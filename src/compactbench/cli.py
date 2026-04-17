@@ -206,8 +206,25 @@ app.add_typer(suites_app, name="suites")
 
 @providers_app.command("list")
 def providers_list() -> None:
-    """List configured model providers."""
-    raise NotImplementedError("providers list: implemented in WO-006")
+    """List registered model providers."""
+    from rich.table import Table
+
+    from compactbench.providers import list_providers
+
+    providers = list_providers()
+    if not providers:
+        console.print("[yellow]no providers registered[/yellow]")
+        raise typer.Exit(code=1)
+
+    table = Table(title="Model providers")
+    table.add_column("Key")
+    table.add_column("Notes")
+    notes: dict[str, str] = {
+        "mock": "deterministic, offline — for tests and local dev",
+    }
+    for key in providers:
+        table.add_row(key, notes.get(key, ""))
+    console.print(table)
 
 
 @suites_app.command("list")

@@ -1,19 +1,20 @@
-"""Model provider ABC.
+"""Model provider ABC and request/response shapes.
 
-Concrete implementations live next to this file (Groq, Google AI Studio,
-Ollama, mock). Each provider normalizes request/response shapes so the runner
-can swap models with a config change.
+Concrete implementations (Groq, Google AI Studio, Ollama) live in WO-006.
+The mock provider below is part of WO-005 so compactors can be tested offline.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
 
 
 @dataclass(frozen=True)
 class CompletionRequest:
+    """A normalized request passed to a provider's ``complete`` method."""
+
     model: str
     prompt: str
     system: str | None = None
@@ -24,15 +25,19 @@ class CompletionRequest:
 
 @dataclass(frozen=True)
 class CompletionResponse:
+    """A normalized response returned from a provider."""
+
     text: str
     prompt_tokens: int
     completion_tokens: int
     model: str
-    raw: dict[str, Any]
+    raw: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
 class Provider(ABC):
-    key: str
+    """Base class every provider must implement."""
+
+    key: ClassVar[str]
 
     @abstractmethod
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
