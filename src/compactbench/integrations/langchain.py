@@ -72,10 +72,7 @@ CompactionResult: TypeAlias = "str | list[BaseMessage] | dict[str, Any]"
 """
 
 
-CompactionFn: TypeAlias = (
-    "Callable[[list[BaseMessage]], "
-    "CompactionResult | Awaitable[CompactionResult]]"
-)
+CompactionFn: TypeAlias = "Callable[[list[BaseMessage]], CompactionResult | Awaitable[CompactionResult]]"
 
 
 def transcript_to_messages(transcript: Transcript) -> list[BaseMessage]:
@@ -208,10 +205,10 @@ def result_to_artifact(
             structured_state = StructuredState.model_validate(cast(dict[str, Any], state))
         turn_ids: Any = as_dict.get("selected_source_turn_ids")
         if isinstance(turn_ids, list):
-            selected = [int(cast(Any, x)) for x in cast(list[Any], turn_ids)]
+            selected = [int(x) for x in turn_ids]
         raw_warnings: Any = as_dict.get("warnings")
         if isinstance(raw_warnings, list):
-            warnings = [str(cast(Any, w)) for w in cast(list[Any], raw_warnings)]
+            warnings = [str(w) for w in raw_warnings]
         extra: Any = as_dict.get("method_metadata")
         if isinstance(extra, dict):
             method_metadata.update(cast(dict[str, Any], extra))

@@ -179,10 +179,13 @@ async def test_compactor_does_not_call_provider_for_compaction() -> None:
 
 
 async def test_compactor_extra_metadata_is_merged() -> None:
+    def _static(_: list[BaseMessage]) -> str:
+        return "s"
+
     compactor = LangChainCompactor(
         provider=MockProvider(default="unused"),
         model="m",
-        compaction_fn=lambda _: "s",
+        compaction_fn=_static,
         extra_metadata={"lc_version": "0.3.99", "chain_type": "summary_memory"},
     )
     artifact = await compactor.compact(_transcript())
