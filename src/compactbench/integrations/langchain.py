@@ -161,7 +161,7 @@ def _selected_turn_ids(
 
 
 def result_to_artifact(
-    result: CompactionResult,
+    result: object,
     source: Transcript,
     *,
     method: str,
@@ -170,7 +170,13 @@ def result_to_artifact(
     provider_key: str,
     extra_metadata: dict[str, Any] | None = None,
 ) -> CompactionArtifact:
-    """Normalise any supported ``CompactionResult`` into a validated artifact."""
+    """Normalise any supported ``CompactionResult`` into a validated artifact.
+
+    ``result`` is typed ``object`` so the function can enforce the supported-type
+    contract at runtime — callers can pass anything, and unsupported shapes raise
+    :class:`TypeError`. Typed wrappers like :class:`LangChainCompactor` constrain
+    the input via :data:`CompactionFn` at their own interface.
+    """
     summary_text = ""
     structured_state = StructuredState()
     selected: list[int] = [turn.id for turn in source.turns]
@@ -191,8 +197,7 @@ def result_to_artifact(
         messages = cast("list[BaseMessage]", result)
         summary_text = _messages_to_summary(messages).strip()
         selected = _selected_turn_ids(messages, source)
-    else:
-        # Dict branch — dict[str, Any] by contract.
+    elif isinstance(result, dict):
         as_dict = cast(dict[str, Any], result)
         raw_summary: Any = as_dict.get("summary_text") or as_dict.get("summary") or ""
         summary_text = str(raw_summary).strip()
@@ -210,6 +215,11 @@ def result_to_artifact(
         extra: Any = as_dict.get("method_metadata")
         if isinstance(extra, dict):
             method_metadata.update(cast(dict[str, Any], extra))
+    else:
+        raise TypeError(
+            f"LangChain compaction callable returned unsupported type {type(result).__name__}; "
+            "expected str, list[BaseMessage], or dict."
+        )
 
     return CompactionArtifact(
         summaryText=summary_text,
