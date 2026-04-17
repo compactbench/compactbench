@@ -1,53 +1,45 @@
 # CompactBench
 
-> Open benchmark for AI conversation compaction methods.
+> **Your agent compacts conversation history before every long turn. Does it do it correctly?** CompactBench is the benchmark that finds out.
 
 [![PyPI version](https://img.shields.io/pypi/v/compactbench.svg)](https://pypi.org/project/compactbench/)
 [![Python](https://img.shields.io/pypi/pyversions/compactbench.svg)](https://pypi.org/project/compactbench/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/compactbench/compactbench/actions/workflows/ci.yml/badge.svg)](https://github.com/compactbench/compactbench/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-compactbench.github.io-black)](https://compactbench.github.io/compactbench/)
 
-CompactBench measures whether language models still behave correctly after long conversation history is replaced with a compacted representation. It runs adversarial, deterministic, multi-cycle benchmarks and publishes ranked results on a public leaderboard.
+Every long-running LLM app eventually compacts its conversation history — summarises it, extracts structured state, runs some ledger. CompactBench hands your compactor an adversarial transcript, replaces the history with whatever your compactor returned, then asks the model probing questions to see what survived.
 
-- **Deterministic generation** — same template + seed + version always yields the same case
-- **Hidden ranked set** — public practice cases for development, hidden templates for ranked scoring
-- **Multi-cycle drift** — methods are evaluated across repeated compact → continue → compact loops
-- **State-fidelity scoring** — correctness of retained decisions, constraints, and entities, not output style
-- **Versioned everywhere** — benchmark suite, template, scorer, model, and method versions are recorded with every result
+**Three things make it different from every other LLM benchmark:**
 
-## Install
+- **We measure the compaction layer, not the model.** MMLU, SWE-bench, and friends feed the model the full context. CompactBench deliberately strips it.
+- **Multi-cycle drift.** Methods are evaluated across repeated compact → continue → compact loops, so decay over time is a first-class metric.
+- **Hidden ranked set.** Public practice cases for development; hidden templates rotated on version bumps for ranked scoring. Same discipline as MLPerf and SWE-bench.
+
+Everything is deterministic, versioned, and reproducible — same template + seed + version always yields the same case, and every result is stamped with suite / scorer / model / method versions.
+
+## 30-second try
 
 ```bash
 pip install compactbench
+compactbench run --method built-in:hybrid-ledger --suite starter \
+                 --provider ollama --model llama3.2
+compactbench score --results results.jsonl
 ```
 
-Or with uv (recommended for development):
+Any of the four built-in compactors — `naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger` — works as a `--method` target. Swap `--provider ollama` for `groq` or `google-ai-studio` if you prefer a remote model (set `COMPACTBENCH_GROQ_API_KEY` or `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY`).
+
+## Other useful commands
 
 ```bash
-uv pip install compactbench
-```
-
-## Quickstart
-
-Run a built-in compactor against the starter suite using a local Ollama model:
-
-```bash
-compactbench run \
-  --method built-in:hybrid-ledger \
-  --suite starter \
-  --provider ollama \
-  --model llama3.2
-```
-
-Generate a single case deterministically for inspection:
-
-```bash
+# Deterministic single-case inspection
 compactbench generate --template buried_constraint_v1 --seed 42
-```
 
-Score an existing results file:
+# List suites / providers / built-in compactors
+compactbench suites list
+compactbench providers list
 
-```bash
+# Re-score an existing results file without re-running
 compactbench score --results results.jsonl
 ```
 
@@ -89,16 +81,15 @@ See [docs/submitting.md](docs/submitting.md) for the full submission protocol.
 
 ## Project status
 
-**v0.1.0 launch-ready.** All ten workorders from the implementation roadmap have landed:
+**v0.1.0 — first public release (2026-04-17).** The v1 stack ships:
 
-- Core: DSL parser, case generation, scoring engine, mock + real providers (Groq / Google AI Studio / Ollama)
-- Methods: four built-in compactors (`naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`)
-- Runtime: end-to-end `compactbench run` with drift cycles, JSONL event log, `--resume`
-- Leaderboard: PR-based submission workflow on GitHub-hosted runners, static site fed by a qualification + ranking core
-- Content: 15 public Elite practice templates + 15 hidden ranked templates across three launch families
-- Release: PyPI trusted-publishing workflow wired up; tag `v0.1.0` to ship
+- **Core**: DSL parser, case generation, scoring engine, real providers (Groq / Google AI Studio / Ollama)
+- **Methods**: four built-in compactors (`naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`)
+- **Runtime**: end-to-end `compactbench run` with drift cycles, JSONL event log, `--resume`
+- **Leaderboard**: PR-based submission flow on GitHub-hosted runners, static site fed by a qualification + ranking core
+- **Content**: 15 public Elite practice templates + 15 hidden ranked templates across three launch families (`buried_constraint`, `decision_override`, `entity_confusion`)
 
-See [CHANGELOG.md](CHANGELOG.md) for the full breakdown. Post-launch work (hidden-set content expansion, additional template families, shadow evaluation automation, custom domain) is tracked via GitHub issues.
+See [CHANGELOG.md](CHANGELOG.md) for the full v0.1.0 breakdown. Post-launch work (more template families, framework integrations, shadow evaluation automation, custom domain) is tracked in [GitHub issues](https://github.com/compactbench/compactbench/issues).
 
 ## Contributing
 

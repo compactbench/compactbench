@@ -1,8 +1,15 @@
 """Your compaction method.
 
-Replace ``MyCompactor`` with your own class name and implement ``compact``.
-Run ``compactbench run --method submissions/<your-handle>/<name>/method.py:MyCompactor
---suite elite_practice`` locally before opening a PR.
+This file ships as a working example — it compiles, runs, and produces a valid
+artifact out of the box (a naive summary). Your job is to replace the body of
+``compact`` with something better and rename the class + ``name`` to match.
+
+Before opening a PR, run locally:
+
+    compactbench run \\
+        --method submissions/HANDLE/METHOD_NAME/method.py:MyCompactor \\
+        --suite elite_practice \\
+        --provider ollama --model llama3.2
 
 Full API docs: https://compactbench.github.io/compactbench/writing-a-compactor/
 """
@@ -23,7 +30,7 @@ class MyCompactor(Compactor):
     expect to score well on.
     """
 
-    name: ClassVar[str] = "my-method"  # change to your method's key
+    name: ClassVar[str] = "my-method"
     version: ClassVar[str] = "0.1.0"
 
     async def compact(
@@ -32,7 +39,6 @@ class MyCompactor(Compactor):
         config: dict[str, Any] | None = None,
         previous_artifact: CompactionArtifact | None = None,
     ) -> CompactionArtifact:
-        # TODO: implement. The example below is a stub — replace with your logic.
         rendered = "\n\n".join(f"{t.role.value.upper()}: {t.content}" for t in transcript.turns)
         response = await self.provider.complete(
             CompletionRequest(
