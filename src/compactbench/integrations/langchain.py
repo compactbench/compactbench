@@ -72,7 +72,9 @@ CompactionResult: TypeAlias = "str | list[BaseMessage] | dict[str, Any]"
 """
 
 
-CompactionFn: TypeAlias = "Callable[[list[BaseMessage]], CompactionResult | Awaitable[CompactionResult]]"
+CompactionFn: TypeAlias = (
+    "Callable[[list[BaseMessage]], CompactionResult | Awaitable[CompactionResult]]"
+)
 
 
 def transcript_to_messages(transcript: Transcript) -> list[BaseMessage]:
@@ -134,9 +136,7 @@ def _messages_to_summary(compacted: list[BaseMessage]) -> str:
     return "\n\n".join(lines)
 
 
-def _selected_turn_ids(
-    compacted: list[BaseMessage], source: Transcript
-) -> list[int]:
+def _selected_turn_ids(compacted: list[BaseMessage], source: Transcript) -> list[int]:
     """Return the subset of source turn ids the compacted messages reference.
 
     If the compaction callable preserved ``compactbench_turn_id`` keys (the
@@ -205,10 +205,12 @@ def result_to_artifact(
             structured_state = StructuredState.model_validate(cast(dict[str, Any], state))
         turn_ids: Any = as_dict.get("selected_source_turn_ids")
         if isinstance(turn_ids, list):
-            selected = [int(x) for x in turn_ids]
+            ids_list: list[Any] = cast(list[Any], turn_ids)
+            selected = [int(x) for x in ids_list]
         raw_warnings: Any = as_dict.get("warnings")
         if isinstance(raw_warnings, list):
-            warnings = [str(w) for w in raw_warnings]
+            warnings_list: list[Any] = cast(list[Any], raw_warnings)
+            warnings = [str(w) for w in warnings_list]
         extra: Any = as_dict.get("method_metadata")
         if isinstance(extra, dict):
             method_metadata.update(cast(dict[str, Any], extra))
