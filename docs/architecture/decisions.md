@@ -143,8 +143,8 @@ Starter public (20 cases, no compression floor), Hard public (30 cases, no compr
 - Trusted publishing via GitHub Actions OIDC (no long-lived PyPI token)
 
 ### C2. GitHub
-- Public repo: `UsernameLoad/compactbench`
-- Private hidden-set repo: `UsernameLoad/compactbench-hidden`
+- Public repo: `compactbench/compactbench`
+- Private hidden-set repo: `compactbench/compactbench-hidden`
 - Docs + leaderboard: GitHub Pages on `compactbench.dev`
 
 ### C3. Domain
@@ -186,10 +186,10 @@ Anthropic Claude, OpenAI GPT, Google Vertex AI — integration when a funding pa
 Oracle Cloud Free Tier VM (Ampere, 4 OCPU / 24 GB RAM), Ubuntu 24.04 LTS.
 
 ### E2. Runner type
-GitHub Actions self-hosted runner registered to the `UsernameLoad/compactbench` repo with the `evaluate` label.
+GitHub Actions self-hosted runner registered to the `compactbench/compactbench` repo with the `evaluate` label.
 
 ### E3. Hidden test set access
-The runner clones `UsernameLoad/compactbench-hidden` via a deploy key scoped to that repo only. The key never leaves the runner VM.
+The runner clones `compactbench/compactbench-hidden` via a deploy key scoped to that repo only. The key never leaves the runner VM.
 
 ### E4. Provider keys
 Stored as repository secrets (`GROQ_API_KEY`, `GOOGLE_AI_STUDIO_API_KEY`) and injected into the `evaluate-submission.yml` workflow environment. Not exposed to PR authors; not usable by workflows outside `evaluate-submission.yml`.

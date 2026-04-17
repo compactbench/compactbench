@@ -14,4 +14,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MkDocs documentation skeleton
 - GitHub Actions CI workflow
 
-[Unreleased]: https://github.com/UsernameLoad/compactbench/compare/v0.0.0...HEAD
+[Unreleased]: https://github.com/compactbench/compactbench/compare/v0.0.0...HEAD

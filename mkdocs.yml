@@ -1,8 +1,8 @@
 site_name: CompactBench
 site_description: Open benchmark for AI conversation compaction methods
 site_url: https://compactbench.dev
-repo_url: https://github.com/UsernameLoad/compactbench
-repo_name: UsernameLoad/compactbench
+repo_url: https://github.com/compactbench/compactbench
+repo_name: compactbench/compactbench
 edit_uri: edit/main/docs/
 
 theme:
