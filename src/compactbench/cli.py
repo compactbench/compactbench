@@ -47,17 +47,62 @@ def main(
 @app.command()
 def run(
     method: str = typer.Option(
-        ..., "--method", "-m", help="Method id: 'built-in:<key>' or path:ClassName."
+        ..., "--method", "-m", help="Method id: 'built-in:<key>' or '<path.py>:<ClassName>'."
     ),
     suite: str = typer.Option("starter", "--suite", "-s", help="Benchmark suite key."),
     provider: str = typer.Option("mock", "--provider", "-p", help="Model provider key."),
     model: str = typer.Option("mock-deterministic", "--model", help="Provider-specific model key."),
+    difficulty: str = typer.Option("medium", "--difficulty"),
     drift_cycles: int = typer.Option(2, "--drift-cycles", min=0, max=5),
+    case_count: int = typer.Option(3, "--case-count", min=1, help="Cases per template."),
     seed_group: str = typer.Option("default", "--seed-group"),
+    benchmarks_dir: Path = typer.Option(
+        Path("benchmarks/public"),
+        "--benchmarks-dir",
+        help="Directory containing benchmark suites.",
+    ),
     output: Path = typer.Option(Path("results.jsonl"), "--output", "-o"),
+    resume: bool = typer.Option(
+        False, "--resume", help="Continue from existing output file (skip completed cases)."
+    ),
 ) -> None:
     """Run a compaction method against a benchmark suite."""
-    raise NotImplementedError("run: implemented in WO-007")
+    import asyncio
+
+    from compactbench.dsl import DifficultyLevel
+    from compactbench.runner import RunArgs, RunnerError, run_experiment
+
+    try:
+        diff = DifficultyLevel(difficulty.lower())
+    except ValueError as exc:
+        console.print(
+            f"[red]unknown difficulty {difficulty!r}. "
+            f"Valid: {[d.value for d in DifficultyLevel]}[/red]"
+        )
+        raise typer.Exit(code=1) from exc
+
+    args = RunArgs(
+        method_spec=method,
+        suite_key=suite,
+        provider_key=provider,
+        model=model,
+        difficulty=diff,
+        drift_cycles=drift_cycles,
+        case_count_per_template=case_count,
+        seed_group=seed_group,
+        benchmarks_dir=benchmarks_dir,
+        output_path=output,
+        resume=resume,
+    )
+
+    try:
+        asyncio.run(run_experiment(args))
+    except RunnerError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]wrote {output}[/green]")
+    console.print(f"run 'compactbench score --results {output}' for a summary.")
 
 
 @app.command()
@@ -128,66 +173,55 @@ def generate(
 def score(
     results: Path = typer.Option(..., "--results", "-r", exists=True, readable=True),
 ) -> None:
-    """Score a JSONL file of ``{case, artifact, responses}`` records.
-
-    Each line must contain a ``GeneratedCase`` at ``case``, a
-    ``CompactionArtifact`` at ``artifact``, and a mapping from evaluation item
-    key to model-response string at ``responses``. Optional ``cycle_number``
-    is passed through.
-    """
-    import json
-
+    """Print a summary of a ``results.jsonl`` file produced by ``compactbench run``."""
     from rich.table import Table
 
-    from compactbench.contracts import CompactionArtifact, GeneratedCase
-    from compactbench.scoring import ScoringError, score_cycle
+    from compactbench.runner import to_run_result
 
-    scorecards: list[tuple[str, Any]] = []
-    with results.open(encoding="utf-8") as f:
-        for line_num, line in enumerate(f, start=1):
-            text = line.strip()
-            if not text:
-                continue
-            try:
-                record = json.loads(text)
-                case = GeneratedCase.model_validate(record["case"])
-                artifact = CompactionArtifact.model_validate(record["artifact"])
-                responses: dict[str, str] = record["responses"]
-                cycle_num = int(record.get("cycle_number", 0))
-                sc = score_cycle(case, artifact, responses, cycle_number=cycle_num)
-            except (KeyError, ScoringError, ValueError) as exc:
-                console.print(f"[red]line {line_num}: {exc}[/red]")
-                raise typer.Exit(code=1) from exc
-            scorecards.append((case.case_id, sc))
+    try:
+        run_result = to_run_result(results)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
-    if not scorecards:
-        console.print("[yellow]no records scored[/yellow]")
-        raise typer.Exit(code=1)
+    header = Table(title="Run")
+    header.add_column("Field")
+    header.add_column("Value")
+    header.add_row("run_id", run_result.run_id)
+    header.add_row("method", f"{run_result.method_name} ({run_result.method_version})")
+    header.add_row("suite", f"{run_result.suite_key} ({run_result.suite_version})")
+    header.add_row("target", f"{run_result.target_provider} / {run_result.target_model}")
+    header.add_row("scorer", run_result.scorer_version)
+    header.add_row("started", run_result.started_at.isoformat())
+    header.add_row("completed", run_result.completed_at.isoformat())
+    console.print(header)
 
-    table = Table(title=f"Scored {len(scorecards)} case(s)")
-    table.add_column("Case ID")
-    table.add_column("Cycle score", justify="right")
-    table.add_column("Penalized", justify="right")
-    table.add_column("Contradiction", justify="right")
-    table.add_column("Compression", justify="right")
-    for case_id, sc in scorecards:
-        table.add_row(
-            case_id,
-            f"{sc.cycle_score:.3f}",
-            f"{sc.penalized_cycle_score:.3f}",
-            f"{sc.contradiction_rate:.3f}",
-            f"{sc.compression_ratio:.2f}x",
+    per_case = Table(title=f"{len(run_result.cases)} case(s)")
+    per_case.add_column("Case ID")
+    per_case.add_column("Case score", justify="right")
+    per_case.add_column("Drift resistance", justify="right")
+    per_case.add_column("Cycles", justify="right")
+    for case in run_result.cases:
+        per_case.add_row(
+            case.case_id,
+            f"{case.case_score:.3f}",
+            f"{case.drift_resistance:.3f}",
+            str(len(case.cycles)),
         )
-    console.print(table)
+    console.print(per_case)
 
-    scores = [sc.cycle_score for _, sc in scorecards]
-    penalized = [sc.penalized_cycle_score for _, sc in scorecards]
-    compressions = [sc.compression_ratio for _, sc in scorecards]
-    console.print("")
-    console.print("[bold]Aggregate[/bold]")
-    console.print(f"  mean cycle score:   {sum(scores) / len(scores):.3f}")
-    console.print(f"  mean penalized:     {sum(penalized) / len(penalized):.3f}")
-    console.print(f"  mean compression:   {sum(compressions) / len(compressions):.2f}x")
+    summary = Table(title="Aggregate")
+    summary.add_column("Metric")
+    summary.add_column("Value", justify="right")
+    summary.add_row("overall_score", f"{run_result.overall_score:.3f}")
+    summary.add_row("drift_resistance", f"{run_result.drift_resistance:.3f}")
+    summary.add_row("constraint_retention", f"{run_result.constraint_retention:.3f}")
+    summary.add_row("contradiction_rate", f"{run_result.contradiction_rate:.3f}")
+    summary.add_row("compression_ratio", f"{run_result.compression_ratio:.2f}x")
+    console.print(summary)
+
+    for note in run_result.notes:
+        console.print(f"[yellow]note: {note}[/yellow]")
 
 
 @app.command()
