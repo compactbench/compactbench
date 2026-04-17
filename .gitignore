@@ -1,0 +1,98 @@
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Secrets
+*.pem
+*.key
+*.crt
+!tests/fixtures/**/*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+MANIFEST
+.installed.cfg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+.uv-cache/
+.uv/
+
+# Testing & coverage
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# Type checkers
+.mypy_cache/
+.pyre/
+.pytype/
+.pyright-cache/
+
+# Linting
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Build artifacts
+*.whl
+
+# Docs
+site/                           # MkDocs build output
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+*.swp
+*.swo
+
+# Claude Code local state
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local state
+data/
+results/
+runs/
+*.jsonl.gz
+
+# Hidden benchmark content — never commit
+benchmarks/hidden/
+benchmarks/**/_private/
+
+# Generated
+*.generated.py
+
+# Logs
+logs/
+*.log

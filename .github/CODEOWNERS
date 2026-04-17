@@ -1,0 +1,10 @@
+# See https://docs.github.com/articles/about-code-owners
+#
+# Default owners for everything — adjust when maintainers beyond the initial author join.
+
+*                                   @UsernameLoad
+/benchmarks/                        @UsernameLoad
+/src/compactbench/scoring/          @UsernameLoad
+/src/compactbench/leaderboard/      @UsernameLoad
+/docs/methodology.md                @UsernameLoad
+/docs/elite-program.md              @UsernameLoad
