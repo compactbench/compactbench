@@ -62,6 +62,8 @@ nav:
   - Leaderboard: leaderboard.md
   - Methodology: methodology.md
   - Elite program: elite-program.md
+  - Governance:
+    - Elite versions: governance/elite-versions.md
   - Architecture:
     - Decisions: architecture/decisions.md
     - Workorders: architecture/workorders.md

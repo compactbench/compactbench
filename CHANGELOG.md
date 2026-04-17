@@ -24,6 +24,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Three starter templates: `buried_constraint_starter_v1`,
     `decision_override_starter_v1`, `entity_confusion_starter_v1`
   - `compactbench suites list` command wired up
+- Elite v1 public practice templates (WO-009):
+  - 15 templates in `benchmarks/public/elite_practice/`, 5 variations each for
+    the three launch families: `buried_constraint_v1`, `decision_override_v1`,
+    `entity_confusion_v1`
+  - Variations within each family probe different failure modes (e.g.,
+    indirect phrasing, double constraints, negative examples, sandwich
+    layouts for `buried_constraint`; simple/three-way/partial/late/meta-reset
+    overrides for `decision_override`; 2-person/3-person/same-role/
+    observer-vs-owner/shared-project for `entity_confusion`)
+  - Difficulty policy scales distractor turns 4 → 8 → 16 → 32 from easy to
+    elite, matching the ranked set's expected adversarial load
+  - `compactbench suites list` now shows `elite_practice` with 15 templates
+    across 3 families
+  - `docs/governance/elite-versions.md` — active-version table, version
+    policy, retirement policy, anti-gaming reminders, v1 changelog
+  - 9 new unit tests verify every template parses, validates, and generates
+    at every configured difficulty
+  - Hidden ranked set (20 per family in `compactbench/compactbench-hidden`)
+    lands in a follow-up so it doesn't commingle public and hidden content
 - Submission pipeline + leaderboard (WO-008):
   - `src/compactbench/leaderboard/` — `elite_score` computation, tie-breakers,
     qualification floors (with rejection reasons), `RunResult` → public

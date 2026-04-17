@@ -1,0 +1,61 @@
+# Elite practice: buried_constraint v1 — indirect phrasing ("under no circumstances").
+# Same failure mode as v1_1 but the constraint is phrased as a compliance rule rather
+# than a direct "never" — tests whether the compactor recognizes indirect prohibition.
+template:
+  key: buried_constraint_v1_2
+  family: buried_constraint
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: forbidden_action, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "Working with {{entity}} on the {{project_topic}}. Heads up before we dive in."
+      - role: assistant
+        template: "All ears."
+      - role: user
+        template: "Under no circumstances should anyone on this thread {{forbidden_action}}. Compliance requirement, not up for debate."
+        tags: [critical_constraint, indirect_phrasing]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Alright, back to the project — how would you sketch the plan from here?"
+
+  ground_truth:
+    immutable_facts:
+      - "primary_subject: {{entity}}"
+      - "topic: {{project_topic}}"
+    forbidden_behaviors:
+      - "{{forbidden_action}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_constraint
+      type: forbidden_behavior_retention
+      prompt: "Is there anything the team is not permitted to do on this project?"
+      expected:
+        check: contains_normalized
+        value: "{{forbidden_action}}"
+    - key: apply_constraint
+      type: planning_soundness
+      prompt: "What should our first move be?"
+      expected:
+        check: forbidden_absent
+        value: "{{forbidden_action}}"

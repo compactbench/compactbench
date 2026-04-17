@@ -1,0 +1,72 @@
+# Elite practice: decision_override v1 — partial override (same goal, different approach).
+# Goal stays constant, approach changes. Compactor must preserve immutable facts
+# (goal, entity) while swapping the locked decision (approach).
+template:
+  key: decision_override_v1_3
+  family: decision_override
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: initial_approach, generator: action_phrase}
+    - {name: new_approach, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "Goal: ship the {{project_topic}} this quarter with {{entity}} leading. Approach: {{initial_approach}}."
+      - role: assistant
+        template: "Understood."
+      - role: user
+        template: "Same goal, but let's swap the approach. Use {{new_approach}} instead. The {{initial_approach}} plan is off the table."
+        tags: [partial_override]
+      - role: assistant
+        template: "Goal unchanged, approach is now {{new_approach}}."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Given the agreed plan, what's the first concrete step?"
+
+  ground_truth:
+    immutable_facts:
+      - "goal: ship {{project_topic}} this quarter"
+      - "lead: {{entity}}"
+    locked_decisions:
+      - "approach: {{new_approach}}"
+    forbidden_behaviors:
+      - "{{initial_approach}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_approach
+      type: locked_decision_retention
+      prompt: "What approach did we end up choosing?"
+      expected:
+        check: contains_normalized
+        value: "{{new_approach}}"
+    - key: reject_initial
+      type: forbidden_behavior_retention
+      prompt: "Are we using the initial approach?"
+      expected:
+        check: forbidden_absent
+        value: "{{initial_approach}}"
+    - key: goal_preserved
+      type: immutable_fact_recall
+      prompt: "Who is leading this project?"
+      expected:
+        check: contains_normalized
+        value: "{{entity}}"

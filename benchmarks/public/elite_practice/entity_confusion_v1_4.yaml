@@ -1,0 +1,66 @@
+# Elite practice: entity_confusion v1 — observer vs owner.
+# One person is the owner, another is cc-ed as observer. The compactor must
+# not route work through the observer. Tests role-collision, not name collision.
+template:
+  key: entity_confusion_v1_4
+  family: entity_confusion
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: person_a, generator: person_name}
+    - {name: person_b, generator: person_name}
+    - {name: org_name, generator: org_name}
+    - {name: task_a, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "Our point of contact at {{org_name}} is {{person_a}}. {{person_a}} will handle {{task_a}} on our behalf."
+      - role: assistant
+        template: "Noted — {{person_a}} at {{org_name}} for {{task_a}}."
+      - role: user
+        template: "Separately, we also have {{person_b}} in the loop — but on a different project, just cc-ed for context. Do not route the {{task_a}} through {{person_b}}."
+        tags: [confusion_risk]
+      - role: assistant
+        template: "Right — {{person_a}} handles {{task_a}}; {{person_b}} is just observer."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Who should I loop in about the {{task_a}} status?"
+
+  ground_truth:
+    immutable_facts:
+      - "{{person_a}} at {{org_name}} handles {{task_a}}"
+    locked_decisions:
+      - "route {{task_a}} through {{person_a}}, not {{person_b}}"
+    forbidden_behaviors:
+      - "route {{task_a}} through {{person_b}}"
+    entity_map:
+      "{{person_a}}": owner_of_task_a
+      "{{person_b}}": observer
+
+  evaluation_items:
+    - key: recall_owner
+      type: entity_integrity
+      prompt: "Who should we contact for the status on {{task_a}}?"
+      expected:
+        check: contains_normalized
+        value: "{{person_a}}"
+    - key: no_misroute
+      type: forbidden_behavior_retention
+      prompt: "Should we route this through {{person_b}}?"
+      expected:
+        check: forbidden_absent
+        value: "{{person_b}}"

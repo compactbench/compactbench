@@ -1,0 +1,64 @@
+# Elite practice: entity_confusion v1 — two people, two distinct tasks.
+# Straightforward split. Tests whether the compactor preserves ownership mapping.
+template:
+  key: entity_confusion_v1_1
+  family: entity_confusion
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: person_a, generator: person_name}
+    - {name: person_b, generator: person_name}
+    - {name: task_a, generator: action_phrase}
+    - {name: task_b, generator: action_phrase}
+    - {name: project_topic, generator: project_noun}
+
+  transcript:
+    turns:
+      - role: user
+        template: "On the {{project_topic}}: {{person_a}} owns {{task_a}}, {{person_b}} owns {{task_b}}. Clear split."
+      - role: assistant
+        template: "Two separate owners, two separate tasks. Got it."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Who owns what, exactly?"
+
+  ground_truth:
+    immutable_facts:
+      - "{{person_a}} owns: {{task_a}}"
+      - "{{person_b}} owns: {{task_b}}"
+    entity_map:
+      "{{person_a}}": owner_of_task_a
+      "{{person_b}}": owner_of_task_b
+
+  evaluation_items:
+    - key: assign_a
+      type: entity_integrity
+      prompt: "What does {{person_a}} own?"
+      expected:
+        check: contains_normalized
+        value: "{{task_a}}"
+    - key: assign_b
+      type: entity_integrity
+      prompt: "What does {{person_b}} own?"
+      expected:
+        check: contains_normalized
+        value: "{{task_b}}"
+    - key: no_swap
+      type: forbidden_behavior_retention
+      prompt: "Does {{person_a}} own {{task_b}}?"
+      expected:
+        check: forbidden_absent
+        value: "{{task_b}}"
