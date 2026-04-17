@@ -48,6 +48,9 @@ providers = [
     "google-genai>=0.3",
     "ollama>=0.3",
 ]
+langchain = [
+    "langchain-core>=0.3",
+]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
@@ -56,6 +59,7 @@ dev = [
     "ruff>=0.5",
     "pyright>=1.1.370",
     "pre-commit>=3.7",
+    "langchain-core>=0.3",
 ]
 docs = [
     "mkdocs-material>=9.5",
@@ -100,6 +104,7 @@ dev = [
     "pre-commit>=3.7",
     "mkdocs-material>=9.5",
     "mkdocs-include-markdown-plugin>=6.2",
+    "langchain-core>=0.3",
 ]
 
 [tool.ruff]
