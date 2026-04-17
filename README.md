@@ -89,15 +89,16 @@ See [docs/submitting.md](docs/submitting.md) for the full submission protocol.
 
 ## Project status
 
-Pre-alpha. Core engine, scoring, runner, and CLI are landed. Three workorders remain before the v1 launch:
+**v0.1.0 launch-ready.** All ten workorders from the implementation roadmap have landed:
 
-| # | Scope | Who can pick it up |
-|---|---|---|
-| [#5 WO-008](https://github.com/compactbench/compactbench/issues/5) | Submission workflow + public leaderboard site | GH Actions + a little Python |
-| [#6 WO-009](https://github.com/compactbench/compactbench/issues/6) | Launch Elite template content (3 families) | YAML authoring — **good starter issue** |
-| [#7 WO-010](https://github.com/compactbench/compactbench/issues/7) | Docs polish + PyPI 0.1.0 release | Writers + release-workflow folks |
+- Core: DSL parser, case generation, scoring engine, mock + real providers (Groq / Google AI Studio / Ollama)
+- Methods: four built-in compactors (`naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`)
+- Runtime: end-to-end `compactbench run` with drift cycles, JSONL event log, `--resume`
+- Leaderboard: PR-based submission workflow on GitHub-hosted runners, static site fed by a qualification + ranking core
+- Content: 15 public Elite practice templates + 15 hidden ranked templates across three launch families
+- Release: PyPI trusted-publishing workflow wired up; tag `v0.1.0` to ship
 
-Each issue has full scope, acceptance criteria, and starter pointers. Comment to claim.
+See [CHANGELOG.md](CHANGELOG.md) for the full breakdown. Post-launch work (hidden-set content expansion, additional template families, shadow evaluation automation, custom domain) is tracked via GitHub issues.
 
 ## Contributing
 
