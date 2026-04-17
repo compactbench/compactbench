@@ -1,0 +1,71 @@
+# Elite practice: decision_override v1 — late override after extensive agreement on A.
+# The user spends multiple turns reinforcing plan A, then reverses at the end.
+# Tests whether the weight of prior agreement survives after compaction.
+template:
+  key: decision_override_v1_4
+  family: decision_override
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: rejected_plan, generator: action_phrase}
+    - {name: approved_plan, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "Plan for {{project_topic}} with {{entity}}: we'll {{rejected_plan}}."
+      - role: assistant
+        template: "Makes sense — solid starting point."
+      - role: user
+        template: "Yeah I think {{rejected_plan}} is the right call."
+      - role: assistant
+        template: "Agreed."
+      - role: user
+        template: "Let's dig into how we'd execute {{rejected_plan}}."
+      - role: assistant
+        template: "First we'd need to scope the work and coordinate with stakeholders."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Wait — scratch all of this. I've thought about it more. We're going to {{approved_plan}} instead. Full pivot."
+        tags: [late_override]
+      - role: assistant
+        template: "Understood — pivoting to {{approved_plan}}."
+      - role: user
+        template: "Right. What's the first step on the new plan?"
+
+  ground_truth:
+    locked_decisions:
+      - "{{approved_plan}}"
+    forbidden_behaviors:
+      - "{{rejected_plan}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_final
+      type: locked_decision_retention
+      prompt: "After the pivot, what's the final plan?"
+      expected:
+        check: contains_normalized
+        value: "{{approved_plan}}"
+    - key: reject_early
+      type: forbidden_behavior_retention
+      prompt: "Are we still executing the earlier plan?"
+      expected:
+        check: forbidden_absent
+        value: "{{rejected_plan}}"

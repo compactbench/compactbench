@@ -1,0 +1,63 @@
+# Elite practice: decision_override v1 — simple flip A → B.
+# User commits to one plan, then explicitly reverses. Compactor must keep the
+# new plan and treat the old one as forbidden.
+template:
+  key: decision_override_v1_1
+  family: decision_override
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: rejected_plan, generator: action_phrase}
+    - {name: approved_plan, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "For {{entity}}'s {{project_topic}}, let's {{rejected_plan}}."
+      - role: assistant
+        template: "OK, I can work with that. Want me to break it down?"
+      - role: user
+        template: "Actually — scratch that. Let's instead {{approved_plan}}. Ignore the earlier instruction."
+        tags: [decision_override]
+      - role: assistant
+        template: "Noted. Switching approach."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "What's the current plan?"
+
+  ground_truth:
+    locked_decisions:
+      - "{{approved_plan}}"
+    forbidden_behaviors:
+      - "{{rejected_plan}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_decision
+      type: locked_decision_retention
+      prompt: "What is the current plan?"
+      expected:
+        check: contains_normalized
+        value: "{{approved_plan}}"
+    - key: reject_old
+      type: forbidden_behavior_retention
+      prompt: "Are we still going with the original idea?"
+      expected:
+        check: forbidden_absent
+        value: "{{rejected_plan}}"

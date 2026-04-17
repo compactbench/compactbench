@@ -1,0 +1,63 @@
+# Elite practice: decision_override v1 — meta reset ("ignore everything").
+# Uses an explicit context-reset instruction. Tests whether the compactor
+# treats the reset as authoritative rather than "one more opinion among many".
+template:
+  key: decision_override_v1_5
+  family: decision_override
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: old_plan, generator: action_phrase}
+    - {name: new_plan, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "I've been planning {{project_topic}} with {{entity}}. Current plan: {{old_plan}}."
+      - role: assistant
+        template: "OK."
+      - role: user
+        template: "Ignore everything we've said so far. Total reset. New plan: {{new_plan}}. That's the only direction now."
+        tags: [meta_reset]
+      - role: assistant
+        template: "Resetting. {{new_plan}} is the plan."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Remind me what we decided."
+
+  ground_truth:
+    locked_decisions:
+      - "{{new_plan}}"
+    forbidden_behaviors:
+      - "{{old_plan}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_reset
+      type: locked_decision_retention
+      prompt: "What is the plan after the reset?"
+      expected:
+        check: contains_normalized
+        value: "{{new_plan}}"
+    - key: reject_old
+      type: forbidden_behavior_retention
+      prompt: "Is the prior plan still active?"
+      expected:
+        check: forbidden_absent
+        value: "{{old_plan}}"

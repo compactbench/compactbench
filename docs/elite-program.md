@@ -45,6 +45,8 @@ Three families ship with the first release:
 
 Each family ships with 5 public practice variations and 20 hidden ranked variations. Additional families are added post-launch.
 
+**Current version**: Elite v1.0 (released 2026-04-17). Full changelog, seed-group policy, and retirement log in [governance/elite-versions.md](governance/elite-versions.md).
+
 ## Compression tiers
 
 Elite segments the leaderboard by compression tier so aggressive methods never compete directly with near-pass-through ones:

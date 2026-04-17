@@ -1,0 +1,69 @@
+# Elite practice: entity_confusion v1 — three people, three distinct tasks.
+# Harder than two-way split: more slots in the entity map increase the chance
+# of a scrambled mapping after compaction.
+template:
+  key: entity_confusion_v1_2
+  family: entity_confusion
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: person_a, generator: person_name}
+    - {name: person_b, generator: person_name}
+    - {name: person_c, generator: person_name}
+    - {name: task_a, generator: action_phrase}
+    - {name: task_b, generator: action_phrase}
+    - {name: task_c, generator: action_phrase}
+    - {name: project_topic, generator: project_noun}
+
+  transcript:
+    turns:
+      - role: user
+        template: "Three-person split on {{project_topic}}: {{person_a}} -> {{task_a}}. {{person_b}} -> {{task_b}}. {{person_c}} -> {{task_c}}."
+      - role: assistant
+        template: "Three owners, three separate tasks."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Who is responsible for {{task_b}}?"
+
+  ground_truth:
+    immutable_facts:
+      - "{{person_a}} owns: {{task_a}}"
+      - "{{person_b}} owns: {{task_b}}"
+      - "{{person_c}} owns: {{task_c}}"
+    entity_map:
+      "{{person_a}}": owner_of_task_a
+      "{{person_b}}": owner_of_task_b
+      "{{person_c}}": owner_of_task_c
+
+  evaluation_items:
+    - key: assign_a
+      type: entity_integrity
+      prompt: "What does {{person_a}} own?"
+      expected:
+        check: contains_normalized
+        value: "{{task_a}}"
+    - key: assign_b
+      type: entity_integrity
+      prompt: "What does {{person_b}} own?"
+      expected:
+        check: contains_normalized
+        value: "{{task_b}}"
+    - key: assign_c
+      type: entity_integrity
+      prompt: "What does {{person_c}} own?"
+      expected:
+        check: contains_normalized
+        value: "{{task_c}}"

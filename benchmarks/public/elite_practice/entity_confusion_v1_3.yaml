@@ -1,0 +1,61 @@
+# Elite practice: entity_confusion v1 — same role, different domains.
+# Two people share the "lead" title but lead different projects. Tests whether
+# the compactor routes queries to the right lead per domain.
+template:
+  key: entity_confusion_v1_3
+  family: entity_confusion
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: person_a, generator: person_name}
+    - {name: person_b, generator: person_name}
+    - {name: domain_a, generator: project_noun}
+    - {name: domain_b, generator: project_noun}
+
+  transcript:
+    turns:
+      - role: user
+        template: "Two technical leads this quarter. {{person_a}} leads on the {{domain_a}}. {{person_b}} leads on the {{domain_b}}. Distinct projects, distinct scopes."
+      - role: assistant
+        template: "Two leads, two domains."
+      - role: user
+        template: "Same level, different domains. Don't mix them up."
+        tags: [confusion_risk]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Who should I talk to about the {{domain_a}}?"
+
+  ground_truth:
+    immutable_facts:
+      - "{{person_a}} leads: {{domain_a}}"
+      - "{{person_b}} leads: {{domain_b}}"
+    entity_map:
+      "{{person_a}}": lead_of_domain_a
+      "{{person_b}}": lead_of_domain_b
+
+  evaluation_items:
+    - key: lead_a
+      type: entity_integrity
+      prompt: "Who leads the {{domain_a}}?"
+      expected:
+        check: contains_normalized
+        value: "{{person_a}}"
+    - key: lead_b
+      type: entity_integrity
+      prompt: "Who leads the {{domain_b}}?"
+      expected:
+        check: contains_normalized
+        value: "{{person_b}}"
