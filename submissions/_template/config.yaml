@@ -1,0 +1,21 @@
+# Submission metadata. Edit every field.
+method:
+  name: my-method                 # should match MyCompactor.name
+  version: 0.1.0
+  class_path: submissions/<your-handle>/<name>/method.py:MyCompactor
+
+# Runtime configuration used by the evaluation runner.
+runtime:
+  provider: groq                  # one of: groq, google-ai-studio, ollama, mock
+  model: llama-3.3-70b-versatile  # model key the provider accepts
+  compression_tier: Elite-Mid     # Elite-Light (>=2x) | Elite-Mid (>=4x) | Elite-Aggressive (>=8x)
+  drift_cycles: 2
+  case_count_per_template: 20
+
+# Public attribution on the leaderboard.
+attribution:
+  handle: <your-github-handle>
+  org: null                       # optional — null for individuals
+
+# Anything your method-specific config reads at runtime.
+method_config: {}

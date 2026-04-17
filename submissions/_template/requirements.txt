@@ -1,0 +1,3 @@
+# Deps beyond compactbench[providers]. Pin versions.
+# Example:
+# numpy==2.1.3
