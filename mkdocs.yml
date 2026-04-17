@@ -62,6 +62,7 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Writing a compactor: writing-a-compactor.md
+  - Integrations: integrations.md
   - Submitting to leaderboard: submitting.md
   - Leaderboard: leaderboard.md
   - Methodology: methodology.md
