@@ -1,0 +1,71 @@
+# Elite practice: entity_confusion v1 — shared project, distinct owners.
+# Two people work on the *same* project but own *different* pieces. Tests whether
+# the compactor preserves task-level ownership when the project umbrella is shared.
+template:
+  key: entity_confusion_v1_5
+  family: entity_confusion
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: person_a, generator: person_name}
+    - {name: person_b, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: task_a, generator: action_phrase}
+    - {name: task_b, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "Both {{person_a}} and {{person_b}} are on the {{project_topic}}, but with different pieces."
+      - role: assistant
+        template: "Understood."
+      - role: user
+        template: "{{person_a}} -> {{task_a}}. {{person_b}} -> {{task_b}}. The project is shared; the tasks are not."
+        tags: [confusion_risk]
+      - role: assistant
+        template: "Shared project, separate owners."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "If we need {{task_a}} delivered, who do I ask?"
+
+  ground_truth:
+    immutable_facts:
+      - "project: {{project_topic}}"
+      - "{{person_a}} owns: {{task_a}}"
+      - "{{person_b}} owns: {{task_b}}"
+    entity_map:
+      "{{person_a}}": owner_of_task_a
+      "{{person_b}}": owner_of_task_b
+
+  evaluation_items:
+    - key: owner_a
+      type: entity_integrity
+      prompt: "Who delivers {{task_a}}?"
+      expected:
+        check: contains_normalized
+        value: "{{person_a}}"
+    - key: owner_b
+      type: entity_integrity
+      prompt: "Who delivers {{task_b}}?"
+      expected:
+        check: contains_normalized
+        value: "{{person_b}}"
+    - key: no_confusion
+      type: forbidden_behavior_retention
+      prompt: "Does {{person_a}} handle {{task_b}}?"
+      expected:
+        check: forbidden_absent
+        value: "{{task_b}}"

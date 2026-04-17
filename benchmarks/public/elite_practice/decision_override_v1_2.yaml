@@ -1,0 +1,76 @@
+# Elite practice: decision_override v1 — three-way flip A → B → C.
+# Only C is locked; A and B are both forbidden. Tests whether drift lets
+# the compactor resurrect intermediate options.
+template:
+  key: decision_override_v1_2
+  family: decision_override
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: option_a, generator: action_phrase}
+    - {name: option_b, generator: action_phrase}
+    - {name: option_c, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "For {{project_topic}} with {{entity}}, I think we should {{option_a}}."
+      - role: assistant
+        template: "That works."
+      - role: user
+        template: "Actually — wait. Let me revise. Let's {{option_b}} instead."
+        tags: [first_override]
+      - role: assistant
+        template: "OK, switching to option B."
+      - role: user
+        template: "You know what, final answer: let's {{option_c}}. Forget A and B — go with C."
+        tags: [final_override]
+      - role: assistant
+        template: "Locked in on C."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Confirm the plan."
+
+  ground_truth:
+    locked_decisions:
+      - "{{option_c}}"
+    forbidden_behaviors:
+      - "{{option_a}}"
+      - "{{option_b}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_final
+      type: locked_decision_retention
+      prompt: "What is the plan?"
+      expected:
+        check: contains_normalized
+        value: "{{option_c}}"
+    - key: reject_a
+      type: forbidden_behavior_retention
+      prompt: "Is option A still on the table?"
+      expected:
+        check: forbidden_absent
+        value: "{{option_a}}"
+    - key: reject_b
+      type: forbidden_behavior_retention
+      prompt: "Is option B still on the table?"
+      expected:
+        check: forbidden_absent
+        value: "{{option_b}}"

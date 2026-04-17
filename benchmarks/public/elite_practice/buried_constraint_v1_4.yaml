@@ -1,0 +1,61 @@
+# Elite practice: buried_constraint v1 — negative example ("like last time").
+# The forbidden behavior is described as something that went wrong before, not
+# as an explicit "never". Tests whether implicit constraints survive compaction.
+template:
+  key: buried_constraint_v1_4
+  family: buried_constraint
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: project_topic, generator: project_noun}
+    - {name: forbidden_action, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "We're starting {{project_topic}} with {{entity}}. Quick context from last quarter."
+      - role: assistant
+        template: "Go ahead."
+      - role: user
+        template: "Last time we tried something similar, someone decided to {{forbidden_action}}. It blew up in production. So — let's not do that this time."
+        tags: [critical_constraint, negative_example]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "So how should we structure this one?"
+
+  ground_truth:
+    immutable_facts:
+      - "primary_subject: {{entity}}"
+      - "topic: {{project_topic}}"
+    forbidden_behaviors:
+      - "{{forbidden_action}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_lesson
+      type: forbidden_behavior_retention
+      prompt: "What did the user flag as the thing that blew up last time?"
+      expected:
+        check: contains_normalized
+        value: "{{forbidden_action}}"
+    - key: apply_lesson
+      type: planning_soundness
+      prompt: "How should we structure this project to avoid last quarter's failure?"
+      expected:
+        check: forbidden_absent
+        value: "{{forbidden_action}}"
