@@ -66,9 +66,9 @@ docs = [
 compactbench = "compactbench.cli:app"
 
 [project.urls]
-Homepage = "https://compactbench.dev"
+Homepage = "https://compactbench.github.io/compactbench"
 Repository = "https://github.com/compactbench/compactbench"
-Documentation = "https://compactbench.dev"
+Documentation = "https://compactbench.github.io/compactbench"
 Issues = "https://github.com/compactbench/compactbench/issues"
 Changelog = "https://github.com/compactbench/compactbench/blob/main/CHANGELOG.md"
 
