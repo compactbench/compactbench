@@ -13,5 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Contributor guide and code of conduct
 - MkDocs documentation skeleton
 - GitHub Actions CI workflow
+- Template DSL (WO-002):
+  - YAML + Handlebars-style `{{variable}}` substitution
+  - Pydantic models for `TemplateDefinition` and sub-structures
+  - Seeded generator registry: `person_name`, `action_phrase`, `project_noun`,
+    `org_name`, `date_iso`, `amount_usd`, `product_sku`
+  - SHA-256-based sub-seed derivation for reordering-stable determinism
+  - Semantic validator for references, generators, and duplicate names
+  - JSON Schema at `benchmarks/schemas/template-v1.json`
+  - Three starter templates: `buried_constraint_starter_v1`,
+    `decision_override_starter_v1`, `entity_confusion_starter_v1`
+  - `compactbench suites list` command wired up
 
 [Unreleased]: https://github.com/compactbench/compactbench/compare/v0.0.0...HEAD
