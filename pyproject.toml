@@ -157,3 +157,10 @@ pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingImports = true
 reportUnusedImport = "warning"
+
+[[tool.pyright.executionEnvironments]]
+# Tests use pytest fixtures and pytest.approx whose stubs are incomplete.
+# Keep src/ strict; relax Unknown checks on tests/.
+root = "tests"
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"

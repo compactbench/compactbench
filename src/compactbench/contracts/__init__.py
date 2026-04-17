@@ -17,6 +17,7 @@ from compactbench.contracts.case import (
 from compactbench.contracts.result import (
     CaseResult,
     CycleResult,
+    ItemScore,
     RunResult,
     Scorecard,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "EvaluationItemType",
     "GeneratedCase",
     "GroundTruth",
+    "ItemScore",
     "RunResult",
     "Scorecard",
     "StructuredState",
