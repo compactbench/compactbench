@@ -1,8 +1,9 @@
-# Submission metadata. Edit every field.
+# Submission metadata — EDIT EVERY FIELD BELOW MARKED "FILL_ME".
+# CI will reject this file if any "FILL_ME" placeholders remain.
 method:
-  name: my-method                 # should match MyCompactor.name
+  name: FILL_ME                   # must match MyCompactor.name in method.py
   version: 0.1.0
-  class_path: submissions/<your-handle>/<name>/method.py:MyCompactor
+  class_path: submissions/FILL_ME/FILL_ME/method.py:MyCompactor  # handle/method-name
 
 # Runtime configuration used by the evaluation runner.
 runtime:
@@ -14,7 +15,7 @@ runtime:
 
 # Public attribution on the leaderboard.
 attribution:
-  handle: <your-github-handle>
+  handle: FILL_ME                 # your GitHub handle (no @)
   org: null                       # optional — null for individuals
 
 # Anything your method-specific config reads at runtime.
