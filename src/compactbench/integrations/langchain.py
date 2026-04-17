@@ -22,8 +22,7 @@ are not required by this adapter.
 from __future__ import annotations
 
 import inspect
-from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, ClassVar, Union, cast
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast
 
 from compactbench.compactors.base import Compactor
 from compactbench.contracts import CompactionArtifact, StructuredState, Transcript
@@ -31,6 +30,8 @@ from compactbench.contracts.case import TurnRole
 from compactbench.providers.base import Provider
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from langchain_core.messages import BaseMessage
 
 
@@ -40,12 +41,15 @@ _INSTALL_HINT = (
 )
 
 
-def _import_message_classes() -> tuple[
-    type[BaseMessage], type[BaseMessage], type[BaseMessage]
-]:
-    """Return ``(SystemMessage, HumanMessage, AIMessage)`` or raise a clean ImportError."""
+def _import_message_classes() -> tuple[Any, Any, Any]:
+    """Return ``(SystemMessage, HumanMessage, AIMessage)`` or raise a clean ImportError.
+
+    Returns ``Any`` because langchain_core's own stubs use loose ``dict`` types
+    that would pollute strict mode throughout the module; we normalise at this
+    boundary and keep the rest of the module cleanly typed.
+    """
     try:
-        from langchain_core.messages import (  # noqa: PLC0415
+        from langchain_core.messages import (
             AIMessage,
             HumanMessage,
             SystemMessage,
@@ -55,11 +59,7 @@ def _import_message_classes() -> tuple[
     return SystemMessage, HumanMessage, AIMessage
 
 
-CompactionResult = Union[
-    str,
-    "list[BaseMessage]",
-    dict[str, Any],
-]
+CompactionResult: TypeAlias = "str | list[BaseMessage] | dict[str, Any]"
 """What a LangChain-side compaction callable is allowed to return.
 
 - ``str`` — a plain prose summary (identical treatment to ``naive-summary``)
@@ -72,10 +72,10 @@ CompactionResult = Union[
 """
 
 
-CompactionFn = Callable[
-    ["list[BaseMessage]"],
-    Union[CompactionResult, Awaitable[CompactionResult]],
-]
+CompactionFn: TypeAlias = (
+    "Callable[[list[BaseMessage]], "
+    "CompactionResult | Awaitable[CompactionResult]]"
+)
 
 
 def transcript_to_messages(transcript: Transcript) -> list[BaseMessage]:
@@ -92,7 +92,7 @@ def transcript_to_messages(transcript: Transcript) -> list[BaseMessage]:
     round-trip conversion preserves provenance.
     """
     system_cls, human_cls, ai_cls = _import_message_classes()
-    out: list[BaseMessage] = []
+    out: list[Any] = []
     for turn in transcript.turns:
         extras: dict[str, Any] = {
             "compactbench_turn_id": turn.id,
@@ -105,19 +105,22 @@ def transcript_to_messages(transcript: Transcript) -> list[BaseMessage]:
                 out.append(human_cls(content=turn.content, additional_kwargs=extras))
             case TurnRole.ASSISTANT:
                 out.append(ai_cls(content=turn.content, additional_kwargs=extras))
-    return out
+    return cast("list[BaseMessage]", out)
 
 
-def _message_content_as_text(message: BaseMessage) -> str:
-    content = message.content
+def _message_content_as_text(message: Any) -> str:
+    content: Any = message.content
     if isinstance(content, str):
         return content
+    if not isinstance(content, list):
+        return ""
     parts: list[str] = []
-    for block in content:
+    for block in cast(list[Any], content):
         if isinstance(block, str):
             parts.append(block)
-        elif isinstance(block, dict):
-            text = block.get("text")
+            continue
+        if isinstance(block, dict):
+            text: Any = cast(dict[Any, Any], block).get("text")
             if isinstance(text, str):
                 parts.append(text)
     return "\n".join(parts)
@@ -125,11 +128,12 @@ def _message_content_as_text(message: BaseMessage) -> str:
 
 def _messages_to_summary(compacted: list[BaseMessage]) -> str:
     lines: list[str] = []
-    for message in compacted:
-        role = getattr(message, "type", message.__class__.__name__)
+    for message in cast(list[Any], compacted):
+        role_raw: Any = getattr(message, "type", message.__class__.__name__)
+        role = str(role_raw).upper()
         text = _message_content_as_text(message)
         if text:
-            lines.append(f"{str(role).upper()}: {text}")
+            lines.append(f"{role}: {text}")
     return "\n\n".join(lines)
 
 
@@ -145,8 +149,9 @@ def _selected_turn_ids(
     """
     ids: list[int] = []
     seen: set[int] = set()
-    for message in compacted:
-        turn_id = message.additional_kwargs.get("compactbench_turn_id")
+    for message in cast(list[Any], compacted):
+        extras = cast(dict[Any, Any], message.additional_kwargs)
+        turn_id: Any = extras.get("compactbench_turn_id")
         if isinstance(turn_id, int) and turn_id not in seen:
             ids.append(turn_id)
             seen.add(turn_id)
@@ -186,28 +191,25 @@ def result_to_artifact(
         messages = cast("list[BaseMessage]", result)
         summary_text = _messages_to_summary(messages).strip()
         selected = _selected_turn_ids(messages, source)
-    elif isinstance(result, dict):
-        raw_summary = result.get("summary_text") or result.get("summary") or ""
+    else:
+        # Dict branch — dict[str, Any] by contract.
+        as_dict = cast(dict[str, Any], result)
+        raw_summary: Any = as_dict.get("summary_text") or as_dict.get("summary") or ""
         summary_text = str(raw_summary).strip()
-        state = result.get("structured_state")
+        state: Any = as_dict.get("structured_state")
         if isinstance(state, StructuredState):
             structured_state = state
         elif isinstance(state, dict):
-            structured_state = StructuredState.model_validate(state)
-        turn_ids = result.get("selected_source_turn_ids")
+            structured_state = StructuredState.model_validate(cast(dict[str, Any], state))
+        turn_ids: Any = as_dict.get("selected_source_turn_ids")
         if isinstance(turn_ids, list):
-            selected = [int(x) for x in turn_ids]
-        raw_warnings = result.get("warnings")
+            selected = [int(cast(Any, x)) for x in cast(list[Any], turn_ids)]
+        raw_warnings: Any = as_dict.get("warnings")
         if isinstance(raw_warnings, list):
-            warnings = [str(w) for w in raw_warnings]
-        extra = result.get("method_metadata")
+            warnings = [str(cast(Any, w)) for w in cast(list[Any], raw_warnings)]
+        extra: Any = as_dict.get("method_metadata")
         if isinstance(extra, dict):
             method_metadata.update(cast(dict[str, Any], extra))
-    else:
-        raise TypeError(
-            f"LangChain compaction callable returned unsupported type {type(result).__name__}; "
-            "expected str, list[BaseMessage], or dict."
-        )
 
     return CompactionArtifact(
         summaryText=summary_text,
@@ -282,11 +284,10 @@ class LangChainCompactor(Compactor):
         previous_artifact: CompactionArtifact | None = None,
     ) -> CompactionArtifact:
         messages = transcript_to_messages(transcript)
-        raw = self._compaction_fn(messages)
+        raw: Any = self._compaction_fn(messages)
         if inspect.isawaitable(raw):
-            result = cast(CompactionResult, await raw)
-        else:
-            result = cast(CompactionResult, raw)
+            raw = await raw
+        result: CompactionResult = cast(CompactionResult, raw)
         return result_to_artifact(
             result,
             transcript,

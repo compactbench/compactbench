@@ -67,7 +67,7 @@ def test_result_to_artifact_accepts_string_summary() -> None:
 
 
 def test_result_to_artifact_accepts_message_list_and_preserves_turn_ids() -> None:
-    preserved = [
+    preserved: list[BaseMessage] = [
         HumanMessage(
             content="Never recommend non-EU suppliers.",
             additional_kwargs={"compactbench_turn_id": 1, "compactbench_turn_tags": []},
