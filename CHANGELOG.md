@@ -24,6 +24,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Three starter templates: `buried_constraint_starter_v1`,
     `decision_override_starter_v1`, `entity_confusion_starter_v1`
   - `compactbench suites list` command wired up
+- End-to-end runner (WO-007):
+  - `compactbench run --method <spec> --suite <key> --provider <k> --model <m>`
+    orchestrates: load suite → generate cases → per case iterate drift cycles
+    (compact → evaluate → score) → aggregate → persist results.jsonl
+  - Event-log JSONL format: `run_start`, one `case_complete` per case
+    streamed, final `run_end` with aggregates
+  - `--resume` continues from an existing output file; rejects with
+    `ResumeError` if run parameters differ
+  - `compactbench score --results` now pretty-prints the run summary from the
+    persisted events (reads, not re-scores)
+  - `--method` supports `built-in:<key>` and `<path.py>:<ClassName>`
+    (loads user compactors from file paths, verifies `Compactor` subclass)
+  - Drift cycles extend the transcript with seeded continuation turns; the
+    model's continuation response uses only the previous artifact as context
+    (that is the drift vector measured)
+  - Per-case `CaseResult` captures all cycles, case-level score, and
+    `drift_resistance`; run-level aggregates cover overall / drift /
+    constraint retention / contradiction / compression
 - Real model providers (WO-006):
   - `GroqProvider` — Llama 3.3 70B, Kimi K2, etc. via the `groq` SDK
   - `GoogleAIStudioProvider` — Gemini 2.0 Flash etc. via the `google-genai` SDK
