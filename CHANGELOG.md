@@ -24,6 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Three starter templates: `buried_constraint_starter_v1`,
     `decision_override_starter_v1`, `entity_confusion_starter_v1`
   - `compactbench suites list` command wired up
+- Built-in compactors + mock provider (WO-005):
+  - Four baselines in `compactbench.compactors`: `naive-summary`,
+    `structured-state`, `hierarchical-summary`, `hybrid-ledger`
+  - All inherit async `Compactor` ABC bound to `(provider, model)` at
+    construction
+  - Shared JSON → `StructuredState` parser with code-fence stripping and
+    lenient field coercion
+  - `MockProvider` with scripted-sequence + default-response modes and call
+    recording for tests
+  - Registries: `list_built_ins()` / `get_built_in()` for compactors and
+    `list_providers()` / `get_provider_cls()` for providers
+  - `compactbench providers list` wired up
 - Scoring engine (WO-004):
   - Per-item checks: `contains_normalized`, `forbidden_absent`, `exact`, `set_match`
   - Weighted cycle aggregation per decisions.md §B3 item weights
