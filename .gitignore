@@ -80,10 +80,10 @@ site/
 Thumbs.db
 desktop.ini
 
-# Local state
-data/
-results/
-runs/
+# Local state (anchored to repo root — docs/data/ must remain tracked)
+/data/
+/results/
+/runs/
 *.jsonl.gz
 
 # Hidden benchmark content — never commit
