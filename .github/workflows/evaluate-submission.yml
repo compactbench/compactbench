@@ -41,6 +41,9 @@ jobs:
       - name: Install compactbench + provider SDKs
         run: uv sync --extra providers
 
+      - name: Validate submission has no leftover FILL_ME placeholders
+        run: uv run python scripts/validate_submissions.py
+
       - name: Install submission dependencies
         run: |
           changed_dirs=$(git diff --name-only \

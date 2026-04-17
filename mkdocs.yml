@@ -48,7 +48,11 @@ markdown_extensions:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -69,6 +73,9 @@ nav:
     - Decisions: architecture/decisions.md
     - Workorders: architecture/workorders.md
 
+# Kept in the repo as working docs but excluded from the published site:
+#   - architecture/_legacy-saas/ — superseded designs kept for historical context
+#   - launch/ — unpublished marketing drafts (HN, r/LocalLLaMA, AI Twitter)
 exclude_docs: |
   architecture/_legacy-saas/
   launch/

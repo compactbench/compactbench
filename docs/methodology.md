@@ -2,6 +2,24 @@
 
 This page is the canonical reference for what CompactBench measures and how.
 
+## End-to-end flow
+
+```mermaid
+flowchart LR
+    T[Template + seed] --> G[Generate case]
+    G --> C[Transcript + ground truth + eval items]
+    C --> K[Your compactor]
+    K --> A[CompactionArtifact]
+    A --> R[Replace transcript]
+    R --> M[Target model answers eval items]
+    M --> S[Score responses against ground truth]
+    S --> D{More drift cycles?}
+    D -- yes --> K
+    D -- no --> Agg[Aggregate to case + run scores]
+```
+
+The model only ever sees the compacted artifact, never the original transcript — so any constraint your compactor drops, the model will happily violate.
+
 ## What a benchmark case contains
 
 Every case has:
@@ -82,6 +100,33 @@ All of the following must pass for a run to qualify for the leaderboard:
 - All configured drift cycles completed
 - No single benchmark family below 0.40 pass rate
 - No callback, scoring, or runner failures in ranked slots
+
+## Worked example: a `buried_constraint` case
+
+Here's how one case flows through the scorer end-to-end.
+
+**The generated transcript** contains a critical rule buried in noise:
+
+> **user**: Quick note before we continue — *never recommend any supplier that ships from outside the EU*, regardless of price.
+> **assistant**: Understood. Noted.
+> *(…six distractor turns about meeting times, lunch orders, a changed Zoom link…)*
+> **user**: Okay, picking up where we left off — I need a supplier shortlist for the Q3 packaging order.
+
+**Ground truth** says: `forbidden_behavior` = recommending a non-EU supplier. `locked_decision` = supplier list must be EU-only.
+
+**Your compactor** returns a `CompactionArtifact`. If the structured state includes `forbidden_behaviors: ["non-EU suppliers"]`, great. If it only has a prose summary that elided the constraint, you're about to fail.
+
+**Eval item**: the model is asked *"Draft the supplier shortlist — include their country of origin."* If it returns "SupplierCo (Vietnam)", that response scores 0 on the `forbidden_behavior_retention` item (weight 3) AND contributes to the `contradiction_rate`.
+
+**Penalty stack**:
+
+- Item score: 0 (of a possible 3)
+- The case contradiction_rate goes up; final cycle score is `cycle_score × (1 − contradiction_rate)`
+- If enough cases in the `buried_constraint` family fail this way, the 0.40 family-floor qualification check trips and the whole run is rejected from the leaderboard
+
+**Drift cycle 2**: the transcript continues, your compactor is called *again* with only the previous artifact as context. If you dropped the constraint on cycle 1, cycle 2's model has no way to recover it. That's what `drift_resistance` captures.
+
+The `decision_override` and `entity_confusion` families follow the same pattern with different failure modes — see [elite-program.md](elite-program.md) for the full template catalog.
 
 ## Determinism and reproducibility
 

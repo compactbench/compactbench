@@ -34,11 +34,16 @@ Live rankings of compaction methods, segmented by benchmark version and target m
 
     if (!data.entries.length) {
       rootEl.innerHTML = `<div class="cb-empty">
-        No ranked submissions yet. The first compaction methods will appear here once
-        <a href="https://github.com/compactbench/compactbench/issues/6">#6 (Elite templates)</a>
-        and the first community submissions land.
+        <strong>No ranked submissions yet — the board is open for the first entry.</strong>
         <br><br>
-        Want to be first? See <a href="../submitting/">submitting a method</a>.
+        Rows appear here automatically when a submission PR passes the hidden-set
+        evaluation on GitHub Actions and is merged. That process takes 1–2 maintainer
+        reviews; you can watch it happen on
+        <a href="https://github.com/compactbench/compactbench/pulls?q=is%3Apr+label%3Aevaluate">open PRs with the <code>evaluate</code> label</a>.
+        <br><br>
+        Want to be first? The full protocol is in
+        <a href="../submitting/">submitting a method</a> — the four built-in
+        compactors give you a baseline to beat.
       </div>`;
       return;
     }
