@@ -1,0 +1,109 @@
+name: Release to PyPI
+
+# Publishes a new version to PyPI when a semver tag is pushed.
+# Uses PyPI's trusted publishing (OIDC) — no long-lived API token needed.
+#
+# One-time setup (maintainer):
+#
+#   1. Register `compactbench` on PyPI: https://pypi.org/account/register
+#   2. On the project page, add a trusted publisher:
+#        Publisher = GitHub
+#        Organization / owner = compactbench
+#        Repository name = compactbench
+#        Workflow filename = release.yml
+#        Environment name = pypi
+#   3. In the GitHub repo, create the `pypi` deployment environment and add
+#      a required-reviewer protection rule so tag pushes require human
+#      approval before publishing.
+#
+# Release flow:
+#
+#   1. Bump [tool.hatch] version in pyproject.toml and __init__.py.
+#   2. Update CHANGELOG: move [Unreleased] to [X.Y.Z] with a date.
+#   3. Tag: `git tag -s vX.Y.Z -m 'release X.Y.Z' && git push origin vX.Y.Z`
+#   4. Approve the `pypi` environment in GitHub Actions.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  id-token: write  # required for PyPI trusted publishing
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # tags needed for version resolution
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build wheel + sdist
+        run: uv build
+
+      - name: Verify version matches tag
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          whl=$(ls dist/*.whl | head -n 1)
+          built_version=$(basename "$whl" | awk -F- '{print $2}')
+          if [ "$tag_version" != "$built_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match built version $built_version"
+            exit 1
+          fi
+          echo "Tag and build agree on $built_version"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/compactbench/
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish via trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Attach artifacts to GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub release with artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/*

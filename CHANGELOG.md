@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-04-17
+
+First public release. The full v1 stack: DSL parser, case-generation engine,
+scoring engine, mock + real providers, built-in compactors, end-to-end runner,
+submission pipeline with public leaderboard, and 15 Elite practice templates
+across three launch families.
+
 ### Added
 - Initial project scaffold: Python package layout, CLI entrypoint, core ABCs
 - Apache 2.0 license
@@ -125,4 +132,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `compactbench generate --template <key> --seed <int>` command wired up
   - Three regression fixtures pinning the starter templates at seed=42, medium
 
-[Unreleased]: https://github.com/compactbench/compactbench/compare/v0.0.0...HEAD
+[Unreleased]: https://github.com/compactbench/compactbench/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/compactbench/compactbench/releases/tag/v0.1.0
