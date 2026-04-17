@@ -61,8 +61,8 @@ coverage.xml
 # Build artifacts
 *.whl
 
-# Docs
-site/                           # MkDocs build output
+# Docs — MkDocs build output
+site/
 
 # IDE
 .idea/
