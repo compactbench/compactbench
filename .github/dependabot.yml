@@ -1,0 +1,43 @@
+version: 2
+updates:
+  # Python package dependencies defined in pyproject.toml.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    groups:
+      # Batch all non-security Python updates into a single weekly PR to reduce noise.
+      python-dependencies:
+        patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "python"
+
+  # GitHub Actions workflow pinned versions.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-dependencies:
+        patterns: ["*"]
+    labels:
+      - "dependencies"
+      - "ci"
