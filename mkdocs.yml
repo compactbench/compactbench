@@ -1,6 +1,6 @@
 site_name: CompactBench
 site_description: Open benchmark for AI conversation compaction methods
-site_url: https://compactbench.dev
+site_url: https://compactbench.github.io/compactbench
 repo_url: https://github.com/compactbench/compactbench
 repo_name: compactbench/compactbench
 edit_uri: edit/main/docs/
@@ -59,6 +59,7 @@ nav:
   - Getting started: getting-started.md
   - Writing a compactor: writing-a-compactor.md
   - Submitting to leaderboard: submitting.md
+  - Leaderboard: leaderboard.md
   - Methodology: methodology.md
   - Elite program: elite-program.md
   - Architecture:
