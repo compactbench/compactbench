@@ -6,7 +6,7 @@ This folder holds community-submitted compaction methods. Each submission is a P
 submissions/<your-handle>/<method-name>/
 ```
 
-A maintainer-operated runner evaluates new submissions against hidden Elite Ranked cases and posts scores back to the PR. Qualifying runs land on the public leaderboard at [compactbench.dev](https://compactbench.dev).
+A maintainer-operated runner evaluates new submissions against hidden Elite Ranked cases and posts scores back to the PR. Qualifying runs land on the public leaderboard at [https://compactbench.github.io/compactbench/leaderboard](https://compactbench.github.io/compactbench/leaderboard/).
 
 ## Before you submit
 

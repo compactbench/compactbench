@@ -77,7 +77,7 @@ See [docs/writing-a-compactor.md](docs/writing-a-compactor.md) for full details.
 
 ## Leaderboard
 
-The public leaderboard is at **[compactbench.dev](https://compactbench.dev)**.
+The public leaderboard is at **[https://compactbench.github.io/compactbench/leaderboard](https://compactbench.github.io/compactbench/leaderboard/)**.
 
 Submissions are evaluated against **hidden** ranked benchmark cases by a maintainer-operated runner. To submit:
 
