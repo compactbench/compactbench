@@ -6,8 +6,8 @@ Thanks for your interest. This project lives and dies by community submissions o
 
 | Contribution | Entry point |
 |---|---|
-| Report a bug | [Bug report issue](https://github.com/UsernameLoad/compactbench/issues/new?template=bug_report.md) |
-| Propose a new benchmark template family | [Template proposal issue](https://github.com/UsernameLoad/compactbench/issues/new?template=template_proposal.md) |
+| Report a bug | [Bug report issue](https://github.com/compactbench/compactbench/issues/new?template=bug_report.md) |
+| Propose a new benchmark template family | [Template proposal issue](https://github.com/compactbench/compactbench/issues/new?template=template_proposal.md) |
 | Submit a compaction method for leaderboard scoring | [Submission guide](docs/submitting.md) |
 | Improve docs or examples | PR to `docs/` directly |
 | Fix something in core | PR to `src/compactbench/` with tests |
@@ -17,7 +17,7 @@ Thanks for your interest. This project lives and dies by community submissions o
 CompactBench uses [uv](https://github.com/astral-sh/uv) for dependency management.
 
 ```bash
-git clone https://github.com/UsernameLoad/compactbench.git
+git clone https://github.com/compactbench/compactbench.git
 cd compactbench
 uv venv
 uv pip install -e ".[dev,providers]"

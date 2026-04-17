@@ -22,4 +22,4 @@ CompactBench measures whether language models still behave correctly after long 
 
 ## Source
 
-[github.com/UsernameLoad/compactbench](https://github.com/UsernameLoad/compactbench) — Apache 2.0.
+[github.com/compactbench/compactbench](https://github.com/compactbench/compactbench) — Apache 2.0.

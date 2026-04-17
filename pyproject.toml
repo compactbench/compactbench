@@ -67,10 +67,10 @@ compactbench = "compactbench.cli:app"
 
 [project.urls]
 Homepage = "https://compactbench.dev"
-Repository = "https://github.com/UsernameLoad/compactbench"
+Repository = "https://github.com/compactbench/compactbench"
 Documentation = "https://compactbench.dev"
-Issues = "https://github.com/UsernameLoad/compactbench/issues"
-Changelog = "https://github.com/UsernameLoad/compactbench/blob/main/CHANGELOG.md"
+Issues = "https://github.com/compactbench/compactbench/issues"
+Changelog = "https://github.com/compactbench/compactbench/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling>=1.25"]

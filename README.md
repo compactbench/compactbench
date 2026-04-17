@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/compactbench.svg)](https://pypi.org/project/compactbench/)
 [![Python](https://img.shields.io/pypi/pyversions/compactbench.svg)](https://pypi.org/project/compactbench/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/UsernameLoad/compactbench/actions/workflows/ci.yml/badge.svg)](https://github.com/UsernameLoad/compactbench/actions/workflows/ci.yml)
+[![CI](https://github.com/compactbench/compactbench/actions/workflows/ci.yml/badge.svg)](https://github.com/compactbench/compactbench/actions/workflows/ci.yml)
 
 CompactBench measures whether language models still behave correctly after long conversation history is replaced with a compacted representation. It runs adversarial, deterministic, multi-cycle benchmarks and publishes ranked results on a public leaderboard.
 
