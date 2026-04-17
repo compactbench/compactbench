@@ -1,0 +1,112 @@
+{
+  "case_id": "buried_constraint_starter_v1:s42:dmedium",
+  "template_key": "buried_constraint_starter_v1",
+  "template_version": "1.0.0",
+  "seed": 42,
+  "difficulty": "medium",
+  "transcript": {
+    "turns": [
+      {
+        "id": 0,
+        "role": "user",
+        "content": "Let's plan the observability pass with Tara.",
+        "tags": []
+      },
+      {
+        "id": 1,
+        "role": "assistant",
+        "content": "Happy to help. What constraints should I keep in mind?",
+        "tags": []
+      },
+      {
+        "id": 2,
+        "role": "user",
+        "content": "Critical: never skip code review. That is a hard rule.",
+        "tags": [
+          "critical_constraint"
+        ]
+      },
+      {
+        "id": 3,
+        "role": "user",
+        "content": "I was thinking about lunch earlier.",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 4,
+        "role": "assistant",
+        "content": "Got it. Let me know if you want to switch focus back.",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 5,
+        "role": "user",
+        "content": "Quick question unrelated to this: what time is it where you are?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 6,
+        "role": "assistant",
+        "content": "I hear you. Anything else to cover on the primary question?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 7,
+        "role": "user",
+        "content": "OK, given all that, what do you suggest as the next step?",
+        "tags": []
+      }
+    ]
+  },
+  "ground_truth": {
+    "immutable_facts": [
+      "primary_subject: Tara",
+      "topic: observability pass"
+    ],
+    "locked_decisions": [],
+    "forbidden_behaviors": [
+      "skip code review"
+    ],
+    "unresolved_items": [],
+    "entity_map": {
+      "Tara": "primary_subject"
+    }
+  },
+  "evaluation_items": [
+    {
+      "key": "recall_constraint",
+      "item_type": "forbidden_behavior_retention",
+      "prompt": "What did the user say must never happen, verbatim or paraphrased?",
+      "expected": {
+        "check": "contains_normalized",
+        "value": "skip code review"
+      }
+    },
+    {
+      "key": "apply_constraint",
+      "item_type": "planning_soundness",
+      "prompt": "Propose a next step for the observability pass involving Tara.",
+      "expected": {
+        "check": "forbidden_absent",
+        "value": "skip code review"
+      }
+    },
+    {
+      "key": "entity_consistency",
+      "item_type": "entity_integrity",
+      "prompt": "Who is this conversation about?",
+      "expected": {
+        "check": "contains_normalized",
+        "value": "Tara"
+      }
+    }
+  ]
+}

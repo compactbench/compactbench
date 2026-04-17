@@ -24,5 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Three starter templates: `buried_constraint_starter_v1`,
     `decision_override_starter_v1`, `entity_confusion_starter_v1`
   - `compactbench suites list` command wired up
+- Case generation engine (WO-003):
+  - `compactbench.engine.generate_case` — pure function of
+    (template, seed, difficulty) → `GeneratedCase`
+  - Case-seed derivation from `(suite_version, seed_group, case_slot)` via SHA-256
+  - Difficulty policy application (distractor count, paraphrase depth,
+    override timing exposed as `difficulty.*` bindings)
+  - Distractor-turn generator (seeded, alternating user/assistant)
+  - Variable substitution across transcript, ground truth, and evaluation items
+  - `compactbench generate --template <key> --seed <int>` command wired up
+  - Three regression fixtures pinning the starter templates at seed=42, medium
 
 [Unreleased]: https://github.com/compactbench/compactbench/compare/v0.0.0...HEAD
