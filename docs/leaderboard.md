@@ -25,7 +25,7 @@ Live rankings of compaction methods, segmented by benchmark version and target m
   function fmt(n, digits) { return (typeof n === "number") ? n.toFixed(digits) : "—"; }
 
   try {
-    const resp = await fetch("./data/leaderboard.json", {cache: "no-store"});
+    const resp = await fetch("../data/leaderboard.json", {cache: "no-store"});
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
@@ -38,7 +38,7 @@ Live rankings of compaction methods, segmented by benchmark version and target m
         <a href="https://github.com/compactbench/compactbench/issues/6">#6 (Elite templates)</a>
         and the first community submissions land.
         <br><br>
-        Want to be first? See <a href="./submitting/">submitting a method</a>.
+        Want to be first? See <a href="../submitting/">submitting a method</a>.
       </div>`;
       return;
     }
