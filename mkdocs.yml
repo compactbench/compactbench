@@ -61,3 +61,9 @@ nav:
   - Submitting to leaderboard: submitting.md
   - Methodology: methodology.md
   - Elite program: elite-program.md
+  - Architecture:
+    - Decisions: architecture/decisions.md
+    - Workorders: architecture/workorders.md
+
+exclude_docs: |
+  architecture/_legacy-saas/
