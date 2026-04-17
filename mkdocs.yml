@@ -62,6 +62,7 @@ nav:
   - Leaderboard: leaderboard.md
   - Methodology: methodology.md
   - Elite program: elite-program.md
+  - FAQ: faq.md
   - Governance:
     - Elite versions: governance/elite-versions.md
   - Architecture:
@@ -70,3 +71,4 @@ nav:
 
 exclude_docs: |
   architecture/_legacy-saas/
+  launch/

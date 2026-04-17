@@ -55,15 +55,32 @@ jobs:
             fi
           done
 
-      # Hidden-set evaluation is optional for v1 — only runs if the deploy key
-      # secret is configured. Until WO-009 populates compactbench-hidden, the
-      # workflow runs against the public `elite_practice` suite as a stand-in.
-      - name: Run against public elite_practice suite
+      # Hidden-set evaluation: clone compactbench-hidden if the deploy key is
+      # configured. Fall back to public `elite_practice` when it isn't, so the
+      # workflow works for maintainers setting things up for the first time.
+      - name: Clone hidden ranked set
+        id: hidden
         env:
-          COMPACTBENCH_GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+          HIDDEN_REPO_DEPLOY_KEY: ${{ secrets.HIDDEN_REPO_DEPLOY_KEY }}
         run: |
-          method_spec=$(python -c "
+          if [ -z "$HIDDEN_REPO_DEPLOY_KEY" ]; then
+            echo "hidden_available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No HIDDEN_REPO_DEPLOY_KEY secret configured — falling back to public elite_practice."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          echo "$HIDDEN_REPO_DEPLOY_KEY" > ~/.ssh/hidden_key
+          chmod 600 ~/.ssh/hidden_key
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/hidden_key -o IdentitiesOnly=yes" \
+            git clone --depth 1 git@github.com:compactbench/compactbench-hidden.git /tmp/hidden
+          echo "hidden_available=true" >> "$GITHUB_OUTPUT"
+          echo "hidden_dir=/tmp/hidden/ranked" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve submission config
+        id: cfg
+        run: |
+          python -c "
           from pathlib import Path
           import sys
           import yaml
@@ -71,22 +88,44 @@ jobs:
               if '_template' in cfg.parts:
                   continue
               data = yaml.safe_load(cfg.read_text())
-              print(data['method']['class_path'])
-              print(data['runtime']['provider'])
-              print(data['runtime']['model'])
-              print(data['runtime'].get('drift_cycles', 2))
-              print(data['runtime'].get('case_count_per_template', 5))
+              with open('${{ github.workspace }}/cfg.env', 'w') as fp:
+                  fp.write(f\"CLASS_PATH={data['method']['class_path']}\n\")
+                  fp.write(f\"PROVIDER={data['runtime']['provider']}\n\")
+                  fp.write(f\"MODEL={data['runtime']['model']}\n\")
+                  fp.write(f\"DRIFT_CYCLES={data['runtime'].get('drift_cycles', 2)}\n\")
+                  fp.write(f\"CASE_COUNT={data['runtime'].get('case_count_per_template', 5)}\n\")
               sys.exit(0)
-          ")
-          read -r class_path provider model drift_cycles case_count <<<"$(echo "$method_spec" | xargs)"
-          uv run compactbench run \
-            --method "$class_path" \
-            --suite elite_practice \
-            --provider "$provider" \
-            --model "$model" \
-            --drift-cycles "$drift_cycles" \
-            --case-count "$case_count" \
-            --output results.jsonl
+          "
+          cat cfg.env >> "$GITHUB_ENV"
+
+      - name: Run against ranked suite
+        id: run
+        env:
+          COMPACTBENCH_GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+        run: |
+          if [ "${{ steps.hidden.outputs.hidden_available }}" = "true" ]; then
+            uv run compactbench run \
+              --method "$CLASS_PATH" \
+              --benchmarks-dir "${{ steps.hidden.outputs.hidden_dir }}" \
+              --suite elite_v1 \
+              --provider "$PROVIDER" \
+              --model "$MODEL" \
+              --drift-cycles "$DRIFT_CYCLES" \
+              --case-count "$CASE_COUNT" \
+              --output results.jsonl
+            echo "suite_label=elite_v1 (hidden ranked)" >> "$GITHUB_OUTPUT"
+          else
+            uv run compactbench run \
+              --method "$CLASS_PATH" \
+              --suite elite_practice \
+              --provider "$PROVIDER" \
+              --model "$MODEL" \
+              --drift-cycles "$DRIFT_CYCLES" \
+              --case-count "$CASE_COUNT" \
+              --output results.jsonl
+            echo "suite_label=elite_practice (public stand-in)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Score summary
         id: summary
@@ -96,11 +135,11 @@ jobs:
             echo 'body<<EOF'
             echo '## Automated evaluation result'
             echo ''
+            echo 'Suite: `${{ steps.run.outputs.suite_label }}`'
+            echo ''
             echo '```'
             cat summary.txt
             echo '```'
-            echo ''
-            echo '_Ran on `elite_practice` (public) as a stand-in until the hidden ranked set is populated (#6). A maintainer will re-run against the ranked set once the submission is ready for ranking._'
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
