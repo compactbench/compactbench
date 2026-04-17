@@ -89,7 +89,15 @@ See [docs/submitting.md](docs/submitting.md) for the full submission protocol.
 
 ## Project status
 
-Pre-alpha. Core engine, scoring, and CLI are in active development. First released version will accompany the v1 leaderboard launch.
+Pre-alpha. Core engine, scoring, runner, and CLI are landed. Three workorders remain before the v1 launch:
+
+| # | Scope | Who can pick it up |
+|---|---|---|
+| [#5 WO-008](https://github.com/compactbench/compactbench/issues/5) | Submission workflow + public leaderboard site | GH Actions + a little Python |
+| [#6 WO-009](https://github.com/compactbench/compactbench/issues/6) | Launch Elite template content (3 families) | YAML authoring — **good starter issue** |
+| [#7 WO-010](https://github.com/compactbench/compactbench/issues/7) | Docs polish + PyPI 0.1.0 release | Writers + release-workflow folks |
+
+Each issue has full scope, acceptance criteria, and starter pointers. Comment to claim.
 
 ## Contributing
 

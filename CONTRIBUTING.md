@@ -12,6 +12,16 @@ Thanks for your interest. This project lives and dies by community submissions o
 | Improve docs or examples | PR to `docs/` directly |
 | Fix something in core | PR to `src/compactbench/` with tests |
 
+## Open workorders — pickup welcome
+
+Three planned workorders from [docs/architecture/workorders.md](docs/architecture/workorders.md) are open as GitHub issues and labeled `help wanted`:
+
+- **[#5 WO-008](https://github.com/compactbench/compactbench/issues/5)** — Submission evaluation workflow + leaderboard site. GitHub Actions + a little Python + static site.
+- **[#6 WO-009](https://github.com/compactbench/compactbench/issues/6)** — Launch Elite templates (3 families, public + hidden). Mostly YAML authoring; **good starter issue**.
+- **[#7 WO-010](https://github.com/compactbench/compactbench/issues/7)** — Docs polish + PyPI 0.1.0 release + launch prep. Writers + release-workflow folks.
+
+Each issue has a detailed scope, dependencies, acceptance criteria, and starter pointers. Comment on the issue before you start if you want to claim it — we'll coordinate reviewers and unblock anything infrastructure-related (self-hosted runner access, hidden-repo access, PyPI trusted-publishing setup).
+
 ## Development setup
 
 CompactBench uses [uv](https://github.com/astral-sh/uv) for dependency management.
