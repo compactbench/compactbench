@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Three starter templates: `buried_constraint_starter_v1`,
     `decision_override_starter_v1`, `entity_confusion_starter_v1`
   - `compactbench suites list` command wired up
+- Scoring engine (WO-004):
+  - Per-item checks: `contains_normalized`, `forbidden_absent`, `exact`, `set_match`
+  - Weighted cycle aggregation per decisions.md §B3 item weights
+  - Contradiction detection (item-aware: recall items excluded)
+  - Compression ratio via `cl100k_base` tokenizer
+  - Drift resistance from cross-cycle scores (clamped to `[0, 1]`)
+  - `compactbench score --results results.jsonl` wired up (reads JSONL of
+    `{case, artifact, responses}` records, prints per-case + aggregate summary)
 - Case generation engine (WO-003):
   - `compactbench.engine.generate_case` — pure function of
     (template, seed, difficulty) → `GeneratedCase`
