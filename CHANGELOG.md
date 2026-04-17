@@ -24,6 +24,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Three starter templates: `buried_constraint_starter_v1`,
     `decision_override_starter_v1`, `entity_confusion_starter_v1`
   - `compactbench suites list` command wired up
+- Submission pipeline + leaderboard (WO-008):
+  - `src/compactbench/leaderboard/` — `elite_score` computation, tie-breakers,
+    qualification floors (with rejection reasons), `RunResult` → public
+    `LeaderboardRow` projection, best-first rank assignment
+  - `.github/workflows/evaluate-submission.yml` — runs on GitHub-hosted
+    `ubuntu-latest`, gated on a maintainer-applied `evaluate` label; clones PR
+    head, installs submission deps, runs `compactbench run`, posts score
+    comment, uploads results artifact
+  - `.github/workflows/update-leaderboard.yml` — on push under `submissions/**`
+    rebuilds `docs/data/leaderboard.json` via `scripts/rebuild_leaderboard.py`
+    and commits; triggers the docs Pages redeploy
+  - `docs/leaderboard.md` — live table rendered client-side from
+    `data/leaderboard.json`, grouped by `(benchmark_version, target_model)`
+  - `submissions/_template/` — copy-paste scaffold (method.py, config.yaml,
+    requirements.txt, README.md)
+  - `compactbench submit` prints a submission checklist (full PR automation
+    stays server-side since hidden-set evaluation requires repo secrets)
+  - Runner infra decision updated: v1 uses GitHub-hosted runners, not
+    self-hosted; migration path preserved
 - End-to-end runner (WO-007):
   - `compactbench run --method <spec> --suite <key> --provider <k> --model <m>`
     orchestrates: load suite → generate cases → per case iterate drift cycles
