@@ -7,6 +7,7 @@ backing workorder lands. See docs/architecture/workorders.md.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -64,9 +65,63 @@ def generate(
     template: str = typer.Option(..., "--template", "-t", help="Template key."),
     seed: int = typer.Option(0, "--seed"),
     difficulty: str = typer.Option("medium", "--difficulty"),
+    benchmarks_dir: Path = typer.Option(
+        Path("benchmarks/public"),
+        "--benchmarks-dir",
+        help="Directory containing public benchmark suites.",
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Write JSON to this file (stdout if omitted)."
+    ),
 ) -> None:
     """Generate a single benchmark case from a template and seed."""
-    raise NotImplementedError("generate: implemented in WO-003")
+    from compactbench.dsl import (
+        DifficultyLevel,
+        TemplateError,
+        load_suite,
+        validate_template,
+    )
+    from compactbench.engine import generate_case
+
+    if not benchmarks_dir.is_dir():
+        console.print(f"[red]no benchmarks directory at {benchmarks_dir}[/red]")
+        raise typer.Exit(code=1)
+
+    found: dict[str, Any] = {}
+    for suite_dir in sorted(p for p in benchmarks_dir.iterdir() if p.is_dir()):
+        try:
+            for t in load_suite(suite_dir):
+                found[t.key] = t
+        except TemplateError as exc:
+            console.print(f"[yellow]skipping {suite_dir.name}: {exc}[/yellow]")
+
+    if template not in found:
+        console.print(f"[red]template {template!r} not found. Known: {sorted(found)}[/red]")
+        raise typer.Exit(code=1)
+
+    tmpl = found[template]
+    try:
+        validate_template(tmpl)
+    except TemplateError as exc:
+        console.print(f"[red]template {template!r} failed validation: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        diff = DifficultyLevel(difficulty.lower())
+    except ValueError as exc:
+        console.print(
+            f"[red]unknown difficulty {difficulty!r}. "
+            f"Valid: {[d.value for d in DifficultyLevel]}[/red]"
+        )
+        raise typer.Exit(code=1) from exc
+
+    case = generate_case(tmpl, seed, diff)
+    json_text = case.model_dump_json(indent=2)
+    if output is None:
+        console.print_json(json_text)
+    else:
+        output.write_text(json_text + "\n", encoding="utf-8")
+        console.print(f"wrote {output}")
 
 
 @app.command()

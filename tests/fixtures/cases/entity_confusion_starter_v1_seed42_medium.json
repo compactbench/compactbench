@@ -1,0 +1,103 @@
+{
+  "case_id": "entity_confusion_starter_v1:s42:dmedium",
+  "template_key": "entity_confusion_starter_v1",
+  "template_version": "1.0.0",
+  "seed": 42,
+  "difficulty": "medium",
+  "transcript": {
+    "turns": [
+      {
+        "id": 0,
+        "role": "user",
+        "content": "On the observability pass, Omar will build SQL through string concatenation, and Aditya will mutate shared global state.",
+        "tags": []
+      },
+      {
+        "id": 1,
+        "role": "assistant",
+        "content": "Got it. Two separate responsibilities.",
+        "tags": []
+      },
+      {
+        "id": 2,
+        "role": "user",
+        "content": "Quick question unrelated to this: what time is it where you are?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 3,
+        "role": "assistant",
+        "content": "Happy to chat about that briefly — anything else on the main topic?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 4,
+        "role": "user",
+        "content": "Do you happen to know what a quokka is?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 5,
+        "role": "assistant",
+        "content": "Noted. Do you want to get back to the plan?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 6,
+        "role": "user",
+        "content": "Can you confirm who owns what?",
+        "tags": []
+      }
+    ]
+  },
+  "ground_truth": {
+    "immutable_facts": [
+      "Omar owns: build SQL through string concatenation",
+      "Aditya owns: mutate shared global state"
+    ],
+    "locked_decisions": [],
+    "forbidden_behaviors": [],
+    "unresolved_items": [],
+    "entity_map": {
+      "Omar": "owner_of_task_a",
+      "Aditya": "owner_of_task_b"
+    }
+  },
+  "evaluation_items": [
+    {
+      "key": "assign_a",
+      "item_type": "entity_integrity",
+      "prompt": "What is Omar responsible for?",
+      "expected": {
+        "check": "contains_normalized",
+        "value": "build SQL through string concatenation"
+      }
+    },
+    {
+      "key": "assign_b",
+      "item_type": "entity_integrity",
+      "prompt": "What is Aditya responsible for?",
+      "expected": {
+        "check": "contains_normalized",
+        "value": "mutate shared global state"
+      }
+    },
+    {
+      "key": "no_swap",
+      "item_type": "forbidden_behavior_retention",
+      "prompt": "Does Omar handle mutate shared global state?",
+      "expected": {
+        "check": "forbidden_absent",
+        "value": "mutate shared global state"
+      }
+    }
+  ]
+}
