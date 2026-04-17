@@ -55,25 +55,25 @@ jobs:
             fi
           done
 
-      # Hidden-set evaluation: clone compactbench-hidden if the deploy key is
-      # configured. Fall back to public `elite_practice` when it isn't, so the
-      # workflow works for maintainers setting things up for the first time.
+      # Hidden-set evaluation: clone compactbench-hidden via HTTPS + a
+      # fine-grained PAT stored as HIDDEN_REPO_TOKEN. Falls back to public
+      # `elite_practice` when the secret is absent.
+      #
+      # Org policy blocks SSH deploy keys, so we use a PAT scoped to
+      # Contents: Read on compactbench-hidden only. See decisions.md §E.
       - name: Clone hidden ranked set
         id: hidden
         env:
-          HIDDEN_REPO_DEPLOY_KEY: ${{ secrets.HIDDEN_REPO_DEPLOY_KEY }}
+          HIDDEN_REPO_TOKEN: ${{ secrets.HIDDEN_REPO_TOKEN }}
         run: |
-          if [ -z "$HIDDEN_REPO_DEPLOY_KEY" ]; then
+          if [ -z "$HIDDEN_REPO_TOKEN" ]; then
             echo "hidden_available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No HIDDEN_REPO_DEPLOY_KEY secret configured — falling back to public elite_practice."
+            echo "::notice::No HIDDEN_REPO_TOKEN secret configured — falling back to public elite_practice."
             exit 0
           fi
-          mkdir -p ~/.ssh
-          echo "$HIDDEN_REPO_DEPLOY_KEY" > ~/.ssh/hidden_key
-          chmod 600 ~/.ssh/hidden_key
-          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
-          GIT_SSH_COMMAND="ssh -i ~/.ssh/hidden_key -o IdentitiesOnly=yes" \
-            git clone --depth 1 git@github.com:compactbench/compactbench-hidden.git /tmp/hidden
+          git clone --depth 1 \
+            "https://x-access-token:${HIDDEN_REPO_TOKEN}@github.com/compactbench/compactbench-hidden.git" \
+            /tmp/hidden
           echo "hidden_available=true" >> "$GITHUB_OUTPUT"
           echo "hidden_dir=/tmp/hidden/ranked" >> "$GITHUB_OUTPUT"
 
