@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Three starter templates: `buried_constraint_starter_v1`,
     `decision_override_starter_v1`, `entity_confusion_starter_v1`
   - `compactbench suites list` command wired up
+- Real model providers (WO-006):
+  - `GroqProvider` — Llama 3.3 70B, Kimi K2, etc. via the `groq` SDK
+  - `GoogleAIStudioProvider` — Gemini 2.0 Flash etc. via the `google-genai` SDK
+  - `OllamaProvider` — local models via the `ollama` SDK
+  - Shared `retry_with_backoff` async helper with exponential + capped delay
+  - Per-provider retry predicates: Groq retries `RateLimitError` /
+    `APITimeoutError` / `APIConnectionError`; Google retries 429s and 5xxs;
+    Ollama retries `httpx.TimeoutException` / `ConnectError` + 429/5xx
+    `ResponseError`
+  - Config via `COMPACTBENCH_GROQ_API_KEY`,
+    `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY`, `COMPACTBENCH_OLLAMA_BASE_URL`
+  - Cross-provider contract tests ensure identical response shape
+  - Real provider SDKs stay optional (`pip install 'compactbench[providers]'`);
+    importing a provider without its SDK raises a clean `ProviderError`
 - Built-in compactors + mock provider (WO-005):
   - Four baselines in `compactbench.compactors`: `naive-summary`,
     `structured-state`, `hierarchical-summary`, `hybrid-ledger`

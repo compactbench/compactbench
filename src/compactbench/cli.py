@@ -221,6 +221,9 @@ def providers_list() -> None:
     table.add_column("Notes")
     notes: dict[str, str] = {
         "mock": "deterministic, offline — for tests and local dev",
+        "groq": "Groq Cloud. Set COMPACTBENCH_GROQ_API_KEY.",
+        "google-ai-studio": ("Google AI Studio. Set COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY."),
+        "ollama": "Local Ollama. COMPACTBENCH_OLLAMA_BASE_URL (default localhost:11434).",
     }
     for key in providers:
         table.add_row(key, notes.get(key, ""))

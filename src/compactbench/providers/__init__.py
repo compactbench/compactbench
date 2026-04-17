@@ -1,8 +1,4 @@
-"""Model provider abstractions and concrete clients.
-
-The mock provider ships in WO-005; real providers (Groq, Google AI Studio,
-Ollama) land in WO-006.
-"""
+"""Model provider abstractions and concrete clients."""
 
 from compactbench.providers.base import (
     CompletionRequest,
@@ -14,10 +10,16 @@ from compactbench.providers.errors import (
     ProviderResponseError,
     UnknownProviderError,
 )
+from compactbench.providers.google_ai_studio import GoogleAIStudioProvider
+from compactbench.providers.groq import GroqProvider
 from compactbench.providers.mock import MockProvider
+from compactbench.providers.ollama import OllamaProvider
 
 _REGISTRY: dict[str, type[Provider]] = {
     MockProvider.key: MockProvider,
+    GroqProvider.key: GroqProvider,
+    GoogleAIStudioProvider.key: GoogleAIStudioProvider,
+    OllamaProvider.key: OllamaProvider,
 }
 
 
@@ -37,7 +39,10 @@ def get_provider_cls(key: str) -> type[Provider]:
 __all__ = [
     "CompletionRequest",
     "CompletionResponse",
+    "GoogleAIStudioProvider",
+    "GroqProvider",
     "MockProvider",
+    "OllamaProvider",
     "Provider",
     "ProviderError",
     "ProviderResponseError",
