@@ -1,0 +1,67 @@
+# Starter variant of the entity_confusion family.
+# Two people each own a distinct task. The compactor must not swap their roles.
+template:
+  key: entity_confusion_starter_v1
+  family: entity_confusion
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 2
+      medium: 4
+      hard: 6
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+
+  variables:
+    - name: person_a
+      generator: person_name
+    - name: person_b
+      generator: person_name
+    - name: task_a
+      generator: action_phrase
+    - name: task_b
+      generator: action_phrase
+    - name: project_topic
+      generator: project_noun
+
+  transcript:
+    turns:
+      - role: user
+        template: "On the {{project_topic}}, {{person_a}} will {{task_a}}, and {{person_b}} will {{task_b}}."
+      - role: assistant
+        template: "Got it. Two separate responsibilities."
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Can you confirm who owns what?"
+
+  ground_truth:
+    immutable_facts:
+      - "{{person_a}} owns: {{task_a}}"
+      - "{{person_b}} owns: {{task_b}}"
+    entity_map:
+      "{{person_a}}": owner_of_task_a
+      "{{person_b}}": owner_of_task_b
+
+  evaluation_items:
+    - key: assign_a
+      type: entity_integrity
+      prompt: "What is {{person_a}} responsible for?"
+      expected:
+        check: contains_normalized
+        value: "{{task_a}}"
+    - key: assign_b
+      type: entity_integrity
+      prompt: "What is {{person_b}} responsible for?"
+      expected:
+        check: contains_normalized
+        value: "{{task_b}}"
+    - key: no_swap
+      type: forbidden_behavior_retention
+      prompt: "Does {{person_a}} handle {{task_b}}?"
+      expected:
+        check: forbidden_absent
+        value: "{{task_b}}"

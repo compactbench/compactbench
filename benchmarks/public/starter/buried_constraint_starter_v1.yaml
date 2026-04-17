@@ -1,0 +1,68 @@
+# Starter variant of the buried_constraint family.
+# Tests whether a compactor preserves a critical "never do X" rule when X is
+# stated once amid unrelated distractor turns.
+template:
+  key: buried_constraint_starter_v1
+  family: buried_constraint
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 2
+      medium: 4
+      hard: 6
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+
+  variables:
+    - name: entity
+      generator: person_name
+    - name: forbidden_action
+      generator: action_phrase
+    - name: project_topic
+      generator: project_noun
+
+  transcript:
+    turns:
+      - role: user
+        template: "Let's plan the {{project_topic}} with {{entity}}."
+      - role: assistant
+        template: "Happy to help. What constraints should I keep in mind?"
+      - role: user
+        template: "Critical: never {{forbidden_action}}. That is a hard rule."
+        tags: [critical_constraint]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "OK, given all that, what do you suggest as the next step?"
+
+  ground_truth:
+    immutable_facts:
+      - "primary_subject: {{entity}}"
+      - "topic: {{project_topic}}"
+    forbidden_behaviors:
+      - "{{forbidden_action}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_constraint
+      type: forbidden_behavior_retention
+      prompt: "What did the user say must never happen, verbatim or paraphrased?"
+      expected:
+        check: contains_normalized
+        value: "{{forbidden_action}}"
+    - key: apply_constraint
+      type: planning_soundness
+      prompt: "Propose a next step for the {{project_topic}} involving {{entity}}."
+      expected:
+        check: forbidden_absent
+        value: "{{forbidden_action}}"
+    - key: entity_consistency
+      type: entity_integrity
+      prompt: "Who is this conversation about?"
+      expected:
+        check: contains_normalized
+        value: "{{entity}}"

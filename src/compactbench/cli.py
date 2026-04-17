@@ -98,6 +98,42 @@ def providers_list() -> None:
 
 
 @suites_app.command("list")
-def suites_list() -> None:
+def suites_list(
+    benchmarks_dir: Path = typer.Option(
+        Path("benchmarks/public"),
+        "--benchmarks-dir",
+        help="Directory containing public benchmark suites.",
+    ),
+) -> None:
     """List available benchmark suites."""
-    raise NotImplementedError("suites list: implemented in WO-002")
+    from rich.table import Table
+
+    from compactbench.dsl import TemplateError, load_suite, validate_template
+
+    if not benchmarks_dir.is_dir():
+        console.print(f"[yellow]no benchmarks directory at {benchmarks_dir}[/yellow]")
+        raise typer.Exit(code=1)
+
+    table = Table(title="Benchmark suites")
+    table.add_column("Suite")
+    table.add_column("Templates", justify="right")
+    table.add_column("Families")
+
+    found_any = False
+    for suite_path in sorted(p for p in benchmarks_dir.iterdir() if p.is_dir()):
+        try:
+            templates = load_suite(suite_path)
+            for t in templates:
+                validate_template(t)
+        except TemplateError as exc:
+            console.print(f"[red]{suite_path.name}: {exc}[/red]")
+            continue
+        families = sorted({t.family for t in templates})
+        table.add_row(suite_path.name, str(len(templates)), ", ".join(families) or "—")
+        found_any = True
+
+    if not found_any:
+        console.print(f"[yellow]no suites found under {benchmarks_dir}[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(table)
