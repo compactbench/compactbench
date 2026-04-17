@@ -1,0 +1,53 @@
+name: Update leaderboard
+
+# Rebuilds docs/data/leaderboard.json when a submission (with its merged
+# results.jsonl) lands on main. The commit we push triggers the docs workflow
+# which redeploys GitHub Pages.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "submissions/**/results.jsonl"
+      - "src/compactbench/leaderboard/**"
+
+permissions:
+  contents: write  # to commit the rebuilt leaderboard.json
+
+concurrency:
+  group: leaderboard
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install package
+        run: uv sync --extra providers
+
+      - name: Rebuild leaderboard.json
+        run: uv run python scripts/rebuild_leaderboard.py
+
+      - name: Commit updated leaderboard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet docs/data/leaderboard.json; then
+            echo "leaderboard.json unchanged — skipping commit"
+            exit 0
+          fi
+          git add docs/data/leaderboard.json
+          git commit -m "chore(leaderboard): rebuild from merged submissions [skip ci]"
+          git push

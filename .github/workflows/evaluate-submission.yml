@@ -1,0 +1,122 @@
+name: Evaluate submission
+
+# Runs only when a maintainer applies the `evaluate` label to a submission PR.
+# `pull_request_target` gives access to repo secrets; the `evaluate` label is
+# the authorization gate. See docs/architecture/decisions.md §E.
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: write  # for posting the score comment
+
+concurrency:
+  group: evaluate-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    if: github.event.label.name == 'evaluate'
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: "3.12"
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v6
+        with:
+          # Check out the submitter's PR branch — this contains the method source.
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up uv + Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install compactbench + provider SDKs
+        run: uv sync --extra providers
+
+      - name: Install submission dependencies
+        run: |
+          changed_dirs=$(git diff --name-only \
+            ${{ github.event.pull_request.base.sha }} \
+            ${{ github.event.pull_request.head.sha }} \
+            -- 'submissions/**' \
+            | awk -F/ '{print $1"/"$2"/"$3}' | sort -u)
+          for dir in $changed_dirs; do
+            if [ -f "$dir/requirements.txt" ]; then
+              echo "Installing deps for $dir"
+              uv pip install -r "$dir/requirements.txt"
+            fi
+          done
+
+      # Hidden-set evaluation is optional for v1 — only runs if the deploy key
+      # secret is configured. Until WO-009 populates compactbench-hidden, the
+      # workflow runs against the public `elite_practice` suite as a stand-in.
+      - name: Run against public elite_practice suite
+        env:
+          COMPACTBENCH_GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+        run: |
+          method_spec=$(python -c "
+          from pathlib import Path
+          import sys
+          import yaml
+          for cfg in Path('submissions').rglob('config.yaml'):
+              if '_template' in cfg.parts:
+                  continue
+              data = yaml.safe_load(cfg.read_text())
+              print(data['method']['class_path'])
+              print(data['runtime']['provider'])
+              print(data['runtime']['model'])
+              print(data['runtime'].get('drift_cycles', 2))
+              print(data['runtime'].get('case_count_per_template', 5))
+              sys.exit(0)
+          ")
+          read -r class_path provider model drift_cycles case_count <<<"$(echo "$method_spec" | xargs)"
+          uv run compactbench run \
+            --method "$class_path" \
+            --suite elite_practice \
+            --provider "$provider" \
+            --model "$model" \
+            --drift-cycles "$drift_cycles" \
+            --case-count "$case_count" \
+            --output results.jsonl
+
+      - name: Score summary
+        id: summary
+        run: |
+          uv run compactbench score --results results.jsonl | tee summary.txt
+          {
+            echo 'body<<EOF'
+            echo '## Automated evaluation result'
+            echo ''
+            echo '```'
+            cat summary.txt
+            echo '```'
+            echo ''
+            echo '_Ran on `elite_practice` (public) as a stand-in until the hidden ranked set is populated (#6). A maintainer will re-run against the ranked set once the submission is ready for ranking._'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload results artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: results
+          path: results.jsonl
+
+      - name: Post score comment to PR
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${{ steps.summary.outputs.body }}`,
+            });

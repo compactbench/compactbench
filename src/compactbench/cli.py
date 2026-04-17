@@ -226,10 +226,47 @@ def score(
 
 @app.command()
 def submit(
-    results: Path = typer.Option(..., "--results", "-r", exists=True, readable=True),
+    results: Path = typer.Option(
+        ...,
+        "--results",
+        "-r",
+        exists=True,
+        readable=True,
+        help="Local results.jsonl produced by `compactbench run`.",
+    ),
+    handle: str = typer.Option(..., "--handle", help="Your GitHub handle."),
+    method_name: str = typer.Option(
+        ..., "--name", help="Method name in kebab-case, e.g. 'my-ledger-v1'."
+    ),
 ) -> None:
-    """Open a PR to submit results for leaderboard scoring."""
-    raise NotImplementedError("submit: implemented in WO-008")
+    """Print the steps to submit a method for leaderboard scoring.
+
+    Full automation of PR creation is out of scope for the local CLI — GitHub
+    Actions evaluation happens against the hidden test set on a repo secret,
+    so submission is always a PR + maintainer review. This command prints a
+    checklist so you don't miss a step.
+    """
+    method_dir = Path("submissions") / handle / method_name
+    console.print("[bold]Submit a method to the CompactBench leaderboard[/bold]")
+    console.print("")
+    console.print(f"  1. Create [cyan]{method_dir}/[/cyan] in your fork.")
+    console.print(
+        f"  2. Copy the scaffold from [cyan]submissions/_template/[/cyan] "
+        f"into [cyan]{method_dir}/[/cyan] and edit every file."
+    )
+    console.print(
+        f"  3. Put your validated [cyan]{results}[/cyan] at "
+        f"[cyan]{method_dir}/results.jsonl[/cyan]."
+    )
+    console.print(
+        "  4. Commit, push, and open a PR on https://github.com/compactbench/compactbench"
+    )
+    console.print(
+        "  5. A maintainer will code-review and apply the [cyan]evaluate[/cyan] "
+        "label, which runs your method against the hidden set."
+    )
+    console.print("")
+    console.print("Full protocol: https://compactbench.github.io/compactbench/submitting/")
 
 
 providers_app = typer.Typer(help="Inspect available model providers.", no_args_is_help=True)

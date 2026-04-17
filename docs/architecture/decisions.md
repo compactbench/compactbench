@@ -182,26 +182,38 @@ Anthropic Claude, OpenAI GPT, Google Vertex AI — integration when a funding pa
 
 ## Part E — Leaderboard runner infrastructure
 
-### E1. Host
-Oracle Cloud Free Tier VM (Ampere, 4 OCPU / 24 GB RAM), Ubuntu 24.04 LTS.
+### E1. Runner
+GitHub-hosted `ubuntu-latest` runners (free and unlimited for public repos).
 
-### E2. Runner type
-GitHub Actions self-hosted runner registered to the `compactbench/compactbench` repo with the `evaluate` label.
+No self-hosted VM for v1. Earlier drafts planned an Oracle Cloud self-hosted runner for outbound-firewall control; we dropped it because (a) it's zero cost only on Oracle's increasingly unreliable free tier, (b) the operational burden outweighs the isolation benefit for a pre-scale project, and (c) the same security properties come from the `pull_request_target` + manual-label flow described in E3–E5 below.
 
-### E3. Hidden test set access
-The runner clones `compactbench/compactbench-hidden` via a deploy key scoped to that repo only. The key never leaves the runner VM.
+We can migrate to self-hosted later without changing the workflow shape if there is a specific incident or a scale need.
 
-### E4. Provider keys
-Stored as repository secrets (`GROQ_API_KEY`, `GOOGLE_AI_STUDIO_API_KEY`) and injected into the `evaluate-submission.yml` workflow environment. Not exposed to PR authors; not usable by workflows outside `evaluate-submission.yml`.
+### E2. Evaluation workflow
+`.github/workflows/evaluate-submission.yml` triggers on `pull_request_target` with the `evaluate` label. It runs on GitHub-hosted `ubuntu-latest` and:
 
-### E5. Evaluation gating
-A maintainer must manually label a submission PR with `evaluate` for the runner to execute. Prevents anonymous PRs from burning runner cycles or exfiltrating secrets.
+1. Checks out the PR's head commit (contains the submission's method source).
+2. Clones `compactbench/compactbench-hidden` using a deploy key stored as a repo secret.
+3. Installs `compactbench` plus the submission's declared deps.
+4. Runs `compactbench run` against the hidden Elite Ranked suite.
+5. Posts the score summary as a PR comment and uploads the results file as a workflow artifact.
 
-### E6. Leaderboard publication
-On merge of a qualified submission, `update-leaderboard.yml` rebuilds `site/data/leaderboard.json`, regenerates the static leaderboard site, and deploys to GitHub Pages.
+### E3. Secret exposure model
+`pull_request_target` runs in the trusted context of the target repo (not the PR author's fork) with access to repo secrets. The workflow is only authorized to run once a **maintainer applies the `evaluate` label** after reviewing the submission's code. This review is the security gate.
 
-### E7. Cost
-$0. Oracle free tier + GitHub Actions free minutes + GitHub Pages free hosting.
+Provider API keys (`GROQ_API_KEY`, `GOOGLE_AI_STUDIO_API_KEY`) and the hidden-repo deploy key are stored as repo secrets scoped to the `evaluate-submission.yml` workflow environment. They are not accessible to regular `pull_request` events or to other workflows.
+
+### E4. Evaluation gating
+Maintainers must manually apply the `evaluate` label to each submission PR after code review. The label's existence is what authorizes the workflow to run with secrets. No auto-labeling, no drive-by evaluations.
+
+### E5. Leaderboard publication
+On merge of a qualified submission, `update-leaderboard.yml` rebuilds `docs/data/leaderboard.json` from all committed submissions and triggers the existing docs deploy. Served from the same GitHub Pages deployment as the docs.
+
+### E6. Cost
+$0. GitHub Actions free minutes (unlimited for public repos) + GitHub Pages free hosting. Optional later: domain registration (~$12/year).
+
+### E7. Migration path
+If we ever need self-hosted (e.g., for outbound-firewall allow-listing or for compliance), add a single `runs-on: [self-hosted, evaluate]` override to the evaluate workflow and register the runner. No changes to the submission flow, leaderboard core, or secret model.
 
 ---
 
