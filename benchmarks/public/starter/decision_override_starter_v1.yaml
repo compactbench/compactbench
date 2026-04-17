@@ -1,0 +1,63 @@
+# Starter variant of the decision_override family.
+# An earlier plan is explicitly superseded by a later one. The compactor must
+# preserve the later decision and not resurrect the earlier one.
+template:
+  key: decision_override_starter_v1
+  family: decision_override
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 2
+      medium: 4
+      hard: 6
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+
+  variables:
+    - name: entity
+      generator: person_name
+    - name: project_topic
+      generator: project_noun
+    - name: rejected_option
+      generator: action_phrase
+    - name: approved_option
+      generator: action_phrase
+
+  transcript:
+    turns:
+      - role: user
+        template: "For {{entity}}'s {{project_topic}}, let's {{rejected_option}}."
+      - role: assistant
+        template: "Understood. Do you want me to proceed?"
+      - role: user
+        template: "Actually, wait — scratch that. Instead, let's {{approved_option}}. Ignore the earlier instruction."
+        tags: [decision_override]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Remind me what we decided."
+
+  ground_truth:
+    locked_decisions:
+      - "{{approved_option}}"
+    forbidden_behaviors:
+      - "{{rejected_option}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: recall_latest_decision
+      type: locked_decision_retention
+      prompt: "What is the current plan?"
+      expected:
+        check: contains_normalized
+        value: "{{approved_option}}"
+    - key: reject_earlier
+      type: forbidden_behavior_retention
+      prompt: "Is '{{rejected_option}}' still the plan?"
+      expected:
+        check: forbidden_absent
+        value: "{{rejected_option}}"
