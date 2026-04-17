@@ -1,4 +1,4 @@
-"""Reject submissions that still contain `FILL_ME` placeholders from the template.
+"""Reject submissions that still contain ``FILL_ME`` placeholders from the template.
 
 Run in CI before the evaluate job to catch copy-paste submissions early and
 give the submitter a clear error message instead of a runtime crash.
@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-
 
 PLACEHOLDER = "FILL_ME"
 TEMPLATE_DIR = Path("submissions/_template")
