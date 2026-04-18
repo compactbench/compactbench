@@ -1,0 +1,27 @@
+# Normalise every text file to LF in the repo and on checkout.
+# Without this, Windows contributors end up committing CRLF and break CI
+# (ruff format and some shell-embedded scripts are sensitive).
+* text=auto eol=lf
+
+# Explicit text types — belt and suspenders for the main file types we ship.
+*.py    text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.json  text eol=lf
+*.ipynb text eol=lf
+*.svg   text eol=lf
+*.sh    text eol=lf
+*.cfg   text eol=lf
+
+# Binaries: leave alone, never convert.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.gz  binary
+*.zip binary
+*.whl binary
