@@ -95,22 +95,35 @@ def _handle_writefile(cell_src: str, cwd: Path) -> bool:
     return True
 
 
+_STRING_LITERAL_RE = re.compile(r"""^(['"])(.*)\1$""")
+
+
 def _extract_subprocess_compactbench(cell_src: str) -> list[list[str]]:
-    """Find ``subprocess.run([..., 'compactbench', ...])`` calls and return the arg lists."""
+    """Find ``subprocess.run([..., 'compactbench', ...])`` calls with fully-literal args.
+
+    Bails on cells that use f-strings, bare variable names, or any other
+    dynamic construction — those are covered by the ``!compactbench`` shell
+    cells elsewhere in the notebook, so a missed extraction here is not a
+    regression, just a skipped duplicate.
+    """
     found: list[list[str]] = []
-    # A dumb but effective match for our known pattern.
     for block in re.finditer(r"subprocess\.run\(\s*\[([^\]]+)\]", cell_src):
         args_src = block.group(1)
-        # Evaluate the simple list-of-strings literal.
-        try:
-            args = [
-                item.strip().strip("'").strip('"')
-                for item in args_src.split(",")
-                if item.strip() and not item.strip().startswith("#")
-            ]
-        except Exception:
-            continue
-        if not args or args[0] != "compactbench":
+        raw_items = [
+            item.strip()
+            for item in args_src.split(",")
+            if item.strip() and not item.strip().startswith("#")
+        ]
+        args: list[str] = []
+        bail = False
+        for item in raw_items:
+            match = _STRING_LITERAL_RE.match(item)
+            if not match:
+                # f-string, variable, or other non-literal — skip the whole call.
+                bail = True
+                break
+            args.append(match.group(2))
+        if bail or not args or args[0] != "compactbench":
             continue
         rewritten: list[str] = []
         i = 0
