@@ -14,6 +14,39 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
+# Markers that appear in provider error bodies/messages when the caller has hit
+# a per-day or per-month quota that won't clear inside a retry window measured
+# in seconds. Retrying these is futile and burns attempts; short-circuit them
+# at the predicate layer so the caller sees the original error immediately.
+_TERMINAL_QUOTA_MARKERS = (
+    "tokens per day",
+    "tokens_per_day",
+    "requests per day",
+    "requests_per_day",
+    "tpd",
+    "rpd",
+    "daily limit",
+    "daily quota",
+    "monthly limit",
+    "monthly quota",
+    "quota exceeded",
+    "insufficient_quota",
+)
+
+
+def is_terminal_quota_error(exc: Exception) -> bool:
+    """Return True if ``exc`` signals a quota window too long to retry through.
+
+    Works heuristically on the error's string representation because provider
+    SDKs expose 429 details through inconsistent attribute shapes — Groq puts
+    ``{'type': 'tokens'}`` in the body, OpenAI uses ``insufficient_quota`` /
+    ``rate_limit_exceeded`` codes, Anthropic returns prose messages. Matching
+    on the rendered message covers all three without SDK-specific branching.
+    """
+    text = str(exc).lower()
+    return any(marker in text for marker in _TERMINAL_QUOTA_MARKERS)
+
+
 async def retry_with_backoff(
     operation: Callable[[], Awaitable[T]],
     *,

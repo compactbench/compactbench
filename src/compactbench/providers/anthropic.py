@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any, ClassVar
 
-from compactbench.providers._retry import retry_with_backoff
+from compactbench.providers._retry import is_terminal_quota_error, retry_with_backoff
 from compactbench.providers.base import (
     CompletionRequest,
     CompletionResponse,
@@ -57,6 +57,8 @@ class AnthropicProvider(Provider):
         )
 
         def _is_retryable(exc: Exception) -> bool:
+            if isinstance(exc, RateLimitError) and is_terminal_quota_error(exc):
+                return False
             return isinstance(
                 exc,
                 RateLimitError | APITimeoutError | APIConnectionError | InternalServerError,
