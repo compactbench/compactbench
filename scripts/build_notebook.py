@@ -100,7 +100,7 @@ CELLS: list[dict[str, object]] = [
         "Same template + seed + version → always the same case. Reproducible by construction.",
     ),
     code(
-        "!compactbench generate --template buried_constraint_v1 --seed 42 --difficulty medium | head -100",
+        "!compactbench generate --template buried_constraint_starter_v1 --seed 42 --difficulty medium | head -100",
     ),
     md(
         "## 3 · Run the `hybrid-ledger` built-in compactor",
