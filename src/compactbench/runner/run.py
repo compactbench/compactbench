@@ -7,6 +7,7 @@ case through all drift cycles, scores everything, and writes a streamed
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -51,6 +52,11 @@ class RunArgs:
     benchmarks_dir: Path
     output_path: Path
     resume: bool
+    # Maximum number of cases evaluated concurrently. Set to 1 to reproduce the
+    # original serial behaviour; higher values parallelise the I/O-bound
+    # provider calls, yielding a roughly linear wall-clock speedup until the
+    # provider's rate limit or the local event loop becomes the bottleneck.
+    concurrency: int = 4
 
 
 async def run_experiment(args: RunArgs) -> Path:
@@ -108,7 +114,11 @@ async def run_experiment(args: RunArgs) -> Path:
                 )
             )
 
-        completed_cases: list[CaseResult] = []
+        # Build the list of (case, seed) pairs the run still needs to execute.
+        # Case generation is deterministic and side-effect-free, so we can
+        # expand everything up-front and then schedule the I/O-bound work
+        # concurrently under a semaphore.
+        pending: list[tuple[GeneratedCase, int]] = []
         for template in templates:
             for slot in range(args.case_count_per_template):
                 case_seed = derive_case_seed(
@@ -117,9 +127,21 @@ async def run_experiment(args: RunArgs) -> Path:
                 case = generate_case(template, case_seed, args.difficulty)
                 if case.case_id in already_done:
                     continue
+                pending.append((case, case_seed))
 
+        concurrency = max(1, args.concurrency)
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def _run_one(case: GeneratedCase, case_seed: int) -> CaseResult:
+            """Execute a single case under the global concurrency semaphore.
+
+            A fresh compactor instance per case keeps any per-instance state
+            (e.g. ledger accumulators) scoped to the case, matching the
+            previous serial behaviour exactly.
+            """
+            async with semaphore:
                 compactor = compactor_cls(provider, args.model)
-                case_result = await _execute_case(
+                return await _execute_case(
                     case=case,
                     compactor=compactor,
                     provider=provider,
@@ -127,8 +149,21 @@ async def run_experiment(args: RunArgs) -> Path:
                     drift_cycles=args.drift_cycles,
                     case_seed=case_seed,
                 )
+
+        tasks = [asyncio.create_task(_run_one(c, s)) for c, s in pending]
+        completed_cases: list[CaseResult] = []
+        try:
+            for coro in asyncio.as_completed(tasks):
+                case_result = await coro
+                # Writer is called from a single awaiting coroutine so
+                # individual writes remain atomic even though cases complete
+                # out of their original enumeration order.
                 writer.write(CaseCompleteEvent(case_result=case_result))
                 completed_cases.append(case_result)
+        except Exception:
+            for t in tasks:
+                t.cancel()
+            raise
 
         # For run-end aggregates, combine newly-executed cases with any that
         # were already persisted from a resumed run.

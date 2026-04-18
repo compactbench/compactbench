@@ -75,6 +75,25 @@ def run(
     resume: bool = typer.Option(
         False, "--resume", help="Continue from existing output file (skip completed cases)."
     ),
+    concurrency: int = typer.Option(
+        4,
+        "--concurrency",
+        min=1,
+        max=32,
+        help=(
+            "Maximum concurrent cases. Set to 1 for strict serial execution. "
+            "Higher values give near-linear wall-clock speedup until the provider's "
+            "rate limit dominates; 4 is a safe default on most free tiers."
+        ),
+    ),
+    estimate: bool = typer.Option(
+        False,
+        "--estimate",
+        help=(
+            "Print projected API calls, tokens, and dollar cost without making any "
+            "provider calls. Use this to size a run before committing real quota."
+        ),
+    ),
 ) -> None:
     """Run a compaction method against a benchmark suite."""
     import asyncio
@@ -103,7 +122,12 @@ def run(
         benchmarks_dir=benchmarks_dir,
         output_path=output,
         resume=resume,
+        concurrency=concurrency,
     )
+
+    if estimate:
+        _print_estimate(args)
+        return
 
     try:
         asyncio.run(run_experiment(args))
@@ -113,6 +137,45 @@ def run(
 
     console.print(f"[green]wrote {output}[/green]")
     console.print(f"run 'compactbench score --results {output}' for a summary.")
+
+
+def _print_estimate(args: Any) -> None:
+    """Load the suite, project cost + tokens, and print the report. No API calls."""
+    from compactbench.dsl import TemplateError, load_suite, validate_template
+    from compactbench.runner.estimate import estimate_run, format_estimate
+
+    suite_dir = args.benchmarks_dir / args.suite_key
+    if not suite_dir.is_dir():
+        console.print(f"[red]suite directory not found: {suite_dir}[/red]")
+        raise typer.Exit(code=1)
+
+    try:
+        templates = load_suite(suite_dir)
+        for t in templates:
+            validate_template(t)
+    except TemplateError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if not templates:
+        console.print(f"[red]no templates in suite {args.suite_key!r}[/red]")
+        raise typer.Exit(code=1)
+
+    versions = {t.version for t in templates}
+    suite_version = next(iter(versions)) if len(versions) == 1 else "mixed"
+
+    report = estimate_run(
+        templates=templates,
+        suite_key=args.suite_key,
+        suite_version=suite_version,
+        seed_group=args.seed_group,
+        case_count_per_template=args.case_count_per_template,
+        difficulty=args.difficulty,
+        drift_cycles=args.drift_cycles,
+        provider_key=args.provider_key,
+        model=args.model,
+    )
+    console.print(format_estimate(report))
 
 
 @app.command()
