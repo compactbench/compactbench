@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from compactbench.dsl import DifficultyLevel, load_suite, validate_template
+from compactbench.dsl import (
+    DifficultyLevel,
+    TemplateDefinition,
+    load_suite,
+    validate_template,
+)
 from compactbench.runner.costs import (
     MODEL_COSTS,
     dollars,
@@ -25,7 +30,7 @@ pytestmark = pytest.mark.unit
 _STARTER_DIR = Path(__file__).resolve().parents[2] / "benchmarks" / "public" / "starter"
 
 
-def _load_starter() -> list:  # type: ignore[type-arg]
+def _load_starter() -> list[TemplateDefinition]:
     templates = load_suite(_STARTER_DIR)
     for t in templates:
         validate_template(t)
@@ -87,37 +92,57 @@ class TestEstimateRun:
     def test_case_count_scales_linearly(self) -> None:
         """Doubling case-count should roughly double totals — a smoke check on the math."""
         templates = _load_starter()
-        base_args = {
-            "templates": templates,
-            "suite_key": "starter",
-            "suite_version": "1.0.0",
-            "seed_group": "default",
-            "difficulty": DifficultyLevel.MEDIUM,
-            "drift_cycles": 0,
-            "provider_key": "mock",
-            "model": "mock-model",
-        }
-        one = estimate_run(case_count_per_template=1, **base_args)
-        four = estimate_run(case_count_per_template=4, **base_args)
+        one = estimate_run(
+            templates=templates,
+            suite_key="starter",
+            suite_version="1.0.0",
+            seed_group="default",
+            case_count_per_template=1,
+            difficulty=DifficultyLevel.MEDIUM,
+            drift_cycles=0,
+            provider_key="mock",
+            model="mock-model",
+        )
+        four = estimate_run(
+            templates=templates,
+            suite_key="starter",
+            suite_version="1.0.0",
+            seed_group="default",
+            case_count_per_template=4,
+            difficulty=DifficultyLevel.MEDIUM,
+            drift_cycles=0,
+            provider_key="mock",
+            model="mock-model",
+        )
 
         assert four.total_cases == 4 * one.total_cases
         assert four.total_calls == 4 * one.total_calls
 
     def test_drift_cycles_multiply_calls(self) -> None:
-        """With drift_cycles=N, each case runs N+1 cycles → proportional call count."""
+        """With drift_cycles=N, each case runs N+1 cycles -> proportional call count."""
         templates = _load_starter()
-        base_args = {
-            "templates": templates,
-            "suite_key": "starter",
-            "suite_version": "1.0.0",
-            "seed_group": "default",
-            "case_count_per_template": 1,
-            "difficulty": DifficultyLevel.MEDIUM,
-            "provider_key": "mock",
-            "model": "mock-model",
-        }
-        one = estimate_run(drift_cycles=0, **base_args)  # 1 cycle per case
-        three = estimate_run(drift_cycles=2, **base_args)  # 3 cycles per case
+        one = estimate_run(
+            templates=templates,
+            suite_key="starter",
+            suite_version="1.0.0",
+            seed_group="default",
+            case_count_per_template=1,
+            difficulty=DifficultyLevel.MEDIUM,
+            drift_cycles=0,  # 1 cycle per case
+            provider_key="mock",
+            model="mock-model",
+        )
+        three = estimate_run(
+            templates=templates,
+            suite_key="starter",
+            suite_version="1.0.0",
+            seed_group="default",
+            case_count_per_template=1,
+            difficulty=DifficultyLevel.MEDIUM,
+            drift_cycles=2,  # 3 cycles per case
+            provider_key="mock",
+            model="mock-model",
+        )
 
         assert three.total_calls == 3 * one.total_calls
 
