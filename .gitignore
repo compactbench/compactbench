@@ -84,7 +84,12 @@ desktop.ini
 /data/
 /results/
 /runs/
+/.smoke-runs/
 *.jsonl.gz
+
+# Maintainer-only local tooling (kept local, never shipped)
+/.local/
+/smoke.bat
 
 # Hidden benchmark content — never commit
 benchmarks/hidden/
