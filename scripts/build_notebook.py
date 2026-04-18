@@ -11,6 +11,8 @@ the JSON) avoids the usual diff-review nightmare on `.ipynb` outputs.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -282,6 +284,20 @@ def main() -> None:
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(NOTEBOOK, indent=1), encoding="utf-8")
     print(f"wrote {out}")
+    # Let ruff normalise the code cells (quote style, trailing commas) so CI's
+    # format check stays green without having to hand-police strings here.
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", "format", str(out)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        print("formatted via ruff")
+    else:
+        # Not fatal — maybe ruff isn't installed in this env. The CI lint job
+        # will still catch any residual drift.
+        print(f"ruff format skipped: {result.stderr.strip() or 'ruff not available'}")
 
 
 if __name__ == "__main__":
