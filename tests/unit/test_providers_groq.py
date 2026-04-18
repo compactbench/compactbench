@@ -158,3 +158,20 @@ async def test_handles_missing_usage() -> None:
     resp = await provider.complete(CompletionRequest(model="m", prompt="p"))
     assert resp.prompt_tokens == 0
     assert resp.completion_tokens == 0
+
+
+async def test_cached_prefix_is_concatenated_into_user_content() -> None:
+    """Groq doesn't advertise caching; behaviour is equivalent to a single call."""
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+
+    await provider.complete(
+        CompletionRequest(
+            model="m",
+            prompt="suffix",
+            cached_prefix="PREFIX ",
+        )
+    )
+    assert mock.await_args is not None
+    assert mock.await_args.kwargs["messages"][-1]["content"] == "PREFIX suffix"

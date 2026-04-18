@@ -40,6 +40,16 @@ CompactBench needs a model provider to evaluate compacted context. Any of the fo
 !!! tip "Running the full Elite practice suite"
     15 templates × default 5 cases × 2 drift cycles × ~3 eval items per cycle = ~450 LLM calls, which exceeds Groq's free-tier daily token limit. For real evaluation runs use **Anthropic**, **OpenAI**, or a paid **Groq** account. The benchmark auto-detects daily-quota 429s and surfaces them immediately (it will not retry futilely).
 
+!!! info "Prompt caching on the evaluation layer"
+    Every cycle asks the target model N evaluation questions against the same compaction artifact. CompactBench automatically threads the artifact as a `cached_prefix` on each call so providers that support prompt caching only pay for those input tokens once per cycle:
+
+    - **Anthropic** — explicit `cache_control: ephemeral` on the artifact block (~90% input-cost drop on cache hits)
+    - **OpenAI** — automatic prompt caching kicks in on stable prefixes ≥1024 tokens at the start of a user message
+    - **Groq / Ollama / Gemini** — no network-side caching today; behaviour is identical to a single concatenated prompt
+    - **Mock** — cached_prefix is recorded on every call for test inspection
+
+    This saves roughly 40–60% of input tokens on the evaluation layer for Anthropic and OpenAI runs, with no user-facing change. The `compactbench run --estimate` projector reports total tokens *before* caching, so real spend is typically lower than the estimate on those two providers.
+
 Put keys in `.env` at the project root, or export them in your shell.
 
 ## Run your first benchmark

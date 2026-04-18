@@ -12,6 +12,8 @@ from compactbench.contracts import (
 )
 from compactbench.providers import MockProvider
 from compactbench.runner.evaluation import (
+    build_evaluation_cached_prefix,
+    build_evaluation_item_suffix,
     build_evaluation_prompt,
     evaluate_items,
     render_artifact_for_prompt,
@@ -93,3 +95,59 @@ async def test_evaluate_items_empty_list_makes_no_calls() -> None:
     responses = await evaluate_items([], _artifact(), provider, model="m")
     assert responses == {}
     assert provider.calls == []
+
+
+def test_split_helpers_round_trip_to_legacy_builder() -> None:
+    """prefix + suffix must equal the full legacy prompt so behaviour is identical."""
+    artifact = _artifact(locked_decisions=["x"], forbidden_behaviors=["skip review"])
+    item = _item(prompt="What's the plan?")
+    full = build_evaluation_prompt(artifact, item)
+    split = build_evaluation_cached_prefix(artifact) + build_evaluation_item_suffix(item)
+    assert full == split
+
+
+def test_cached_prefix_contains_artifact_context() -> None:
+    artifact = _artifact(locked_decisions=["use postgres"])
+    prefix = build_evaluation_cached_prefix(artifact)
+    assert "prior conversation" in prefix
+    assert "use postgres" in prefix
+    # The prefix must NOT leak the item-specific question:
+    assert "QUESTION" not in prefix
+    assert "ANSWER" not in prefix
+
+
+def test_item_suffix_contains_only_item_content() -> None:
+    suffix = build_evaluation_item_suffix(_item(prompt="What's the plan?"))
+    assert "What's the plan?" in suffix
+    assert "ANSWER:" in suffix
+    # The suffix must NOT contain any artifact context:
+    assert "prior conversation" not in suffix
+    assert "SUMMARY" not in suffix
+
+
+async def test_evaluate_items_passes_same_cached_prefix_on_every_call() -> None:
+    """Every eval item in a cycle should reuse a single cached_prefix for caching."""
+    provider = MockProvider(responses=["r1", "r2", "r3"])
+    items = [_item("a"), _item("b", prompt="second question"), _item("c")]
+    artifact = _artifact(locked_decisions=["stable decision"])
+
+    await evaluate_items(items, artifact, provider, model="m")
+
+    prefixes = {call.cached_prefix for call in provider.calls}
+    assert len(prefixes) == 1, "all items must share one cached_prefix"
+    shared = next(iter(prefixes))
+    assert shared is not None
+    assert "stable decision" in shared
+
+    # Each item's suffix is item-specific and DOES NOT contain the artifact.
+    per_item_prompts = [call.prompt for call in provider.calls]
+    assert any("second question" in p for p in per_item_prompts)
+    assert all("stable decision" not in p for p in per_item_prompts)
+
+
+async def test_evaluate_items_cached_prefix_is_non_empty() -> None:
+    """Sanity: the prefix is populated even when structured_state is empty."""
+    provider = MockProvider(default="x")
+    await evaluate_items([_item()], _artifact(), provider, model="m")
+    assert provider.calls[0].cached_prefix
+    assert len(provider.calls[0].cached_prefix or "") > 0

@@ -56,10 +56,17 @@ class GroqProvider(Provider):
                 return False
             return isinstance(exc, RateLimitError | APITimeoutError | APIConnectionError)
 
+        # Groq does not advertise prompt caching yet, so we just concatenate
+        # the cached_prefix with the prompt. Callers still get correct results;
+        # no optimisation but nothing breaks.
+        user_content = (
+            request.cached_prefix + request.prompt if request.cached_prefix else request.prompt
+        )
+
         messages: list[dict[str, str]] = []
         if request.system:
             messages.append({"role": "system", "content": request.system})
-        messages.append({"role": "user", "content": request.prompt})
+        messages.append({"role": "user", "content": user_content})
 
         kwargs: dict[str, Any] = {
             "model": request.model,

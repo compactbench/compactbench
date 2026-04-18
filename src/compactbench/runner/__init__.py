@@ -9,6 +9,8 @@ from compactbench.runner.continuation import extend_with_continuation
 from compactbench.runner.cycle import CycleExecutionResult, execute_cycle
 from compactbench.runner.errors import MethodResolutionError, ResumeError, RunnerError
 from compactbench.runner.evaluation import (
+    build_evaluation_cached_prefix,
+    build_evaluation_item_suffix,
     build_evaluation_prompt,
     evaluate_items,
     render_artifact_for_prompt,
@@ -39,6 +41,8 @@ __all__ = [
     "RunStartEvent",
     "RunnerError",
     "aggregate_run_metrics",
+    "build_evaluation_cached_prefix",
+    "build_evaluation_item_suffix",
     "build_evaluation_prompt",
     "completed_case_ids",
     "evaluate_items",

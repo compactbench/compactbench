@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -198,3 +199,45 @@ async def test_handles_missing_usage() -> None:
     resp = await provider.complete(CompletionRequest(model="m", prompt="p"))
     assert resp.prompt_tokens == 0
     assert resp.completion_tokens == 0
+
+
+async def test_cached_prefix_wraps_content_in_cache_control_blocks() -> None:
+    """Caller-supplied cached_prefix becomes a content block marked ephemeral."""
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+
+    await provider.complete(
+        CompletionRequest(
+            model="m",
+            prompt="item question",
+            cached_prefix="STATIC ARTIFACT CONTEXT",
+        )
+    )
+
+    assert mock.await_args is not None
+    messages = mock.await_args.kwargs["messages"]
+    assert len(messages) == 1
+    content = messages[0]["content"]
+    # Expect a list of two text blocks; the first marked for ephemeral caching.
+    assert isinstance(content, list)
+    blocks = cast(list[Any], content)
+    assert len(blocks) == 2
+    assert blocks[0] == {
+        "type": "text",
+        "text": "STATIC ARTIFACT CONTEXT",
+        "cache_control": {"type": "ephemeral"},
+    }
+    assert blocks[1] == {"type": "text", "text": "item question"}
+
+
+async def test_no_cached_prefix_uses_simple_string_content() -> None:
+    """Legacy single-prompt requests stay as a plain string on the user message."""
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+
+    await provider.complete(CompletionRequest(model="m", prompt="hi"))
+    assert mock.await_args is not None
+    content = mock.await_args.kwargs["messages"][0]["content"]
+    assert content == "hi"

@@ -57,10 +57,16 @@ class OllamaProvider(Provider):
                 return isinstance(code, int) and (code == 429 or code >= 500)
             return False
 
+        # Ollama has no network-side prompt caching; concatenate the prefix
+        # so behaviour is equivalent to a single-prompt call.
+        user_content = (
+            request.cached_prefix + request.prompt if request.cached_prefix else request.prompt
+        )
+
         messages: list[dict[str, str]] = []
         if request.system:
             messages.append({"role": "system", "content": request.system})
-        messages.append({"role": "user", "content": request.prompt})
+        messages.append({"role": "user", "content": user_content})
 
         chat_kwargs: dict[str, Any] = {
             "model": request.model,

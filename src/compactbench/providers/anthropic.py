@@ -65,9 +65,27 @@ class AnthropicProvider(Provider):
             )
 
         # Anthropic takes `system` as a top-level kwarg, not a message role.
+        # When the caller supplies a cached_prefix we split the user message
+        # into two content blocks and mark the prefix with `cache_control`
+        # ephemeral — subsequent calls that reuse the same prefix get ~90%
+        # off its input-token cost. Without the prefix we send the simpler
+        # single-string content the Messages API also accepts.
+        user_content: Any
+        if request.cached_prefix:
+            user_content = [
+                {
+                    "type": "text",
+                    "text": request.cached_prefix,
+                    "cache_control": {"type": "ephemeral"},
+                },
+                {"type": "text", "text": request.prompt},
+            ]
+        else:
+            user_content = request.prompt
+
         kwargs: dict[str, Any] = {
             "model": request.model,
-            "messages": [{"role": "user", "content": request.prompt}],
+            "messages": [{"role": "user", "content": user_content}],
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         }

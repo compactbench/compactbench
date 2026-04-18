@@ -39,9 +39,14 @@ class MockProvider(Provider):
             self._index += 1
         else:
             text = self._default
+        # Approximate token count as (cached_prefix + prompt) // 4 so tests
+        # exercising cached_prefix see a realistic prompt_tokens value.
+        input_len = len(request.prompt)
+        if request.cached_prefix:
+            input_len += len(request.cached_prefix)
         return CompletionResponse(
             text=text,
-            prompt_tokens=max(1, len(request.prompt) // 4),
+            prompt_tokens=max(1, input_len // 4),
             completion_tokens=max(1, len(text) // 4),
             model=request.model,
             raw={"provider": "mock", "call_index": len(self.calls) - 1},
