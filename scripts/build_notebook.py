@@ -60,9 +60,6 @@ CELLS: list[dict[str, object]] = [
     ),
     code(
         "!pip install -q 'compactbench[providers]'",
-        "",
-        "import compactbench",
-        "print('compactbench', compactbench.__version__ if hasattr(compactbench, \"__version__\") else '(installed)')",
         "!compactbench --help | head -20",
     ),
     md(
@@ -73,8 +70,8 @@ CELLS: list[dict[str, object]] = [
         "The cell below hides your input. Nothing is logged or saved.",
     ),
     code(
-        "import os",
         "import getpass",
+        "import os",
         "",
         "# Colab users: you can also set this once under the 🔑 Secrets panel with name GROQ_API_KEY.",
         "api_key = None",
