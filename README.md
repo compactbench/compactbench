@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/compactbench/compactbench/actions/workflows/ci.yml/badge.svg)](https://github.com/compactbench/compactbench/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-compactbench.github.io-black)](https://compactbench.github.io/compactbench/)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/compactbench/compactbench/blob/main/notebooks/try_compactbench.ipynb)
 
 Every long-running LLM app eventually compacts its conversation history — summarises it, extracts structured state, runs some ledger. CompactBench hands your compactor an adversarial transcript, replaces the history with whatever your compactor returned, then asks the model probing questions to see what survived.
 
@@ -19,6 +20,10 @@ Every long-running LLM app eventually compacts its conversation history — summ
 Everything is deterministic, versioned, and reproducible — same template + seed + version always yields the same case, and every result is stamped with suite / scorer / model / method versions.
 
 ## 30-second try
+
+**In your browser:** open [`notebooks/try_compactbench.ipynb`](notebooks/try_compactbench.ipynb) in Colab ([direct link](https://colab.research.google.com/github/compactbench/compactbench/blob/main/notebooks/try_compactbench.ipynb)) — zero local install, uses Groq's free tier.
+
+**Locally:**
 
 ```bash
 pip install compactbench

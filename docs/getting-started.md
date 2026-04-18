@@ -1,5 +1,11 @@
 # Getting started
 
+!!! tip "Zero-install Colab notebook"
+    Want to try CompactBench in your browser without any setup? Open
+    [`notebooks/try_compactbench.ipynb`](https://colab.research.google.com/github/compactbench/compactbench/blob/main/notebooks/try_compactbench.ipynb)
+    in Colab — it walks through installation, runs the four built-in baselines against a real
+    model on Groq's free tier, and ends with writing your own compactor. Under two minutes end-to-end.
+
 ## Install
 
 ```bash
