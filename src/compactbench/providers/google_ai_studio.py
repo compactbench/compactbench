@@ -73,10 +73,18 @@ class GoogleAIStudioProvider(Provider):
             config_kwargs["response_mime_type"] = "application/json"
         config = types.GenerateContentConfig(**config_kwargs)
 
+        # Gemini supports explicit CachedContent but the setup is heavier
+        # (a separate cache lifecycle call per prefix). For now we concatenate
+        # so behaviour is unchanged — a future PR can introduce CachedContent
+        # reuse when the prefix exceeds the provider's minimum cacheable size.
+        contents = (
+            request.cached_prefix + request.prompt if request.cached_prefix else request.prompt
+        )
+
         async def _call() -> Any:
             return await self._client.aio.models.generate_content(
                 model=request.model,
-                contents=request.prompt,
+                contents=contents,
                 config=config,
             )
 

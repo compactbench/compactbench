@@ -13,7 +13,24 @@ from typing import Any, ClassVar
 
 @dataclass(frozen=True)
 class CompletionRequest:
-    """A normalized request passed to a provider's ``complete`` method."""
+    """A normalized request passed to a provider's ``complete`` method.
+
+    ``cached_prefix`` is an optimisation hint. When set, the effective user
+    input is ``cached_prefix + prompt`` and the provider is free to cache the
+    prefix to avoid re-billing the input tokens on subsequent calls that reuse
+    it verbatim. Semantics:
+
+    - **Anthropic** wraps the prefix in an explicit ``cache_control: ephemeral``
+      content block, which drops the cached tokens' input cost by ~90% on hits.
+    - **OpenAI** simply prepends the prefix; OpenAI's automatic prompt caching
+      picks up any stable prefix ≥ 1024 tokens at the start of a message.
+    - **Groq / Ollama / Gemini / Mock** currently just prepend and make a
+      regular call. Providers MAY add caching semantics later without changing
+      the call site.
+
+    When ``cached_prefix`` is ``None`` every provider behaves exactly as it
+    did before this field existed.
+    """
 
     model: str
     prompt: str
@@ -21,6 +38,7 @@ class CompletionRequest:
     max_tokens: int = 2048
     temperature: float = 0.0
     response_format: dict[str, Any] | None = None
+    cached_prefix: str | None = None
 
 
 @dataclass(frozen=True)

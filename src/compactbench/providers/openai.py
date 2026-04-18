@@ -58,10 +58,17 @@ class OpenAIProvider(Provider):
                 RateLimitError | APITimeoutError | APIConnectionError | InternalServerError,
             )
 
+        # OpenAI's automatic prompt caching kicks in for stable prefixes >=
+        # 1024 tokens at the start of a message, so prepending cached_prefix
+        # to the user content is all we need — no explicit cache API.
+        user_content = (
+            request.cached_prefix + request.prompt if request.cached_prefix else request.prompt
+        )
+
         messages: list[dict[str, str]] = []
         if request.system:
             messages.append({"role": "system", "content": request.system})
-        messages.append({"role": "user", "content": request.prompt})
+        messages.append({"role": "user", "content": user_content})
 
         kwargs: dict[str, Any] = {
             "model": request.model,
