@@ -2,6 +2,11 @@
 
 CompactBench's `Compactor` ABC works standalone, but most production code already lives inside a framework. The `compactbench.integrations` package ships thin adapters that let you benchmark what you already have.
 
+- [LangChain](#langchain) — wrap any callable that takes `list[BaseMessage]`
+- [LlamaIndex](#llamaindex) — wrap any callable that takes `list[ChatMessage]`
+
+Both adapters share the same return-shape contract (`str | list[messages] | dict`) and preserve turn provenance via `additional_kwargs` so filtered-message methods automatically populate `CompactionArtifact.selected_source_turn_ids`.
+
 ## LangChain
 
 `compactbench.integrations.langchain` wraps any LangChain-flavoured compaction callable as a CompactBench [`Compactor`](writing-a-compactor.md) so it can be scored against Elite practice or the hidden ranked set.
@@ -124,6 +129,78 @@ def compact_with_legacy_memory(messages: list[BaseMessage]) -> str:
 
 This is exactly the shape a production LangChain app uses — now it's a row on the CompactBench leaderboard.
 
+## LlamaIndex
+
+`compactbench.integrations.llamaindex` mirrors the LangChain adapter — same three public symbols, same three supported return shapes (`str | list[ChatMessage] | dict`), same provenance-preserving `additional_kwargs`. Pick whichever framework you already have in production.
+
+**Install:**
+
+```bash
+pip install 'compactbench[llamaindex]'
+```
+
+That adds only `llama-index-core>=0.11`. Your LLM binding (`llama-index-llms-openai`, `llama-index-llms-ollama`, etc.) stays your choice.
+
+### Wrap a `ChatSummaryMemoryBuffer`
+
+```python
+from llama_index.core.base.llms.types import ChatMessage
+from llama_index.core.memory import ChatSummaryMemoryBuffer
+from llama_index.llms.openai import OpenAI
+
+from compactbench.integrations.llamaindex import LlamaIndexCompactor
+from compactbench.providers import GroqProvider
+
+summariser_llm = OpenAI(model="gpt-4o-mini", temperature=0)
+
+def summarise(messages: list[ChatMessage]) -> str:
+    memory = ChatSummaryMemoryBuffer.from_defaults(llm=summariser_llm, token_limit=500)
+    memory.set(messages)
+    return "\n".join(str(m.content) for m in memory.get())
+
+compactor = LlamaIndexCompactor(
+    provider=GroqProvider(),  # answers eval items
+    model="llama-3.3-70b-versatile",
+    compaction_fn=summarise,
+    method_name="llamaindex-chat-summary-buffer",
+    method_version="0.1.0",
+)
+```
+
+### Return structured state
+
+Same dict-shape contract as the LangChain adapter — return any of `summary_text`, `structured_state`, `selected_source_turn_ids`, `warnings`, `method_metadata`:
+
+```python
+async def structured(messages: list[ChatMessage]) -> dict:
+    # ... your pipeline ...
+    return {
+        "summary_text": prose_summary,
+        "structured_state": {
+            "locked_decisions": [...],
+            "forbidden_behaviors": [...],
+            "entity_map": {...},
+        },
+        "method_metadata": {"memory_type": "chat_summary_buffer", "calls": 3},
+    }
+```
+
+### Preserving turn provenance
+
+`transcript_to_chat_messages` stamps `additional_kwargs["compactbench_turn_id"]` on every outgoing message. If your callable returns a filtered `list[ChatMessage]`, the adapter reads those ids back and populates `CompactionArtifact.selected_source_turn_ids` automatically.
+
+```python
+def keep_last_n(messages: list[ChatMessage], n: int = 6) -> list[ChatMessage]:
+    return messages[-n:]
+
+compactor = LlamaIndexCompactor(
+    provider=GroqProvider(),
+    model="llama-3.3-70b-versatile",
+    compaction_fn=lambda ms: keep_last_n(ms, 6),
+    method_name="keep-last-6",
+)
+```
+
 ## Other frameworks
 
-Adapters for **LlamaIndex** and **CrewAI** are on the roadmap and will follow the same shape (`result_to_artifact` + a subclass of `Compactor`). Open a [GitHub issue](https://github.com/compactbench/compactbench/issues/new) if you want a specific framework prioritised — or send a PR; the LangChain adapter at `src/compactbench/integrations/langchain.py` is a good reference template.
+**CrewAI** and **Haystack** adapters follow the same shape (`result_to_artifact` + a subclass of `Compactor`). Open a [GitHub issue](https://github.com/compactbench/compactbench/issues/new) if you want a specific framework prioritised — or send a PR; the LangChain and LlamaIndex adapters at `src/compactbench/integrations/` are good reference templates.

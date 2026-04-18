@@ -29,7 +29,7 @@ compactbench score --results results.jsonl
 
 Any of the four built-in compactors — `naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger` — works as a `--method` target. Swap `--provider ollama` for `groq` or `google-ai-studio` if you prefer a remote model (set `COMPACTBENCH_GROQ_API_KEY` or `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY`).
 
-Already have a LangChain memory or summarisation chain? Wrap it with the [LangChain integration](https://compactbench.github.io/compactbench/integrations/) — `pip install 'compactbench[langchain]'` — and benchmark what you're already running in production.
+Already have production code in [LangChain](https://compactbench.github.io/compactbench/integrations/#langchain) or [LlamaIndex](https://compactbench.github.io/compactbench/integrations/#llamaindex)? Wrap it with `compactbench.integrations` — `pip install 'compactbench[langchain]'` or `compactbench[llamaindex]` — and benchmark what you're already running.
 
 ## Other useful commands
 
