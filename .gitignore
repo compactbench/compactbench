@@ -84,6 +84,7 @@ desktop.ini
 /data/
 /results/
 /runs/
+/.smoke-runs/
 *.jsonl.gz
 
 # Hidden benchmark content — never commit

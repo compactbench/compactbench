@@ -36,6 +36,8 @@ Any of the four built-in compactors — `naive-summary`, `structured-state`, `hi
 
 Already have production code in [LangChain](https://compactbench.github.io/compactbench/integrations/#langchain) or [LlamaIndex](https://compactbench.github.io/compactbench/integrations/#llamaindex)? Wrap it with `compactbench.integrations` — `pip install 'compactbench[langchain]'` or `compactbench[llamaindex]` — and benchmark what you're already running.
 
+**Maintainers on Windows:** double-click [`smoke.bat`](smoke.bat) at the repo root for an interactive menu that runs single-baseline smokes, cross-model head-to-heads, case inspection, and the leaderboard rebuild without having to type long commands. See [`scripts/smoke.ps1`](scripts/smoke.ps1).
+
 ## Other useful commands
 
 ```bash

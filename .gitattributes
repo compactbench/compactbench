@@ -15,6 +15,12 @@
 *.sh    text eol=lf
 *.cfg   text eol=lf
 
+# Windows scripts — keep CRLF so cmd.exe / powershell.exe parse them cleanly
+# regardless of the platform the file is committed from.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
 # Binaries: leave alone, never convert.
 *.png binary
 *.jpg binary
