@@ -1,0 +1,8 @@
+# Enables the "Sponsor" button on the repo.
+#
+# Once you activate GitHub Sponsors at https://github.com/sponsors/accounts,
+# replace `UsernameLoad` below with your approved Sponsors handle if different.
+# Corporate sponsors and lab consortium inquiries: see
+# https://compactbench.github.io/compactbench/ for the certification-service
+# contact path.
+github: [UsernameLoad]

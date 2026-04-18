@@ -11,12 +11,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from compactbench.providers import (
+    AnthropicProvider,
     CompletionRequest,
     CompletionResponse,
     GoogleAIStudioProvider,
     GroqProvider,
     MockProvider,
     OllamaProvider,
+    OpenAIProvider,
     Provider,
     list_providers,
 )
@@ -55,6 +57,25 @@ def _make_ollama_provider() -> OllamaProvider:
     return provider
 
 
+def _make_anthropic_provider() -> AnthropicProvider:
+    provider = AnthropicProvider(api_key="fake", base_backoff_seconds=0.0)
+    block = MagicMock(type="text", text="hello")
+    usage = MagicMock(input_tokens=3, output_tokens=2)
+    response = MagicMock(content=[block], usage=usage, model="m", id="id", stop_reason="end_turn")
+    provider._client.messages.create = AsyncMock(return_value=response)  # pyright: ignore[reportPrivateUsage]
+    return provider
+
+
+def _make_openai_provider() -> OpenAIProvider:
+    provider = OpenAIProvider(api_key="fake", base_backoff_seconds=0.0)
+    message = MagicMock(content="hello")
+    choice = MagicMock(message=message, finish_reason="stop")
+    usage = MagicMock(prompt_tokens=3, completion_tokens=2)
+    response = MagicMock(choices=[choice], usage=usage, model="m", id="id")
+    provider._client.chat.completions.create = AsyncMock(return_value=response)  # pyright: ignore[reportPrivateUsage]
+    return provider
+
+
 def _assert_contract(response: CompletionResponse, expected_key: str) -> None:
     assert isinstance(response, CompletionResponse)
     assert response.text == "hello"
@@ -67,8 +88,15 @@ def _assert_contract(response: CompletionResponse, expected_key: str) -> None:
     assert response.completion_tokens >= 0
 
 
-def test_all_four_providers_are_registered() -> None:
-    assert set(list_providers()) == {"mock", "groq", "google-ai-studio", "ollama"}
+def test_all_providers_are_registered() -> None:
+    assert set(list_providers()) == {
+        "mock",
+        "groq",
+        "google-ai-studio",
+        "ollama",
+        "anthropic",
+        "openai",
+    }
 
 
 async def test_mock_provider_meets_contract() -> None:
@@ -93,3 +121,15 @@ async def test_ollama_provider_meets_contract() -> None:
     provider: Provider = _make_ollama_provider()
     response = await provider.complete(CompletionRequest(model="any", prompt="hi"))
     _assert_contract(response, "ollama")
+
+
+async def test_anthropic_provider_meets_contract() -> None:
+    provider: Provider = _make_anthropic_provider()
+    response = await provider.complete(CompletionRequest(model="any", prompt="hi"))
+    _assert_contract(response, "anthropic")
+
+
+async def test_openai_provider_meets_contract() -> None:
+    provider: Provider = _make_openai_provider()
+    response = await provider.complete(CompletionRequest(model="any", prompt="hi"))
+    _assert_contract(response, "openai")

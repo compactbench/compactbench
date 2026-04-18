@@ -47,6 +47,8 @@ providers = [
     "groq>=0.9",
     "google-genai>=0.3",
     "ollama>=0.3",
+    "anthropic>=0.40",
+    "openai>=1.50",
 ]
 langchain = [
     "langchain-core>=0.3",

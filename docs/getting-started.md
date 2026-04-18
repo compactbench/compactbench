@@ -28,12 +28,14 @@ compactbench --version
 
 CompactBench needs a model provider to evaluate compacted context. Any of the following work out of the box:
 
-| Provider | Env var | Free tier |
-|---|---|---|
-| Groq | `COMPACTBENCH_GROQ_API_KEY` | yes |
-| Google AI Studio | `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY` | yes |
-| Ollama (local) | `COMPACTBENCH_OLLAMA_BASE_URL` | local only |
-| Mock (tests) | (no config needed) | n/a |
+| Provider | `--provider` key | Env var | Free tier |
+|---|---|---|---|
+| Groq | `groq` | `COMPACTBENCH_GROQ_API_KEY` | yes |
+| Google AI Studio | `google-ai-studio` | `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY` | yes |
+| Anthropic | `anthropic` | `COMPACTBENCH_ANTHROPIC_API_KEY` | credit-based |
+| OpenAI | `openai` | `COMPACTBENCH_OPENAI_API_KEY` | credit-based |
+| Ollama (local) | `ollama` | `COMPACTBENCH_OLLAMA_BASE_URL` | local only |
+| Mock (tests) | `mock` | (no config needed) | n/a |
 
 Put keys in `.env` at the project root, or export them in your shell.
 
@@ -57,6 +59,26 @@ compactbench run \
   --suite starter \
   --provider groq \
   --model llama-3.3-70b-versatile
+```
+
+Against Anthropic Claude:
+
+```bash
+compactbench run \
+  --method built-in:hybrid-ledger \
+  --suite starter \
+  --provider anthropic \
+  --model claude-3-5-haiku-latest
+```
+
+Against OpenAI:
+
+```bash
+compactbench run \
+  --method built-in:hybrid-ledger \
+  --suite starter \
+  --provider openai \
+  --model gpt-4o-mini
 ```
 
 Results are written to `results.jsonl` by default. Use `--output` to change the path.
