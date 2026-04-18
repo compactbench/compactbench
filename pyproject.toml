@@ -89,6 +89,13 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/compactbench"]
 
+# Bundle the public benchmark content into the wheel so `pip install compactbench`
+# works end-to-end without cloning the repo. config.default_benchmarks_dir()
+# prefers cwd/benchmarks/public for in-repo dev; this mapping is the fallback.
+[tool.hatch.build.targets.wheel.force-include]
+"benchmarks/public" = "compactbench/_data/benchmarks/public"
+"benchmarks/schemas" = "compactbench/_data/benchmarks/schemas"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "src/compactbench",
