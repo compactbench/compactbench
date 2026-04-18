@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -220,7 +221,7 @@ async def test_cached_prefix_wraps_content_in_cache_control_blocks() -> None:
     content = messages[0]["content"]
     # Expect a list of two text blocks; the first marked for ephemeral caching.
     assert isinstance(content, list)
-    blocks: list[dict[str, object]] = list(content)
+    blocks = cast(list[Any], content)
     assert len(blocks) == 2
     assert blocks[0] == {
         "type": "text",
