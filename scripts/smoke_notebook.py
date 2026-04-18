@@ -40,6 +40,17 @@ def _rewrite_providers_models(cmd: str) -> str:
     return cmd
 
 
+def _strip_shell_pipe(cmd: str) -> str:
+    """Drop ``| head -N`` and similar output-limiting tails.
+
+    The notebook uses pipes for Colab display readability; the smoke test
+    doesn't need them and ``shlex.split`` would treat ``|`` as a literal arg,
+    not a shell pipe. Everything before the first top-level ``|`` is enough
+    to exercise the CLI.
+    """
+    return cmd.split("|")[0].strip()
+
+
 def _extract_shell_commands(cell_src: str) -> list[str]:
     """Pick out ``!compactbench ...`` lines, joining backslash-continued ones."""
     commands: list[str] = []
@@ -142,7 +153,7 @@ def main() -> int:
                 if "--help" in cmd:
                     print(f"[cell {i}] skipping help line: {cmd!r}")
                     continue
-                rewritten = _rewrite_providers_models(cmd)
+                rewritten = _rewrite_providers_models(_strip_shell_pipe(cmd))
                 args = shlex.split(rewritten)
                 print(f"[cell {i}] $ {' '.join(args)}")
                 result = subprocess.run(

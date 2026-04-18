@@ -82,11 +82,12 @@ class AnthropicProvider(Provider):
             base_delay=self._base_backoff_seconds,
         )
 
-        content_blocks = getattr(response, "content", None) or []
+        content_blocks: list[Any] = getattr(response, "content", None) or []
         text_parts: list[str] = []
         for block in content_blocks:
-            if getattr(block, "type", None) == "text":
-                text_val = getattr(block, "text", "")
+            block_type: Any = getattr(block, "type", None)
+            if block_type == "text":
+                text_val: Any = getattr(block, "text", "")
                 if isinstance(text_val, str):
                     text_parts.append(text_val)
         if not text_parts:

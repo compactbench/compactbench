@@ -80,13 +80,14 @@ class OpenAIProvider(Provider):
             base_delay=self._base_backoff_seconds,
         )
 
-        choices = getattr(response, "choices", None) or []
+        choices: list[Any] = getattr(response, "choices", None) or []
         if not choices:
             raise ProviderResponseError("OpenAI returned no choices in response")
-        choice = choices[0]
-        message = getattr(choice, "message", None)
-        text = getattr(message, "content", None) or ""
-        usage = getattr(response, "usage", None)
+        choice: Any = choices[0]
+        message: Any = getattr(choice, "message", None)
+        text_raw: Any = getattr(message, "content", None) or ""
+        text = text_raw if isinstance(text_raw, str) else ""
+        usage: Any = getattr(response, "usage", None)
         return CompletionResponse(
             text=text,
             prompt_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
