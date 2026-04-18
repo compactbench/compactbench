@@ -1,5 +1,6 @@
 """Model provider abstractions and concrete clients."""
 
+from compactbench.providers.anthropic import AnthropicProvider
 from compactbench.providers.base import (
     CompletionRequest,
     CompletionResponse,
@@ -14,12 +15,15 @@ from compactbench.providers.google_ai_studio import GoogleAIStudioProvider
 from compactbench.providers.groq import GroqProvider
 from compactbench.providers.mock import MockProvider
 from compactbench.providers.ollama import OllamaProvider
+from compactbench.providers.openai import OpenAIProvider
 
 _REGISTRY: dict[str, type[Provider]] = {
     MockProvider.key: MockProvider,
     GroqProvider.key: GroqProvider,
     GoogleAIStudioProvider.key: GoogleAIStudioProvider,
     OllamaProvider.key: OllamaProvider,
+    AnthropicProvider.key: AnthropicProvider,
+    OpenAIProvider.key: OpenAIProvider,
 }
 
 
@@ -37,12 +41,14 @@ def get_provider_cls(key: str) -> type[Provider]:
 
 
 __all__ = [
+    "AnthropicProvider",
     "CompletionRequest",
     "CompletionResponse",
     "GoogleAIStudioProvider",
     "GroqProvider",
     "MockProvider",
     "OllamaProvider",
+    "OpenAIProvider",
     "Provider",
     "ProviderError",
     "ProviderResponseError",
