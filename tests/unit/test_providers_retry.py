@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from compactbench.providers._retry import retry_with_backoff
+from compactbench.providers._retry import is_terminal_quota_error, retry_with_backoff
 
 pytestmark = pytest.mark.unit
 
@@ -104,3 +104,39 @@ async def test_invalid_max_retries_raises() -> None:
             is_retryable=lambda _exc: True,
             max_retries=0,
         )
+
+
+class TestIsTerminalQuotaError:
+    """Covers the daily/monthly-quota detection heuristic used by every provider."""
+
+    def test_detects_groq_tokens_per_day_message(self) -> None:
+        exc = Exception(
+            "Error code: 429 - {'error': {'message': 'Rate limit reached for model "
+            "llama-3.3-70b-versatile ... service tier on_demand on tokens per day (TPD): "
+            "Limit 100000, Used 99579. Please try again in 1m4.8s.'}}"
+        )
+        assert is_terminal_quota_error(exc)
+
+    def test_detects_openai_insufficient_quota(self) -> None:
+        exc = Exception("insufficient_quota: You have exceeded your monthly limit.")
+        assert is_terminal_quota_error(exc)
+
+    def test_detects_daily_limit_prose(self) -> None:
+        assert is_terminal_quota_error(Exception("Hit daily limit, retry tomorrow"))
+
+    def test_detects_rpd_marker(self) -> None:
+        assert is_terminal_quota_error(Exception("requests per day (RPD) exceeded"))
+
+    def test_rejects_per_minute_rate_limit(self) -> None:
+        """Per-minute / per-second 429s should retry; they clear in our window."""
+        exc = Exception("Rate limit reached: requests per minute. Retry after 2s.")
+        assert not is_terminal_quota_error(exc)
+
+    def test_rejects_generic_transient_error(self) -> None:
+        assert not is_terminal_quota_error(Exception("connection reset"))
+        assert not is_terminal_quota_error(Exception("Internal server error"))
+
+    def test_case_insensitive(self) -> None:
+        """Providers capitalise inconsistently; our matcher should not care."""
+        assert is_terminal_quota_error(Exception("TOKENS PER DAY exceeded"))
+        assert is_terminal_quota_error(Exception("Quota Exceeded"))

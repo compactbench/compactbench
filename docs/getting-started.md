@@ -30,12 +30,15 @@ CompactBench needs a model provider to evaluate compacted context. Any of the fo
 
 | Provider | `--provider` key | Env var | Free tier |
 |---|---|---|---|
-| Groq | `groq` | `COMPACTBENCH_GROQ_API_KEY` | yes |
-| Google AI Studio | `google-ai-studio` | `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY` | yes |
-| Anthropic | `anthropic` | `COMPACTBENCH_ANTHROPIC_API_KEY` | credit-based |
-| OpenAI | `openai` | `COMPACTBENCH_OPENAI_API_KEY` | credit-based |
-| Ollama (local) | `ollama` | `COMPACTBENCH_OLLAMA_BASE_URL` | local only |
-| Mock (tests) | `mock` | (no config needed) | n/a |
+| Groq | `groq` | `COMPACTBENCH_GROQ_API_KEY` | yes — ~100k tokens/day on Llama 3.3 70B free tier, [upgrade](https://console.groq.com/settings/billing) for higher limits |
+| Google AI Studio | `google-ai-studio` | `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY` | yes — free on Gemini 2.0 Flash, RPM limits apply |
+| Anthropic | `anthropic` | `COMPACTBENCH_ANTHROPIC_API_KEY` | credit-based — $5 starter credit with a new account |
+| OpenAI | `openai` | `COMPACTBENCH_OPENAI_API_KEY` | credit-based — usage-priced, no true free tier |
+| Ollama (local) | `ollama` | `COMPACTBENCH_OLLAMA_BASE_URL` | local only — constrained by your machine |
+| Mock (tests) | `mock` | (no config needed) | n/a — returns canned "hello" responses; scores are non-interpretable but the full pipeline runs, useful for CI + pipeline smokes |
+
+!!! tip "Running the full Elite practice suite"
+    15 templates × default 5 cases × 2 drift cycles × ~3 eval items per cycle = ~450 LLM calls, which exceeds Groq's free-tier daily token limit. For real evaluation runs use **Anthropic**, **OpenAI**, or a paid **Groq** account. The benchmark auto-detects daily-quota 429s and surfaces them immediately (it will not retry futilely).
 
 Put keys in `.env` at the project root, or export them in your shell.
 

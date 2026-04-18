@@ -13,6 +13,7 @@ import typer
 from rich.console import Console
 
 from compactbench import __version__
+from compactbench.config import default_benchmarks_dir
 
 app = typer.Typer(
     name="compactbench",
@@ -54,10 +55,19 @@ def run(
     model: str = typer.Option("mock-deterministic", "--model", help="Provider-specific model key."),
     difficulty: str = typer.Option("medium", "--difficulty"),
     drift_cycles: int = typer.Option(2, "--drift-cycles", min=0, max=5),
-    case_count: int = typer.Option(3, "--case-count", min=1, help="Cases per template."),
+    case_count: int = typer.Option(
+        5,
+        "--case-count",
+        min=1,
+        help=(
+            "Cases per template. 5 is enough for per-family std-dev to be "
+            "meaningful; 20+ is standard for ranked submissions. Lower values "
+            "run faster but give noisy scores."
+        ),
+    ),
     seed_group: str = typer.Option("default", "--seed-group"),
     benchmarks_dir: Path = typer.Option(
-        Path("benchmarks/public"),
+        default_benchmarks_dir(),
         "--benchmarks-dir",
         help="Directory containing benchmark suites.",
     ),
@@ -111,7 +121,7 @@ def generate(
     seed: int = typer.Option(0, "--seed"),
     difficulty: str = typer.Option("medium", "--difficulty"),
     benchmarks_dir: Path = typer.Option(
-        Path("benchmarks/public"),
+        default_benchmarks_dir(),
         "--benchmarks-dir",
         help="Directory containing public benchmark suites.",
     ),
@@ -304,7 +314,7 @@ def providers_list() -> None:
 @suites_app.command("list")
 def suites_list(
     benchmarks_dir: Path = typer.Option(
-        Path("benchmarks/public"),
+        default_benchmarks_dir(),
         "--benchmarks-dir",
         help="Directory containing public benchmark suites.",
     ),

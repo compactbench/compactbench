@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any, ClassVar
 
-from compactbench.providers._retry import retry_with_backoff
+from compactbench.providers._retry import is_terminal_quota_error, retry_with_backoff
 from compactbench.providers.base import (
     CompletionRequest,
     CompletionResponse,
@@ -51,6 +51,9 @@ class GroqProvider(Provider):
         from groq import APIConnectionError, APITimeoutError, RateLimitError
 
         def _is_retryable(exc: Exception) -> bool:
+            # Daily-token-quota 429s won't clear in our retry window; skip them.
+            if isinstance(exc, RateLimitError) and is_terminal_quota_error(exc):
+                return False
             return isinstance(exc, RateLimitError | APITimeoutError | APIConnectionError)
 
         messages: list[dict[str, str]] = []
