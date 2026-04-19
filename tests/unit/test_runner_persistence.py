@@ -207,3 +207,40 @@ def test_writer_append_mode_preserves_existing(tmp_path: Path) -> None:
     with ResultsWriter(path, mode="append") as writer:
         writer.write(CaseCompleteEvent(case_result=_case_result("c2")))
     assert completed_case_ids(path) == {"c1", "c2"}
+
+
+def test_iter_events_tolerates_truncated_trailing_line(tmp_path: Path) -> None:
+    """A crash between ``write()`` and ``flush()`` can leave a partial final
+    line. ``--resume`` needs to ignore that line rather than crash on
+    JSONDecodeError."""
+    path = tmp_path / "results.jsonl"
+    with ResultsWriter(path) as writer:
+        writer.write(_run_start_event())
+        writer.write(CaseCompleteEvent(case_result=_case_result("c1")))
+    # Append a truncated JSON record (no trailing newline, mid-object).
+    with path.open("a", encoding="utf-8") as fp:
+        fp.write('{"event":"case_complete","case_result":{"case_id":"c2","templ')
+
+    events = list(iter_events(path))
+    # Two complete events recovered; truncated final line silently dropped.
+    assert len(events) == 2
+    # completed_case_ids sees only the successfully persisted one.
+    assert completed_case_ids(path) == {"c1"}
+
+
+def test_iter_events_still_raises_on_mid_file_corruption(tmp_path: Path) -> None:
+    """A damaged line that DOES have a trailing newline indicates real
+    corruption, not an interrupted append. Must not be swallowed."""
+    path = tmp_path / "results.jsonl"
+    with ResultsWriter(path) as writer:
+        writer.write(_run_start_event())
+        writer.write(CaseCompleteEvent(case_result=_case_result("c1")))
+
+    # Insert a garbage line in the middle with a trailing newline.
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    corrupted = [*lines[:1], "not-json-and-not-truncated\n", *lines[1:]]
+    path.write_text("".join(corrupted), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid event"):
+        list(iter_events(path))

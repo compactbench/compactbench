@@ -99,16 +99,33 @@ class ResultsWriter:
 
 
 def iter_events(path: Path) -> Iterator[ResultEvent]:
-    """Yield every event parsed from ``path``."""
+    """Yield every event parsed from ``path``.
+
+    The final line is allowed to be truncated/partial without raising — a
+    crash or kill between ``write()`` and ``flush()`` can leave the JSONL
+    file ending mid-record, and ``--resume`` needs to recover from that by
+    silently dropping the dangling line. Corruption anywhere *earlier* in
+    the file still raises, because that indicates real damage, not an
+    interrupted append.
+    """
     with path.open(encoding="utf-8") as fp:
-        for line_num, line in enumerate(fp, start=1):
-            text = line.strip()
-            if not text:
-                continue
-            try:
-                yield _EVENT_ADAPTER.validate_json(text)
-            except Exception as exc:
-                raise ValueError(f"invalid event at {path}:{line_num}: {exc}") from exc
+        lines = fp.readlines()
+    last_index = len(lines) - 1
+    for line_num, line in enumerate(lines, start=1):
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            yield _EVENT_ADAPTER.validate_json(text)
+        except Exception as exc:
+            is_final_line = line_num - 1 == last_index
+            # A truncated final line lacks the trailing newline the writer
+            # appends to every complete event. Tolerate it on resume;
+            # complete mid-file events should have a newline, so any
+            # parse failure there is real corruption.
+            if is_final_line and not line.endswith("\n"):
+                return
+            raise ValueError(f"invalid event at {path}:{line_num}: {exc}") from exc
 
 
 def read_run_start(path: Path) -> RunStartEvent | None:
