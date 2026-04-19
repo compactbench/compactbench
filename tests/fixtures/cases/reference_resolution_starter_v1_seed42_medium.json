@@ -1,0 +1,113 @@
+{
+  "case_id": "reference_resolution_starter_v1:s42:dmedium",
+  "template_key": "reference_resolution_starter_v1",
+  "template_version": "1.0.0",
+  "seed": 42,
+  "difficulty": "medium",
+  "transcript": {
+    "turns": [
+      {
+        "id": 0,
+        "role": "user",
+        "content": "Starting the observability pass with Tara.",
+        "tags": []
+      },
+      {
+        "id": 1,
+        "role": "assistant",
+        "content": "Great, any rules before we begin?",
+        "tags": []
+      },
+      {
+        "id": 2,
+        "role": "user",
+        "content": "Only one: never skip code review. Hard line.",
+        "tags": [
+          "critical_constraint"
+        ]
+      },
+      {
+        "id": 3,
+        "role": "user",
+        "content": "I was thinking about lunch earlier.",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 4,
+        "role": "assistant",
+        "content": "Got it. Let me know if you want to switch focus back.",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 5,
+        "role": "user",
+        "content": "Quick question unrelated to this: what time is it where you are?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 6,
+        "role": "assistant",
+        "content": "I hear you. Anything else to cover on the primary question?",
+        "tags": [
+          "distractor"
+        ]
+      },
+      {
+        "id": 7,
+        "role": "user",
+        "content": "With that rule in mind, what should our first step be?",
+        "tags": []
+      }
+    ]
+  },
+  "ground_truth": {
+    "immutable_facts": [
+      "primary_subject: Tara",
+      "topic: observability pass"
+    ],
+    "locked_decisions": [],
+    "forbidden_behaviors": [
+      "skip code review"
+    ],
+    "unresolved_items": [],
+    "deferred_items": [],
+    "entity_map": {
+      "Tara": "primary_subject"
+    }
+  },
+  "evaluation_items": [
+    {
+      "key": "resolve_that_rule",
+      "item_type": "locked_decision_retention",
+      "prompt": "Which specific rule did the user point at when they said 'with that rule in mind'?",
+      "expected": {
+        "check": "contains_normalized",
+        "value": "skip code review"
+      }
+    },
+    {
+      "key": "apply_rule",
+      "item_type": "planning_soundness",
+      "prompt": "Propose the first step for Tara's observability pass.",
+      "expected": {
+        "check": "forbidden_absent",
+        "value": "skip code review"
+      }
+    },
+    {
+      "key": "entity_consistency",
+      "item_type": "entity_integrity",
+      "prompt": "Who is this project with?",
+      "expected": {
+        "check": "contains_normalized",
+        "value": "Tara"
+      }
+    }
+  ]
+}

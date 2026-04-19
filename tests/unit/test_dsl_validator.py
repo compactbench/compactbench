@@ -163,6 +163,6 @@ _STARTER_DIR = Path(__file__).resolve().parents[2] / "benchmarks" / "public" / "
 
 def test_all_starter_templates_validate() -> None:
     templates = load_suite(_STARTER_DIR)
-    assert len(templates) == 3
+    assert len(templates) == 4
     for template in templates:
         validate_template(template)

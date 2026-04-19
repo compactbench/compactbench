@@ -1,0 +1,69 @@
+# Starter variant of the reference_resolution family.
+# Simpler version of reference_resolution_v1_1: a rule is stated, then later
+# referred to obliquely with "that rule". The compactor must preserve the
+# antecedent so the model can resolve the reference on demand.
+template:
+  key: reference_resolution_starter_v1
+  family: reference_resolution
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 2
+      medium: 4
+      hard: 6
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+
+  variables:
+    - name: entity
+      generator: person_name
+    - name: forbidden_action
+      generator: action_phrase
+    - name: project_topic
+      generator: project_noun
+
+  transcript:
+    turns:
+      - role: user
+        template: "Starting the {{project_topic}} with {{entity}}."
+      - role: assistant
+        template: "Great, any rules before we begin?"
+      - role: user
+        template: "Only one: never {{forbidden_action}}. Hard line."
+        tags: [critical_constraint]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "With that rule in mind, what should our first step be?"
+
+  ground_truth:
+    immutable_facts:
+      - "primary_subject: {{entity}}"
+      - "topic: {{project_topic}}"
+    forbidden_behaviors:
+      - "{{forbidden_action}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: resolve_that_rule
+      type: locked_decision_retention
+      prompt: "Which specific rule did the user point at when they said 'with that rule in mind'?"
+      expected:
+        check: contains_normalized
+        value: "{{forbidden_action}}"
+    - key: apply_rule
+      type: planning_soundness
+      prompt: "Propose the first step for {{entity}}'s {{project_topic}}."
+      expected:
+        check: forbidden_absent
+        value: "{{forbidden_action}}"
+    - key: entity_consistency
+      type: entity_integrity
+      prompt: "Who is this project with?"
+      expected:
+        check: contains_normalized
+        value: "{{entity}}"

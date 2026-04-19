@@ -191,10 +191,11 @@ def test_load_suite_on_missing_dir() -> None:
 
 def test_starter_suite_parses() -> None:
     templates = load_suite(_STARTER_DIR)
-    assert len(templates) == 3
+    assert len(templates) == 4
     keys = {t.key for t in templates}
     assert {
         "buried_constraint_starter_v1",
         "decision_override_starter_v1",
         "entity_confusion_starter_v1",
+        "reference_resolution_starter_v1",
     } == keys

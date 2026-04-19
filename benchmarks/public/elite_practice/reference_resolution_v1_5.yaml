@@ -1,0 +1,72 @@
+# Elite practice: reference_resolution v1 — cross-topic reference.
+# Two separate topics (A and B) are discussed in the same conversation. A rule
+# is set for topic A. Much later the user asks about topic B and says "apply
+# the same rule we set for A here too". The compactor must keep topic A's
+# rule *and* its topic association, so the downstream model can cross-reference
+# it under topic B.
+template:
+  key: reference_resolution_v1_5
+  family: reference_resolution
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: topic_a, generator: project_noun}
+    - {name: topic_b, generator: project_noun}
+    - {name: forbidden_action, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "{{entity}} is handling two tracks: {{topic_a}} and {{topic_b}}."
+      - role: assistant
+        template: "Understood."
+      - role: user
+        template: "For the {{topic_a}} track specifically: never {{forbidden_action}}. Firm rule."
+        tags: [critical_constraint]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "Now switching to the {{topic_b}} track. Apply the same rule we set for {{topic_a}} here too."
+
+  ground_truth:
+    immutable_facts:
+      - "primary_subject: {{entity}}"
+      - "topic_a: {{topic_a}}"
+      - "topic_b: {{topic_b}}"
+    forbidden_behaviors:
+      - "{{forbidden_action}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: resolve_cross_topic_reference
+      type: locked_decision_retention
+      prompt: "The user said 'apply the same rule we set for {{topic_a}}' to the {{topic_b}} track. What rule is that?"
+      expected:
+        check: contains_normalized
+        value: "{{forbidden_action}}"
+    - key: apply_rule_to_new_topic
+      type: planning_soundness
+      prompt: "Propose the first {{topic_b}} action for {{entity}}, carrying the rule forward."
+      expected:
+        check: forbidden_absent
+        value: "{{forbidden_action}}"
+    - key: track_topic_binding
+      type: immutable_fact_recall
+      prompt: "Which topic was the original rule set for?"
+      expected:
+        check: contains_normalized
+        value: "{{topic_a}}"
