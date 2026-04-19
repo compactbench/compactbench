@@ -120,10 +120,13 @@ async def run_experiment(args: RunArgs) -> Path:
         # concurrently under a semaphore.
         pending: list[tuple[GeneratedCase, int]] = []
         for template in templates:
+            # Namespace the seed with (suite, template) so slot N of two different
+            # templates doesn't deterministically share variable choices — that
+            # would correlate "Alice" / "Bob" style bindings across families and
+            # weaken adversarial diversity.
+            seed_namespace = f"{args.suite_key}@{suite_version}/{template.key}@{template.version}"
             for slot in range(args.case_count_per_template):
-                case_seed = derive_case_seed(
-                    f"{args.suite_key}@{suite_version}", args.seed_group, slot
-                )
+                case_seed = derive_case_seed(seed_namespace, args.seed_group, slot)
                 case = generate_case(template, case_seed, args.difficulty)
                 if case.case_id in already_done:
                     continue

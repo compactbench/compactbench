@@ -13,6 +13,7 @@ from compactbench.contracts import (
     GeneratedCase,
     ItemScore,
     Scorecard,
+    Transcript,
 )
 from compactbench.scoring.checks import run_check
 from compactbench.scoring.compression import compression_ratio
@@ -56,8 +57,21 @@ def score_cycle(
     artifact: CompactionArtifact,
     responses: dict[str, str],
     cycle_number: int = 0,
+    *,
+    source_transcript: Transcript | None = None,
 ) -> Scorecard:
-    """Score one cycle of a compaction run and return a :class:`Scorecard`."""
+    """Score one cycle of a compaction run and return a :class:`Scorecard`.
+
+    ``source_transcript`` is the transcript that was actually handed to the
+    compactor for this cycle. For cycle 0 it equals ``case.transcript``; for
+    drift cycles it is the extended transcript. Compression ratio is measured
+    against this source so later-cycle ratios reflect the true "how much did
+    we compress right now" number rather than a ratio against the original
+    transcript (which made later cycles look artificially more compressed).
+
+    When ``source_transcript`` is None we fall back to ``case.transcript`` so
+    callers that don't care about drift-cycle accuracy keep working.
+    """
     if cycle_number < 0:
         raise ValueError(f"cycle_number must be >= 0, got {cycle_number}")
 
@@ -65,7 +79,7 @@ def score_cycle(
     cycle_score = _weighted_cycle_score(item_scores)
     contra = contradiction_rate(case.evaluation_items, responses, case.ground_truth)
     penalized = max(0.0, min(1.0, cycle_score * (1.0 - contra)))
-    comp_ratio = compression_ratio(case.transcript, artifact)
+    comp_ratio = compression_ratio(source_transcript or case.transcript, artifact)
 
     return Scorecard(
         cycle_number=cycle_number,

@@ -236,3 +236,43 @@ def test_scores_real_starter_case_with_empty_responses() -> None:
     # So cycle_score is positive only from forbidden_absent items.
     assert 0.0 <= sc.cycle_score <= 1.0
     assert sc.cycle_score < 1.0  # not everything passed
+
+
+def test_compression_ratio_uses_source_transcript_when_provided() -> None:
+    """In drift cycles the transcript grows; compression must reflect that."""
+    from compactbench.contracts import Transcript, Turn, TurnRole
+
+    template = parse_template_file(_STARTER_DIR / "buried_constraint_starter_v1.yaml")
+    case = generate_case(template, seed=42, difficulty=DifficultyLevel.MEDIUM)
+    artifact = CompactionArtifact(summaryText="short summary")
+    responses = {item.key: "" for item in case.evaluation_items}
+
+    # An extended transcript (as the runner would produce for drift cycle >= 1):
+    # original turns plus two continuation turns adding ~10x the content.
+    padding = "filler content " * 1000  # ~15k extra chars
+    extended = Transcript(
+        turns=[
+            *case.transcript.turns,
+            Turn(id=99, role=TurnRole.USER, content=padding),
+            Turn(id=100, role=TurnRole.ASSISTANT, content="noted"),
+        ]
+    )
+
+    sc_default = score_cycle(case, artifact, responses)
+    sc_extended = score_cycle(case, artifact, responses, source_transcript=extended)
+
+    # The extended transcript is strictly larger, so compression ratio against
+    # it should be strictly larger (more tokens / same artifact).
+    assert sc_extended.compression_ratio > sc_default.compression_ratio
+
+
+def test_compression_ratio_falls_back_to_case_transcript() -> None:
+    """Legacy callers passing no source_transcript keep original behaviour."""
+    template = parse_template_file(_STARTER_DIR / "buried_constraint_starter_v1.yaml")
+    case = generate_case(template, seed=42, difficulty=DifficultyLevel.MEDIUM)
+    artifact = CompactionArtifact(summaryText="short")
+    responses = {item.key: "" for item in case.evaluation_items}
+
+    sc_a = score_cycle(case, artifact, responses)
+    sc_b = score_cycle(case, artifact, responses, source_transcript=None)
+    assert sc_a.compression_ratio == sc_b.compression_ratio

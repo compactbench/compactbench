@@ -80,11 +80,21 @@ def project_row(
 
 
 def rank_rows(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
-    """Return ``rows`` sorted best-first with ``rank`` assigned.
+    """Return ``rows`` sorted best-first with ``rank`` assigned within each segment.
 
-    Segmentation by ``(benchmark_version, target_model)`` is the caller's
-    responsibility — this function only sorts and numbers whatever it is given.
+    Ranks are computed **independently within each ``(benchmark_version,
+    target_provider, target_model, scorer_version)`` group** so Llama 3.3 70B
+    methods never compete numerically with Claude 3.5 Haiku methods, etc. The
+    output list is returned in ``(segment, rank ascending)`` order.
     """
+
+    def _segment(row: LeaderboardRow) -> tuple[str, str, str, str]:
+        return (
+            row["benchmark_version"],
+            row["target_provider"],
+            row["target_model"],
+            row["scorer_version"],
+        )
 
     def _key(row: LeaderboardRow) -> tuple[float, float, float, float, float]:
         return rank_key(
@@ -95,9 +105,15 @@ def rank_rows(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
             published_at=datetime.fromisoformat(row["published_at"]),
         )
 
+    # Group first, then sort + number inside each group.
+    segments: dict[tuple[str, str, str, str], list[LeaderboardRow]] = {}
+    for row in rows:
+        segments.setdefault(_segment(row), []).append(row)
+
     ranked: list[LeaderboardRow] = []
-    for i, row in enumerate(sorted(rows, key=_key), start=1):
-        ranked_row: LeaderboardRow = dict(row)  # pyright: ignore[reportAssignmentType]
-        ranked_row["rank"] = i
-        ranked.append(ranked_row)
+    for segment_key in sorted(segments):
+        for i, row in enumerate(sorted(segments[segment_key], key=_key), start=1):
+            ranked_row: LeaderboardRow = dict(row)  # pyright: ignore[reportAssignmentType]
+            ranked_row["rank"] = i
+            ranked.append(ranked_row)
     return ranked

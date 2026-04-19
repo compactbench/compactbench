@@ -111,6 +111,24 @@ def test_ground_truth_has_resolved_values(buried_template: TemplateDefinition) -
     assert not _PLACEHOLDER_PATTERN.search(forbidden)
 
 
+def test_deferred_items_plumbed_from_template_to_ground_truth(
+    buried_template: TemplateDefinition,
+) -> None:
+    """Regression: ``deferred_items`` exists in the template schema but used
+    to get dropped before being written into ``GroundTruth``.
+
+    We mutate a real starter template's ground_truth section to populate the
+    bucket and confirm the value round-trips through generation.
+    """
+    patched_gt = buried_template.ground_truth.model_copy(
+        update={"deferred_items": ["hiring decision held for Q2"]}
+    )
+    patched_template = buried_template.model_copy(update={"ground_truth": patched_gt})
+
+    case = generate_case(patched_template, seed=42, difficulty=DifficultyLevel.MEDIUM)
+    assert case.ground_truth.deferred_items == ["hiring decision held for Q2"]
+
+
 def test_evaluation_items_have_resolved_expected_values(
     buried_template: TemplateDefinition,
 ) -> None:

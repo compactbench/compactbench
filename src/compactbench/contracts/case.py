@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import StrEnum
 from typing import Any
 
@@ -28,9 +29,26 @@ class Transcript(BaseModel):
 
     turns: list[Turn]
 
-    def tokens_by_role(self) -> dict[TurnRole, int]:
+    def chars_by_role(self) -> dict[TurnRole, int]:
+        """Total character count of turn content, grouped by role.
+
+        Cheap O(n) helper that requires no tokenizer. Use :meth:`tokens_by_role`
+        when you actually need token counts.
+        """
         return {
             role: sum(len(t.content) for t in self.turns if t.role == role) for role in TurnRole
+        }
+
+    def tokens_by_role(self, tokenize: Callable[[str], int]) -> dict[TurnRole, int]:
+        """Total token count of turn content, grouped by role.
+
+        ``tokenize`` is a callable ``(text: str) -> int`` returning the token
+        count for a given string. Typically ``lambda s: len(encoding.encode(s))``
+        with a ``tiktoken`` encoding; any equivalent counter works.
+        """
+        return {
+            role: sum(tokenize(t.content) for t in self.turns if t.role == role)
+            for role in TurnRole
         }
 
 
@@ -43,6 +61,7 @@ class GroundTruth(BaseModel):
     locked_decisions: list[str] = Field(default_factory=list)
     forbidden_behaviors: list[str] = Field(default_factory=list)
     unresolved_items: list[str] = Field(default_factory=list)
+    deferred_items: list[str] = Field(default_factory=list)
     entity_map: dict[str, str] = Field(default_factory=dict)
 
 

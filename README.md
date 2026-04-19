@@ -62,7 +62,7 @@ class MyCompactor(Compactor):
     name = "my-method"
     version = "0.1.0"
 
-    def compact(self, transcript: Transcript, config: dict) -> CompactionArtifact:
+    async def compact(self, transcript: Transcript, config: dict) -> CompactionArtifact:
         ...
 ```
 

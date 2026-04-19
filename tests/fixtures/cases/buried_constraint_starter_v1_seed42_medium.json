@@ -76,6 +76,7 @@
       "skip code review"
     ],
     "unresolved_items": [],
+    "deferred_items": [],
     "entity_map": {
       "Tara": "primary_subject"
     }

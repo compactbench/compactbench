@@ -64,6 +64,7 @@ def _build_ground_truth(template: GroundTruthTemplate, bindings: dict[str, str])
         locked_decisions=_sub_list(template.locked_decisions),
         forbidden_behaviors=_sub_list(template.forbidden_behaviors),
         unresolved_items=_sub_list(template.unresolved_items),
+        deferred_items=_sub_list(template.deferred_items),
         entity_map={
             substitute(k, bindings): substitute(v, bindings) for k, v in template.entity_map.items()
         },

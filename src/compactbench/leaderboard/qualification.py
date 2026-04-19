@@ -11,7 +11,7 @@ from compactbench.contracts import RunResult
 from compactbench.leaderboard.ranking import TIER_FLOORS, CompressionTier
 
 MAX_CONTRADICTION_RATE: float = 0.10
-MIN_FAMILY_PASS_RATE: float = 0.40
+MIN_FAMILY_MEAN_SCORE: float = 0.40
 
 
 @dataclass(frozen=True)
@@ -59,20 +59,22 @@ def qualify(
                     f"{expected_cycles} configured cycles"
                 )
 
-    # Per-family pass-rate guard only applies when the run covers more than one family.
-    family_rates = _family_pass_rates(run_result)
-    if len(family_rates) > 1:
-        for family, pass_rate in family_rates.items():
-            if pass_rate < MIN_FAMILY_PASS_RATE:
+    # Per-family mean-score guard only applies when the run covers more than one family.
+    # Named "mean score" rather than "pass rate" because it is a weighted mean of
+    # case_scores, not a fraction of cases above a binary pass threshold.
+    family_means = _family_mean_scores(run_result)
+    if len(family_means) > 1:
+        for family, mean_score in family_means.items():
+            if mean_score < MIN_FAMILY_MEAN_SCORE:
                 reasons.append(
-                    f"family {family!r} pass rate {pass_rate:.2f} is below the "
-                    f"{MIN_FAMILY_PASS_RATE:.2f} minimum (category-diversity guard)"
+                    f"family {family!r} mean score {mean_score:.2f} is below the "
+                    f"{MIN_FAMILY_MEAN_SCORE:.2f} minimum (category-diversity guard)"
                 )
 
     return QualificationResult(qualified=not reasons, reasons=reasons)
 
 
-def _family_pass_rates(run_result: RunResult) -> dict[str, float]:
+def _family_mean_scores(run_result: RunResult) -> dict[str, float]:
     """Mean case_score grouped by benchmark family inferred from template_key."""
     groups: dict[str, list[float]] = {}
     for case in run_result.cases:
