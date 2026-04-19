@@ -6,6 +6,7 @@ from compactbench.providers.base import (
     CompletionResponse,
     Provider,
 )
+from compactbench.providers.counting import CountingProvider
 from compactbench.providers.errors import (
     ProviderError,
     ProviderResponseError,
@@ -44,6 +45,7 @@ __all__ = [
     "AnthropicProvider",
     "CompletionRequest",
     "CompletionResponse",
+    "CountingProvider",
     "GoogleAIStudioProvider",
     "GroqProvider",
     "MockProvider",
