@@ -21,7 +21,7 @@ from typing import IO, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from compactbench.contracts import CaseResult, RunResult
+from compactbench.contracts import CaseResult, RunResult, TokenUsage
 
 SCORER_VERSION: str = "1.0.0"
 
@@ -62,6 +62,9 @@ class RunEndEvent(BaseModel):
     constraint_retention: float = Field(ge=0.0, le=1.0)
     contradiction_rate: float = Field(ge=0.0, le=1.0)
     compression_ratio: float = Field(ge=0.0)
+    # ``None`` for legacy result files written before token telemetry shipped;
+    # a populated ``TokenUsage`` for anything produced by a recent runner.
+    token_usage: TokenUsage | None = None
     notes: list[str] = Field(default_factory=list[str])
 
 
@@ -176,6 +179,7 @@ def to_run_result(path: Path) -> RunResult:
         constraint_retention = end.constraint_retention
         contradiction_rate = end.contradiction_rate
         compression_ratio = end.compression_ratio
+        token_usage = end.token_usage
         notes = list(end.notes)
     else:
         # Run was interrupted — derive aggregates from whatever cases landed.
@@ -186,6 +190,7 @@ def to_run_result(path: Path) -> RunResult:
         constraint_retention = agg["constraint_retention"]
         contradiction_rate = agg["contradiction_rate"]
         compression_ratio = agg["compression_ratio"]
+        token_usage = sum_case_token_usage(cases)
         notes = ["run_end event missing: results may be incomplete"]
 
     return RunResult(
@@ -205,8 +210,26 @@ def to_run_result(path: Path) -> RunResult:
         constraint_retention=constraint_retention,
         contradiction_rate=contradiction_rate,
         compression_ratio=compression_ratio,
+        token_usage=token_usage,
         notes=notes,
     )
+
+
+def sum_case_token_usage(case_results: list[CaseResult]) -> TokenUsage | None:
+    """Return the element-wise sum of every case's ``token_usage``.
+
+    Returns ``None`` when no case reported telemetry (typical for legacy files
+    or mock-only runs configured without a :class:`CountingProvider`). A mixed
+    set — some cases with telemetry, some without — rolls up to the sum of the
+    ones that did, which mildly understates the true total but is strictly
+    better than reporting no usage at all.
+    """
+    total: TokenUsage | None = None
+    for cr in case_results:
+        if cr.token_usage is None:
+            continue
+        total = cr.token_usage if total is None else total + cr.token_usage
+    return total
 
 
 def aggregate_run_metrics(case_results: list[CaseResult]) -> dict[str, float]:

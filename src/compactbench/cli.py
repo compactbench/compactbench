@@ -316,6 +316,28 @@ def score(
     summary.add_row("compression_ratio", f"{run_result.compression_ratio:.2f}x")
     console.print(summary)
 
+    usage = run_result.token_usage
+    if usage is not None and usage.call_count > 0:
+        tokens = Table(title="Token usage")
+        tokens.add_column("Metric")
+        tokens.add_column("Value", justify="right")
+        tokens.add_row("api_calls", f"{usage.call_count:,}")
+        tokens.add_row("prompt_tokens", f"{usage.prompt_tokens:,}")
+        tokens.add_row("completion_tokens", f"{usage.completion_tokens:,}")
+        tokens.add_row("total_tokens", f"{usage.total_tokens:,}")
+        if usage.cached_prompt_tokens > 0:
+            cache_hit_ratio = (
+                usage.cached_prompt_tokens / usage.prompt_tokens if usage.prompt_tokens else 0.0
+            )
+            tokens.add_row("cached_prompt_tokens", f"{usage.cached_prompt_tokens:,}")
+            tokens.add_row("prompt_cache_hit_rate", f"{cache_hit_ratio:.1%}")
+        if usage.call_count:
+            tokens.add_row(
+                "avg_tokens_per_call",
+                f"{usage.total_tokens / usage.call_count:.0f}",
+            )
+        console.print(tokens)
+
     for note in run_result.notes:
         console.print(f"[yellow]note: {note}[/yellow]")
 

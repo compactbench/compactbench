@@ -114,6 +114,12 @@ class AnthropicProvider(Provider):
             raise ProviderResponseError("Anthropic returned no text content blocks")
 
         usage = getattr(response, "usage", None)
+        # Anthropic reports cache hits under ``cache_read_input_tokens`` and
+        # newly-written cache entries under ``cache_creation_input_tokens``;
+        # we surface both in ``raw`` so downstream telemetry can distinguish
+        # a cheap cached call from a full-price first call on the same prefix.
+        cache_read = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+        cache_creation = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
         return CompletionResponse(
             text="".join(text_parts),
             prompt_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
@@ -123,5 +129,7 @@ class AnthropicProvider(Provider):
                 "provider": "anthropic",
                 "id": getattr(response, "id", None),
                 "stop_reason": getattr(response, "stop_reason", None),
+                "cache_read_input_tokens": cache_read or 0,
+                "cache_creation_input_tokens": cache_creation or 0,
             },
         )

@@ -97,6 +97,15 @@ class OpenAIProvider(Provider):
         text_raw: Any = getattr(message, "content", None) or ""
         text = text_raw if isinstance(text_raw, str) else ""
         usage: Any = getattr(response, "usage", None)
+        # OpenAI reports automatic-cache hits nested under
+        # ``usage.prompt_tokens_details.cached_tokens``. Surface it in ``raw``
+        # so the counting wrapper can tell first-call (full price) from
+        # reused-prefix (~50% discount) calls.
+        prompt_details: Any = getattr(usage, "prompt_tokens_details", None) if usage else None
+        cached_tokens_val = (
+            getattr(prompt_details, "cached_tokens", 0) if prompt_details is not None else 0
+        )
+        cached_tokens = int(cached_tokens_val) if cached_tokens_val else 0
         return CompletionResponse(
             text=text,
             prompt_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
@@ -106,5 +115,6 @@ class OpenAIProvider(Provider):
                 "provider": "openai",
                 "finish_reason": getattr(choice, "finish_reason", None),
                 "id": getattr(response, "id", None),
+                "cached_tokens": cached_tokens,
             },
         )

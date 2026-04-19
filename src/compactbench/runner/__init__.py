@@ -25,6 +25,7 @@ from compactbench.runner.persistence import (
     completed_case_ids,
     iter_events,
     read_run_start,
+    sum_case_token_usage,
     to_run_result,
 )
 from compactbench.runner.run import RunArgs, run_experiment
@@ -53,5 +54,6 @@ __all__ = [
     "render_artifact_for_prompt",
     "resolve_compactor_class",
     "run_experiment",
+    "sum_case_token_usage",
     "to_run_result",
 ]

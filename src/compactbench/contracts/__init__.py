@@ -20,6 +20,7 @@ from compactbench.contracts.result import (
     ItemScore,
     RunResult,
     Scorecard,
+    TokenUsage,
 )
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "RunResult",
     "Scorecard",
     "StructuredState",
+    "TokenUsage",
     "Transcript",
     "Turn",
     "TurnRole",

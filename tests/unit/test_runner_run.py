@@ -159,6 +159,34 @@ async def test_end_to_end_deterministic(tmp_path: Path) -> None:
         assert by_id_a[cid].case_score == by_id_b[cid].case_score
 
 
+async def test_run_populates_token_usage_at_every_level(tmp_path: Path) -> None:
+    """End-to-end: cycles, cases, and the run all carry populated TokenUsage."""
+    output = tmp_path / "results.jsonl"
+    await run_experiment(_args(output, case_count=1, drift_cycles=1))
+
+    result = to_run_result(output)
+
+    assert result.token_usage is not None
+    assert result.token_usage.call_count > 0
+    assert result.token_usage.prompt_tokens > 0
+    assert result.token_usage.completion_tokens > 0
+
+    # Every case records its own TokenUsage; the run-level total is the sum.
+    summed = None
+    for case in result.cases:
+        assert case.token_usage is not None
+        assert case.token_usage.call_count > 0
+        summed = case.token_usage if summed is None else summed + case.token_usage
+        # Each cycle also records usage, and the per-case total is the sum of cycles.
+        cycle_sum = None
+        for cycle in case.cycles:
+            assert cycle.token_usage is not None
+            cycle_sum = cycle.token_usage if cycle_sum is None else cycle_sum + cycle.token_usage
+        assert cycle_sum == case.token_usage
+
+    assert summed == result.token_usage
+
+
 async def test_concurrency_default_matches_serial(tmp_path: Path) -> None:
     """Parallel execution must produce the same per-case results as serial."""
     output_serial = tmp_path / "serial.jsonl"

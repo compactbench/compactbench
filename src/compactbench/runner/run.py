@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from compactbench.compactors import Compactor
-from compactbench.contracts import CaseResult, CycleResult, GeneratedCase
+from compactbench.contracts import CaseResult, CycleResult, GeneratedCase, TokenUsage
 from compactbench.dsl import (
     DifficultyLevel,
     TemplateDefinition,
@@ -22,7 +22,7 @@ from compactbench.dsl import (
     validate_template,
 )
 from compactbench.engine import derive_case_seed, generate_case
-from compactbench.providers import Provider, get_provider_cls
+from compactbench.providers import CountingProvider, Provider, get_provider_cls
 from compactbench.runner._resolver import resolve_compactor_class
 from compactbench.runner.cycle import execute_cycle
 from compactbench.runner.errors import ResumeError, RunnerError
@@ -35,6 +35,7 @@ from compactbench.runner.persistence import (
     aggregate_run_metrics,
     completed_case_ids,
     read_run_start,
+    sum_case_token_usage,
 )
 from compactbench.scoring import drift_resistance
 
@@ -141,13 +142,21 @@ async def run_experiment(args: RunArgs) -> Path:
             A fresh compactor instance per case keeps any per-instance state
             (e.g. ledger accumulators) scoped to the case, matching the
             previous serial behaviour exactly.
+
+            A fresh :class:`CountingProvider` per case is required for correct
+            token attribution under concurrency: if we shared one wrapper
+            across cases, concurrent calls from case B would contaminate
+            case A's per-cycle snapshots. Each wrapper forwards to the same
+            underlying provider, so the actual HTTP client and its connection
+            pool are still shared.
             """
             async with semaphore:
-                compactor = compactor_cls(provider, args.model)
+                counting_provider = CountingProvider(provider)
+                compactor = compactor_cls(counting_provider, args.model)
                 return await _execute_case(
                     case=case,
                     compactor=compactor,
-                    provider=provider,
+                    provider=counting_provider,
                     model=args.model,
                     drift_cycles=args.drift_cycles,
                     case_seed=case_seed,
@@ -182,6 +191,7 @@ async def run_experiment(args: RunArgs) -> Path:
                     all_cases.append(event.case_result)
 
         agg = aggregate_run_metrics(all_cases)
+        run_token_usage = sum_case_token_usage(all_cases)
         writer.write(
             RunEndEvent(
                 completed_at=datetime.now(UTC),
@@ -190,6 +200,7 @@ async def run_experiment(args: RunArgs) -> Path:
                 constraint_retention=agg["constraint_retention"],
                 contradiction_rate=agg["contradiction_rate"],
                 compression_ratio=agg["compression_ratio"],
+                token_usage=run_token_usage,
             )
         )
     finally:
@@ -213,6 +224,7 @@ async def _execute_case(
     previous_artifact: CompactionArtifact | None = None
     cycles: list[CycleResult] = []
     cycle_scores: list[float] = []
+    case_usage: TokenUsage | None = None
 
     for cycle_num in range(drift_cycles + 1):
         result = await execute_cycle(
@@ -236,11 +248,19 @@ async def _execute_case(
                 scorecard=result.scorecard,
                 drift_delta=drift_delta,
                 latency_ms=result.latency_ms,
+                token_usage=result.token_usage,
             )
         )
         cycle_scores.append(result.scorecard.penalized_cycle_score)
         transcript = result.extended_transcript
         previous_artifact = result.artifact
+        # Accumulate into the case total only when the cycle actually reported
+        # telemetry; leaving ``case_usage`` as ``None`` when every cycle is
+        # ``None`` preserves the "not recorded" signal up one level.
+        if result.token_usage is not None:
+            case_usage = (
+                result.token_usage if case_usage is None else case_usage + result.token_usage
+            )
 
     case_score = sum(cycle_scores) / len(cycle_scores) if cycle_scores else 0.0
     return CaseResult(
@@ -250,6 +270,7 @@ async def _execute_case(
         cycles=cycles,
         case_score=case_score,
         drift_resistance=drift_resistance(cycle_scores),
+        token_usage=case_usage,
     )
 
 
