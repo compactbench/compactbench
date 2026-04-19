@@ -122,9 +122,30 @@ def main() -> int:
     ranked = rank_rows(rows)
 
     LEADERBOARD_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    # Preserve ``updated_at`` when the ranked entries haven't actually changed.
+    # Without this the file re-stamps on every workflow run (triggered by
+    # pushes that touch src/compactbench/leaderboard/**) and update-leaderboard.yml
+    # tries to commit a no-op diff, which branch protection rightly rejects.
+    previous_updated_at: str | None = None
+    previous_entries: Any = None
+    if LEADERBOARD_PATH.exists():
+        try:
+            previous = json.loads(LEADERBOARD_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            previous = None
+        if isinstance(previous, dict):
+            previous_updated_at = previous.get("updated_at")
+            previous_entries = previous.get("entries")
+
+    if previous_entries == ranked and isinstance(previous_updated_at, str):
+        updated_at = previous_updated_at
+    else:
+        updated_at = datetime.now(UTC).isoformat()
+
     payload = {
         "schema_version": SCHEMA_VERSION,
-        "updated_at": datetime.now(UTC).isoformat(),
+        "updated_at": updated_at,
         "entries": ranked,
     }
     LEADERBOARD_PATH.write_text(
