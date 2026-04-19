@@ -82,8 +82,11 @@ def estimate_run(
     total_output = 0
 
     for template in templates:
+        # Seed namespace mirrors the runner so estimate uses the exact same
+        # cases the real run will execute.
+        seed_namespace = f"{suite_key}@{suite_version}/{template.key}@{template.version}"
         for slot in range(case_count_per_template):
-            case_seed = derive_case_seed(f"{suite_key}@{suite_version}", seed_group, slot)
+            case_seed = derive_case_seed(seed_namespace, seed_group, slot)
             case = generate_case(template, case_seed, difficulty)
             total_cases += 1
 

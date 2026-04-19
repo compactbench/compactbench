@@ -24,14 +24,14 @@ jobs:
       PYTHON_VERSION: "3.12"
     steps:
       - name: Check out PR head
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           # Check out the submitter's PR branch — this contains the method source.
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Set up uv + Python
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
           enable-cache: true
 
@@ -59,8 +59,10 @@ jobs:
           done
 
       # Hidden-set evaluation: clone compactbench-hidden via HTTPS + a
-      # fine-grained PAT stored as HIDDEN_REPO_TOKEN. Falls back to public
-      # `elite_practice` when the secret is absent.
+      # fine-grained PAT stored as HIDDEN_REPO_TOKEN. We refuse to run when
+      # the secret is absent — silently falling back to public elite_practice
+      # used to produce a "ranked-looking" result from public cases, which
+      # eroded leaderboard trust. Fix the secret or don't rank.
       #
       # Org policy blocks SSH deploy keys, so we use a PAT scoped to
       # Contents: Read on compactbench-hidden only. See decisions.md §E.
@@ -70,14 +72,12 @@ jobs:
           HIDDEN_REPO_TOKEN: ${{ secrets.HIDDEN_REPO_TOKEN }}
         run: |
           if [ -z "$HIDDEN_REPO_TOKEN" ]; then
-            echo "hidden_available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No HIDDEN_REPO_TOKEN secret configured — falling back to public elite_practice."
-            exit 0
+            echo "::error::HIDDEN_REPO_TOKEN secret is not configured. Ranked evaluation cannot proceed without hidden-set access. Add the secret under Settings → Secrets and variables → Actions, then re-label the PR."
+            exit 1
           fi
           git clone --depth 1 \
             "https://x-access-token:${HIDDEN_REPO_TOKEN}@github.com/compactbench/compactbench-hidden.git" \
             /tmp/hidden
-          echo "hidden_available=true" >> "$GITHUB_OUTPUT"
           echo "hidden_dir=/tmp/hidden/ranked" >> "$GITHUB_OUTPUT"
 
       - name: Resolve submission config
@@ -107,28 +107,16 @@ jobs:
           COMPACTBENCH_GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
         run: |
-          if [ "${{ steps.hidden.outputs.hidden_available }}" = "true" ]; then
-            uv run compactbench run \
-              --method "$CLASS_PATH" \
-              --benchmarks-dir "${{ steps.hidden.outputs.hidden_dir }}" \
-              --suite elite_v1 \
-              --provider "$PROVIDER" \
-              --model "$MODEL" \
-              --drift-cycles "$DRIFT_CYCLES" \
-              --case-count "$CASE_COUNT" \
-              --output results.jsonl
-            echo "suite_label=elite_v1 (hidden ranked)" >> "$GITHUB_OUTPUT"
-          else
-            uv run compactbench run \
-              --method "$CLASS_PATH" \
-              --suite elite_practice \
-              --provider "$PROVIDER" \
-              --model "$MODEL" \
-              --drift-cycles "$DRIFT_CYCLES" \
-              --case-count "$CASE_COUNT" \
-              --output results.jsonl
-            echo "suite_label=elite_practice (public stand-in)" >> "$GITHUB_OUTPUT"
-          fi
+          uv run compactbench run \
+            --method "$CLASS_PATH" \
+            --benchmarks-dir "${{ steps.hidden.outputs.hidden_dir }}" \
+            --suite elite_v1 \
+            --provider "$PROVIDER" \
+            --model "$MODEL" \
+            --drift-cycles "$DRIFT_CYCLES" \
+            --case-count "$CASE_COUNT" \
+            --output results.jsonl
+          echo "suite_label=elite_v1 (hidden ranked)" >> "$GITHUB_OUTPUT"
 
       - name: Score summary
         id: summary
@@ -147,13 +135,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload results artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: results
           path: results.jsonl
 
       - name: Post score comment to PR
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             await github.rest.issues.createComment({

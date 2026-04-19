@@ -19,7 +19,7 @@ class MyCompactor(Compactor):
     name = "my-method"
     version = "0.1.0"
 
-    def compact(
+    async def compact(
         self,
         transcript: Transcript,
         config: dict[str, Any] | None = None,
@@ -78,7 +78,7 @@ Then inspect `results.jsonl`.
 If you want to accumulate state across cycles (the strongest baseline — `hybrid-ledger` — does this), use the `previous_artifact` argument:
 
 ```python
-def compact(
+async def compact(
     self,
     transcript: Transcript,
     config: dict[str, Any] | None = None,

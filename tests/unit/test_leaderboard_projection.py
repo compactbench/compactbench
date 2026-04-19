@@ -119,3 +119,86 @@ def test_rank_rows_tie_broken_by_drift_resistance() -> None:
 def test_rank_rows_empty_list() -> None:
     rows: list[LeaderboardRow] = []
     assert rank_rows(rows) == []
+
+
+def test_rank_rows_segments_by_model() -> None:
+    """A weaker method on model A must not outrank a stronger method on model B.
+
+    Ranks are assigned independently within each
+    (benchmark_version, target_provider, target_model, scorer_version) group,
+    so both segments should each have a rank-1 entry.
+    """
+
+    def _row(method_name: str, model: str, overall: float) -> LeaderboardRow:
+        run = RunResult(
+            run_id="r",
+            method_name=method_name,
+            method_version="1.0.0",
+            suite_key="elite",
+            suite_version="1.0.0",
+            scorer_version="1.0.0",
+            target_provider="groq",
+            target_model=model,
+            started_at=datetime(2026, 4, 17, tzinfo=UTC),
+            completed_at=datetime(2026, 4, 17, tzinfo=UTC),
+            cases=[],
+            overall_score=overall,
+            drift_resistance=0.9,
+            constraint_retention=0.85,
+            contradiction_rate=0.02,
+            compression_ratio=6.0,
+        )
+        return project_row(
+            run,
+            tier="Elite-Mid",
+            handle="a",
+            org=None,
+            published_at=datetime(2026, 4, 17, tzinfo=UTC),
+        )
+
+    # Stronger on model B, weaker on model A.
+    strong_b = _row("strong_b", "model-b", overall=0.95)
+    weak_a = _row("weak_a", "model-a", overall=0.4)
+
+    ranked = rank_rows([strong_b, weak_a])
+
+    # Both get rank 1 in their own segment.
+    ranks_by_name = {r["method_name"]: r["rank"] for r in ranked}
+    assert ranks_by_name == {"weak_a": 1, "strong_b": 1}
+
+
+def test_rank_rows_segments_by_benchmark_version() -> None:
+    """Different benchmark versions must not cross-compete."""
+
+    def _row(method_name: str, suite_version: str, overall: float) -> LeaderboardRow:
+        run = RunResult(
+            run_id="r",
+            method_name=method_name,
+            method_version="1.0.0",
+            suite_key="elite",
+            suite_version=suite_version,
+            scorer_version="1.0.0",
+            target_provider="groq",
+            target_model="m",
+            started_at=datetime(2026, 4, 17, tzinfo=UTC),
+            completed_at=datetime(2026, 4, 17, tzinfo=UTC),
+            cases=[],
+            overall_score=overall,
+            drift_resistance=0.9,
+            constraint_retention=0.85,
+            contradiction_rate=0.02,
+            compression_ratio=6.0,
+        )
+        return project_row(
+            run,
+            tier="Elite-Mid",
+            handle="a",
+            org=None,
+            published_at=datetime(2026, 4, 17, tzinfo=UTC),
+        )
+
+    v1 = _row("v1_entry", "1.0.0", overall=0.9)
+    v2 = _row("v2_entry", "2.0.0", overall=0.3)
+    ranked = rank_rows([v1, v2])
+    ranks_by_name = {r["method_name"]: r["rank"] for r in ranked}
+    assert ranks_by_name == {"v1_entry": 1, "v2_entry": 1}

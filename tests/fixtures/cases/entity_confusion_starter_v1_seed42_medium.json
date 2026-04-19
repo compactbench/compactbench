@@ -29,7 +29,7 @@
       {
         "id": 3,
         "role": "assistant",
-        "content": "Happy to chat about that briefly — anything else on the main topic?",
+        "content": "Happy to chat about that briefly \u2014 anything else on the main topic?",
         "tags": [
           "distractor"
         ]
@@ -66,6 +66,7 @@
     "locked_decisions": [],
     "forbidden_behaviors": [],
     "unresolved_items": [],
+    "deferred_items": [],
     "entity_map": {
       "Omar": "owner_of_task_a",
       "Aditya": "owner_of_task_b"

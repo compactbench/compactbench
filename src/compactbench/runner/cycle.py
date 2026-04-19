@@ -56,7 +56,13 @@ async def execute_cycle(
 
     artifact = await compactor.compact(working_transcript, previous_artifact=previous_artifact)
     responses = await evaluate_items(case.evaluation_items, artifact, provider, model)
-    scorecard = score_cycle(case, artifact, responses, cycle_number=cycle_number)
+    scorecard = score_cycle(
+        case,
+        artifact,
+        responses,
+        cycle_number=cycle_number,
+        source_transcript=working_transcript,
+    )
 
     latency_ms = int((time.perf_counter() - started) * 1000)
     return CycleExecutionResult(
