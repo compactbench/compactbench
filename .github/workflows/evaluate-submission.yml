@@ -9,7 +9,11 @@ on:
     types: [labeled]
 
 permissions:
-  contents: read
+  # `contents: write` is required so the workflow can commit the canonical
+  # hidden-run `results.jsonl` back to the PR branch — without that, the
+  # leaderboard-rebuild step downstream would be trusting the submitter's
+  # locally-committed results file instead of the hidden-set run.
+  contents: write
   pull-requests: write  # for posting the score comment
 
 concurrency:
@@ -44,19 +48,41 @@ jobs:
       - name: Validate submission has no leftover FILL_ME placeholders
         run: uv run python scripts/validate_submissions.py
 
-      - name: Install submission dependencies
+      # Resolve the exact submission directory touched by this PR. Earlier
+      # versions scanned every `submissions/*/*/config.yaml` and used the
+      # first non-template match, which worked only by accident when no real
+      # submissions existed. Binding to the PR diff is unambiguous, and
+      # rejecting PRs that touch zero or more-than-one submission keeps
+      # evaluation runs one-to-one with review.
+      - name: Resolve submission directory from PR diff
+        id: submission
         run: |
           changed_dirs=$(git diff --name-only \
             ${{ github.event.pull_request.base.sha }} \
             ${{ github.event.pull_request.head.sha }} \
             -- 'submissions/**' \
-            | awk -F/ '{print $1"/"$2"/"$3}' | sort -u)
-          for dir in $changed_dirs; do
-            if [ -f "$dir/requirements.txt" ]; then
-              echo "Installing deps for $dir"
-              uv pip install -r "$dir/requirements.txt"
-            fi
-          done
+            | awk -F/ 'NF>=3 {print $1"/"$2"/"$3}' \
+            | sort -u \
+            | grep -v '^submissions/_template' || true)
+          count=$(printf '%s\n' "$changed_dirs" | grep -c . || true)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::PR does not touch any submissions/<handle>/<method>/ directory. Evaluate PRs must include exactly one submission."
+            exit 1
+          fi
+          if [ "$count" -gt 1 ]; then
+            echo "::error::PR touches multiple submissions: $changed_dirs — split into one PR per submission so each is evaluated and reviewed independently."
+            exit 1
+          fi
+          echo "submission_dir=$changed_dirs" >> "$GITHUB_OUTPUT"
+          echo "Evaluating submission: $changed_dirs"
+
+      - name: Install submission dependencies
+        run: |
+          dir="${{ steps.submission.outputs.submission_dir }}"
+          if [ -f "$dir/requirements.txt" ]; then
+            echo "Installing deps for $dir"
+            uv pip install -r "$dir/requirements.txt"
+          fi
 
       # Hidden-set evaluation: clone compactbench-hidden via HTTPS + a
       # fine-grained PAT stored as HIDDEN_REPO_TOKEN. We refuse to run when
@@ -82,22 +108,22 @@ jobs:
 
       - name: Resolve submission config
         id: cfg
+        env:
+          SUBMISSION_DIR: ${{ steps.submission.outputs.submission_dir }}
         run: |
           python -c "
-          from pathlib import Path
-          import sys
-          import yaml
-          for cfg in Path('submissions').rglob('config.yaml'):
-              if '_template' in cfg.parts:
-                  continue
-              data = yaml.safe_load(cfg.read_text())
-              with open('${{ github.workspace }}/cfg.env', 'w') as fp:
-                  fp.write(f\"CLASS_PATH={data['method']['class_path']}\n\")
-                  fp.write(f\"PROVIDER={data['runtime']['provider']}\n\")
-                  fp.write(f\"MODEL={data['runtime']['model']}\n\")
-                  fp.write(f\"DRIFT_CYCLES={data['runtime'].get('drift_cycles', 2)}\n\")
-                  fp.write(f\"CASE_COUNT={data['runtime'].get('case_count_per_template', 5)}\n\")
-              sys.exit(0)
+          import os, sys, yaml
+          cfg_path = os.environ['SUBMISSION_DIR'] + '/config.yaml'
+          if not os.path.isfile(cfg_path):
+              print(f'::error::{cfg_path} not found in submission dir', file=sys.stderr)
+              sys.exit(1)
+          data = yaml.safe_load(open(cfg_path).read())
+          with open('${{ github.workspace }}/cfg.env', 'w') as fp:
+              fp.write(f\"CLASS_PATH={data['method']['class_path']}\n\")
+              fp.write(f\"PROVIDER={data['runtime']['provider']}\n\")
+              fp.write(f\"MODEL={data['runtime']['model']}\n\")
+              fp.write(f\"DRIFT_CYCLES={data['runtime'].get('drift_cycles', 2)}\n\")
+              fp.write(f\"CASE_COUNT={data['runtime'].get('case_count_per_template', 5)}\n\")
           "
           cat cfg.env >> "$GITHUB_ENV"
 
@@ -139,6 +165,63 @@ jobs:
         with:
           name: results
           path: results.jsonl
+
+      # Commit the canonical hidden-run results.jsonl back onto the PR branch.
+      # The leaderboard-rebuild workflow (triggered on merge to main) reads
+      # whatever results.jsonl is committed under the submission directory —
+      # so without this step, it would rank the submitter's locally-committed
+      # file instead of the hidden-set run. Skipped for fork PRs because
+      # GITHUB_TOKEN has no write access to forks; in that case the maintainer
+      # must fetch the workflow artifact and commit it manually before merging.
+      - name: Commit canonical hidden-run results to PR branch
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          SUBMISSION_DIR: ${{ steps.submission.outputs.submission_dir }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = `${process.env.SUBMISSION_DIR}/results.jsonl`;
+            const content = fs.readFileSync("results.jsonl", "utf8");
+            const encoded = Buffer.from(content).toString("base64");
+            const branch = context.payload.pull_request.head.ref;
+
+            let existingSha;
+            try {
+              const existing = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path,
+                ref: branch,
+              });
+              existingSha = existing.data.sha;
+            } catch (err) {
+              if (err.status !== 404) throw err;
+            }
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              message: "chore(submission): canonical hidden-run results [skip ci]",
+              content: encoded,
+              branch,
+              sha: existingSha,
+            });
+            core.info(`Committed hidden-run results to ${branch}:${path}`);
+
+      - name: Warn if fork PR (results not auto-committed)
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            core.warning(
+              "PR originates from a fork; GITHUB_TOKEN cannot push to the fork. " +
+              "Maintainer must download the `results` artifact from this run and " +
+              "commit it to the submission directory before merging — otherwise " +
+              "the leaderboard will rank the submitter-committed file, not the " +
+              "canonical hidden-run results."
+            );
 
       - name: Post score comment to PR
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
