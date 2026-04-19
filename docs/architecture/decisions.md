@@ -5,7 +5,7 @@
 - **Version**: 1.0 (OSS)
 - **Date locked**: 2026-04-16
 - **Scope**: canonical reference for all workorders through v1 PyPI release.
-- **Supersedes**: the SaaS-era decisions document (archived at [_legacy-saas/decisions.md](_legacy-saas/decisions.md)).
+- **Supersedes**: an earlier SaaS-era decisions document (no longer retained in the repo).
 
 CompactBench is an open-source Python package distributed on PyPI. The leaderboard is operated by maintainers; submissions arrive as PRs and are evaluated by a GitHub Actions self-hosted runner that holds the hidden test set and provider API keys.
 
@@ -69,12 +69,12 @@ YAML templates with Handlebars-style `{{variable}}` substitution, JSON Schema va
 
 Seeded generators: `person_name`, `action_phrase`, `project_noun`, `date_iso`, `amount_usd`, `product_sku`, `org_name`. Each draws from a bounded lexicon and advances a seeded PRNG.
 
-See canonical example in [_legacy-saas/decisions.md §B1](_legacy-saas/decisions.md).
+Canonical examples ship at `benchmarks/public/starter/*.yaml` and are parsed by `src/compactbench/dsl/parser.py`.
 
 ### B2. Compaction artifact schema
 Strict JSON Schema. Every section required; empty arrays / empty object allowed; missing keys rejected. Implemented as pydantic models in `src/compactbench/contracts/artifact.py`.
 
-Full schema in [_legacy-saas/decisions.md §B2](_legacy-saas/decisions.md). Schema version: `1.0.0`.
+Full schema lives with the code at `src/compactbench/contracts/artifact.py`, with a JSON Schema mirror at `benchmarks/schemas/`. Schema version: `1.0.0`.
 
 ### B3. Scoring formulas
 
@@ -120,7 +120,7 @@ Tie-breakers: higher drift_resistance → higher constraint_retention → lower 
 - no runner failures in ranked slots
 
 ### B5. Built-in compactors
-`naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`. Algorithm sketches in [_legacy-saas/decisions.md §B5](_legacy-saas/decisions.md).
+`naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`. Implementations live under `src/compactbench/compactors/`; each file's module docstring sketches the algorithm.
 
 ### B6. Launch Elite families
 `buried_constraint_v1`, `decision_override_v1`, `entity_confusion_v1`. Each: 5 public practice variations + 20 hidden ranked variations. Remaining 12 families added post-launch.
