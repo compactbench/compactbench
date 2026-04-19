@@ -176,6 +176,10 @@ def test_all_starter_templates_generate(difficulty: DifficultyLevel) -> None:
             "entity_confusion_starter_v1.yaml",
             "entity_confusion_starter_v1_seed42_medium.json",
         ),
+        (
+            "reference_resolution_starter_v1.yaml",
+            "reference_resolution_starter_v1_seed42_medium.json",
+        ),
     ],
 )
 def test_starter_cases_match_committed_fixtures(template_file: str, fixture_name: str) -> None:

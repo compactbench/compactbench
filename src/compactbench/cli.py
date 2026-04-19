@@ -250,6 +250,7 @@ def score(
     from rich.table import Table
 
     from compactbench.runner import to_run_result
+    from compactbench.scoring import item_type_breakdown
 
     try:
         run_result = to_run_result(results)
@@ -282,6 +283,28 @@ def score(
             str(len(case.cycles)),
         )
     console.print(per_case)
+
+    breakdown = item_type_breakdown(run_result)
+    if breakdown:
+        diag = Table(title="Failures by item type")
+        diag.add_column("Item type")
+        diag.add_column("Weight", justify="right")
+        diag.add_column("N", justify="right")
+        diag.add_column("Perfect", justify="right")
+        diag.add_column("Partial", justify="right")
+        diag.add_column("Failed", justify="right")
+        diag.add_column("Mean", justify="right")
+        for row in breakdown:
+            diag.add_row(
+                row.item_type,
+                f"{row.weight:.1f}",
+                str(row.total),
+                str(row.perfect),
+                str(row.partial),
+                str(row.failed),
+                f"{row.mean_score:.3f}",
+            )
+        console.print(diag)
 
     summary = Table(title="Aggregate")
     summary.add_column("Metric")

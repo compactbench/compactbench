@@ -24,12 +24,13 @@ _EXPECTED_FAMILIES: dict[str, int] = {
     "buried_constraint": 5,
     "decision_override": 5,
     "entity_confusion": 5,
+    "reference_resolution": 5,
 }
 
 
-def test_elite_practice_has_fifteen_templates() -> None:
+def test_elite_practice_has_twenty_templates() -> None:
     templates = load_suite(_ELITE_PRACTICE_DIR)
-    assert len(templates) == 15
+    assert len(templates) == 20
 
 
 def test_elite_practice_family_distribution() -> None:

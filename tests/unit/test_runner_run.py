@@ -50,8 +50,8 @@ async def test_end_to_end_starter_suite_one_cycle(tmp_path: Path) -> None:
     await run_experiment(_args(output, case_count=1, drift_cycles=0))
 
     run_result = to_run_result(output)
-    # Starter has 3 templates with 1 case each = 3 cases.
-    assert len(run_result.cases) == 3
+    # Starter has 4 templates with 1 case each = 4 cases.
+    assert len(run_result.cases) == 4
     assert run_result.method_name == "naive-summary"
     assert run_result.suite_key == "starter"
     # Every case has 1 cycle.
@@ -87,7 +87,7 @@ async def test_writes_run_start_case_complete_run_end(tmp_path: Path) -> None:
     assert isinstance(events[0], RunStartEvent)
     assert isinstance(events[-1], RunEndEvent)
     case_events = [e for e in events if isinstance(e, CaseCompleteEvent)]
-    assert len(case_events) == 3
+    assert len(case_events) == 4
 
 
 async def test_respects_case_count_per_template(tmp_path: Path) -> None:
@@ -95,8 +95,8 @@ async def test_respects_case_count_per_template(tmp_path: Path) -> None:
     await run_experiment(_args(output, case_count=2, drift_cycles=0))
 
     run_result = to_run_result(output)
-    # 3 templates with 2 cases each = 6 cases.
-    assert len(run_result.cases) == 6
+    # 4 templates with 2 cases each = 8 cases.
+    assert len(run_result.cases) == 8
 
 
 async def test_raises_on_unknown_suite(tmp_path: Path) -> None:
@@ -122,7 +122,7 @@ async def test_resume_skips_completed_cases(tmp_path: Path) -> None:
     # First run completes fully.
     await run_experiment(_args(output, case_count=1, drift_cycles=0))
     first_completed = completed_case_ids(output)
-    assert len(first_completed) == 3
+    assert len(first_completed) == 4
 
     # Resume run should produce the same set of completed cases (no-op continuation).
     await run_experiment(_args(output, case_count=1, drift_cycles=0, resume=True))

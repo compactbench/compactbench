@@ -1,0 +1,74 @@
+# Elite practice: reference_resolution v1 — elided anaphor ("same as before").
+# Two separate items are discussed. A later turn says "treat it the same way
+# as before", relying on correctly identifying the antecedent (the *second*
+# item, not the first). A compactor that collapses both items into "some rules
+# were set" loses the specificity needed to resolve the reference.
+template:
+  key: reference_resolution_v1_2
+  family: reference_resolution
+  version: 1.0.0
+
+  difficulty_policy:
+    distractor_turns:
+      easy: 4
+      medium: 8
+      hard: 16
+      elite: 32
+    paraphrase_depth:
+      easy: 0
+      medium: 1
+      hard: 2
+      elite: 3
+
+  variables:
+    - {name: entity, generator: person_name}
+    - {name: topic_a, generator: project_noun}
+    - {name: topic_b, generator: project_noun}
+    - {name: early_action, generator: action_phrase}
+    - {name: forbidden_action, generator: action_phrase}
+
+  transcript:
+    turns:
+      - role: user
+        template: "I need help across two tracks: {{topic_a}} and {{topic_b}}, both with {{entity}}."
+      - role: assistant
+        template: "Understood. Any constraints for either?"
+      - role: user
+        template: "For {{topic_a}}, we already agreed: never {{early_action}}. That is settled."
+      - role: user
+        template: "For {{topic_b}}, similar spirit but different action: never {{forbidden_action}}."
+        tags: [critical_constraint]
+      - role: distractor_block
+        count: "{{difficulty.distractor_turns}}"
+      - role: user
+        template: "For the next {{topic_b}} step, treat it the same way as what we just said about {{topic_b}}."
+
+  ground_truth:
+    immutable_facts:
+      - "primary_subject: {{entity}}"
+      - "topic_a: {{topic_a}}"
+      - "topic_b: {{topic_b}}"
+    forbidden_behaviors:
+      - "{{forbidden_action}}"
+    entity_map:
+      "{{entity}}": primary_subject
+
+  evaluation_items:
+    - key: resolve_second_antecedent
+      type: locked_decision_retention
+      prompt: "The user said 'treat it the same way as what we just said about {{topic_b}}'. What rule were they referring to?"
+      expected:
+        check: contains_normalized
+        value: "{{forbidden_action}}"
+    - key: apply_second_antecedent
+      type: planning_soundness
+      prompt: "Propose the next {{topic_b}} step for {{entity}}."
+      expected:
+        check: forbidden_absent
+        value: "{{forbidden_action}}"
+    - key: do_not_confuse_tracks
+      type: immutable_fact_recall
+      prompt: "Name both tracks the user is juggling."
+      expected:
+        check: contains_normalized
+        value: "{{topic_b}}"
