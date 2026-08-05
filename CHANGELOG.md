@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `OpenAIProvider` accepts a `base_url` (constructor argument or
+  `COMPACTBENCH_OPENAI_BASE_URL`), so the `openai` provider also serves any
+  OpenAI-compatible endpoint — vLLM, llama.cpp server, LM Studio, Together,
+  Fireworks, OpenRouter. When a base URL is set the API key becomes optional,
+  because self-hosted servers generally do not check one.
+- Responses carry `raw["custom_base_url"]`, recording whether a run went to a
+  non-default endpoint without storing the URL itself.
+
 ## [0.1.0] — 2026-04-17
 
 First public release. The full v1 stack: DSL parser, case-generation engine,

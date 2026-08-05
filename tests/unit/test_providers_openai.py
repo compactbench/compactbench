@@ -201,3 +201,50 @@ async def test_no_cached_prefix_leaves_prompt_untouched() -> None:
     await provider.complete(CompletionRequest(model="m", prompt="hi"))
     assert mock.await_args is not None
     assert mock.await_args.kwargs["messages"][-1]["content"] == "hi"
+
+
+async def test_base_url_is_passed_to_the_sdk() -> None:
+    provider = OpenAIProvider(api_key="k", base_url="http://localhost:8000/v1")
+    assert str(provider._client.base_url).rstrip("/") == "http://localhost:8000/v1"  # pyright: ignore[reportPrivateUsage]
+
+
+async def test_base_url_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COMPACTBENCH_OPENAI_BASE_URL", "http://localhost:1234/v1")
+    provider = OpenAIProvider(api_key="k")
+    assert str(provider._client.base_url).rstrip("/") == "http://localhost:1234/v1"  # pyright: ignore[reportPrivateUsage]
+
+
+async def test_base_url_makes_the_api_key_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Self-hosted servers do not check a key, and requiring one would block them."""
+    monkeypatch.delenv("COMPACTBENCH_OPENAI_API_KEY", raising=False)
+    provider = OpenAIProvider(base_url="http://localhost:8000/v1")
+    assert provider is not None
+
+
+async def test_still_requires_a_key_without_a_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The relaxation must not leak into the hosted path, where a key is mandatory."""
+    monkeypatch.delenv("COMPACTBENCH_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("COMPACTBENCH_OPENAI_BASE_URL", raising=False)
+    with pytest.raises(ProviderError, match="OpenAI API key"):
+        OpenAIProvider()
+
+
+async def test_custom_base_url_is_flagged_in_raw() -> None:
+    provider = OpenAIProvider(api_key="k", base_url="http://localhost:8000/v1")
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+
+    resp = await provider.complete(CompletionRequest(model="m", prompt="p"))
+    assert resp.raw["custom_base_url"] is True
+
+
+async def test_default_client_is_not_flagged_as_custom(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Explicitly unset: a developer with the env var exported would otherwise see this
+    # fail for a reason that has nothing to do with the code under test.
+    monkeypatch.delenv("COMPACTBENCH_OPENAI_BASE_URL", raising=False)
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+
+    resp = await provider.complete(CompletionRequest(model="m", prompt="p"))
+    assert resp.raw["custom_base_url"] is False
