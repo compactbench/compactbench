@@ -64,6 +64,16 @@ class CountingProvider(Provider):
         """Return the underlying provider this wrapper forwards to."""
         return self._wrapped
 
+    @property
+    def endpoint_kind(self) -> str:
+        """Forward the wrapped provider's endpoint provenance.
+
+        The runner always wraps the real provider in this counter, so without
+        this delegation every run would report ``"default"`` no matter where the
+        calls actually went — silently defeating the provenance signal.
+        """
+        return self._wrapped.endpoint_kind
+
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         response = await self._wrapped.complete(request)
         async with self._lock:

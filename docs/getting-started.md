@@ -52,12 +52,15 @@ CompactBench needs a model provider to evaluate compacted context. Any of the fo
     When a base URL is set the API key becomes optional, since self-hosted servers
     generally do not check one. Hosted gateways still need `COMPACTBENCH_OPENAI_API_KEY`.
 
-    Runs against a custom base URL are flagged in each response's `raw.custom_base_url`,
-    so a results file records that it did not go to OpenAI. The URL itself is **not**
-    stored — it is frequently an internal host and results files get shared.
+    Runs against a custom base URL are recorded in `results.jsonl` as
+    `endpoint_kind: "custom"` on the `run_start` event, so a reader can tell the run did
+    not go to OpenAI. The URL itself is **not** stored — it is frequently an internal
+    host and results files get shared. `endpoint_kind` is also part of the leaderboard's
+    ranking segment, so a self-hosted model is never ranked against the vendor-hosted
+    model whose name it was submitted under.
 
 !!! tip "Running the full Elite practice suite"
-    15 templates × default 5 cases × 2 drift cycles × ~3 eval items per cycle = ~450 LLM calls, which exceeds Groq's free-tier daily token limit. For real evaluation runs use **Anthropic**, **OpenAI**, or a paid **Groq** account. The benchmark auto-detects daily-quota 429s and surfaces them immediately (it will not retry futilely).
+    20 templates × default 5 cases × 2 drift cycles × ~3 eval items per cycle = ~900 LLM calls, which exceeds Groq's free-tier daily token limit. For real evaluation runs use **Anthropic**, **OpenAI**, or a paid **Groq** account. The benchmark auto-detects daily-quota 429s and surfaces them immediately (it will not retry futilely).
 
 !!! info "Prompt caching on the evaluation layer"
     Every cycle asks the target model N evaluation questions against the same compaction artifact. CompactBench automatically threads the artifact as a `cached_prefix` on each call so providers that support prompt caching only pay for those input tokens once per cycle:

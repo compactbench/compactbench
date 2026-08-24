@@ -6,14 +6,24 @@ callers should treat the dollar figures as order-of-magnitude guidance, not
 invoice-grade estimates.
 
 Updating: change the value, bump ``CATALOGUE_UPDATED``, and cite the source in
-the PR that updates it.
+the PR that updates it. ``test_costs_catalogue_is_not_stale`` fails once the
+catalogue is more than ``MAX_CATALOGUE_AGE_DAYS`` old, and ``format_estimate``
+prints the date, so a silently-rotting price table is no longer possible.
+
+Entries marked ``# verified`` were checked against the provider's published
+rates on ``CATALOGUE_UPDATED``. Unmarked entries are carried over from an
+earlier snapshot and should be re-checked before being quoted.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-CATALOGUE_UPDATED = "2026-04-18"
+CATALOGUE_UPDATED = "2026-08-24"
+
+# `--estimate` output is advisory, but a price table nobody refreshes silently
+# becomes wrong. Fail the suite rather than quote rates from an unknown vintage.
+MAX_CATALOGUE_AGE_DAYS = 120
 
 
 @dataclass(frozen=True)
@@ -32,9 +42,11 @@ MODEL_COSTS: dict[tuple[str, str], ModelCost] = {
     ("groq", "llama-3.1-8b-instant"): ModelCost(0.05, 0.08),
     ("groq", "mixtral-8x7b-32768"): ModelCost(0.24, 0.24),
     # --- Anthropic --- (https://www.anthropic.com/pricing)
-    ("anthropic", "claude-3-5-haiku-latest"): ModelCost(0.80, 4.00),
-    ("anthropic", "claude-3-5-sonnet-latest"): ModelCost(3.00, 15.00),
-    ("anthropic", "claude-opus-4-latest"): ModelCost(15.00, 75.00),
+    ("anthropic", "claude-opus-5"): ModelCost(5.00, 25.00),  # verified
+    ("anthropic", "claude-sonnet-5"): ModelCost(3.00, 15.00),  # verified
+    ("anthropic", "claude-haiku-4-5"): ModelCost(1.00, 5.00),  # verified
+    ("anthropic", "claude-opus-4-8"): ModelCost(5.00, 25.00),  # verified
+    ("anthropic", "claude-fable-5"): ModelCost(10.00, 50.00),  # verified
     # --- OpenAI --- (https://openai.com/api/pricing/)
     ("openai", "gpt-4o-mini"): ModelCost(0.15, 0.60),
     ("openai", "gpt-4o"): ModelCost(2.50, 10.00),
@@ -46,6 +58,8 @@ MODEL_COSTS: dict[tuple[str, str], ModelCost] = {
     # --- Ollama --- (local, no per-token cost)
     ("ollama", "llama3.2"): ModelCost(0.00, 0.00),
     ("ollama", "llama3.1"): ModelCost(0.00, 0.00),
+    ("ollama", "llama3.2:1b"): ModelCost(0.00, 0.00),
+    ("ollama", "qwen2.5:1.5b-instruct"): ModelCost(0.00, 0.00),
 }
 
 

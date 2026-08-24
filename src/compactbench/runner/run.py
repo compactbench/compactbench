@@ -84,7 +84,7 @@ async def run_experiment(args: RunArgs) -> Path:
         existing = read_run_start(args.output_path)
         if existing is None:
             raise ResumeError(f"--resume passed but {args.output_path} has no run_start event")
-        _assert_resume_compatible(existing, args, compactor_cls)
+        _assert_resume_compatible(existing, args, compactor_cls, provider.endpoint_kind)
         already_done = completed_case_ids(args.output_path)
         run_id = existing.run_id
         started_at = existing.started_at
@@ -107,6 +107,7 @@ async def run_experiment(args: RunArgs) -> Path:
                     scorer_version=SCORER_VERSION,
                     target_provider=args.provider_key,
                     target_model=args.model,
+                    endpoint_kind=provider.endpoint_kind,
                     difficulty=args.difficulty.value,
                     drift_cycles=args.drift_cycles,
                     seed_group=args.seed_group,
@@ -288,9 +289,20 @@ def _suite_version(templates: list[TemplateDefinition]) -> str:
 
 
 def _assert_resume_compatible(
-    existing: RunStartEvent, args: RunArgs, compactor_cls: type[Compactor]
+    existing: RunStartEvent,
+    args: RunArgs,
+    compactor_cls: type[Compactor],
+    endpoint_kind: str | None = None,
 ) -> None:
     mismatches: list[str] = []
+    # Provider + model alone do not pin down where the calls go: `--provider
+    # openai --model gpt-4o` reaches OpenAI or a local vLLM server depending
+    # only on an environment variable. Without this check a run could be half
+    # executed against the real model and resumed against a local one under the
+    # same alias, producing a single results file with two different targets in
+    # it and no way to tell from the data.
+    if endpoint_kind is not None and existing.endpoint_kind != endpoint_kind:
+        mismatches.append(f"endpoint_kind: {existing.endpoint_kind!r} vs {endpoint_kind!r}")
     if existing.method_name != compactor_cls.name:
         mismatches.append(f"method_name: {existing.method_name!r} vs {compactor_cls.name!r}")
     if existing.suite_key != args.suite_key:

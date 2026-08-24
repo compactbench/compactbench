@@ -32,7 +32,7 @@ compactbench run --method built-in:hybrid-ledger --suite starter \
 compactbench score --results results.jsonl
 ```
 
-Any of the four built-in compactors — `naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger` — works as a `--method` target. Swap `--provider ollama` for `groq` or `google-ai-studio` if you prefer a remote model (set `COMPACTBENCH_GROQ_API_KEY` or `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY`).
+Any of the four built-in compactors — `naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger` — works as a `--method` target. Swap `--provider ollama` for `groq`, `google-ai-studio`, `anthropic` or `openai` if you prefer a remote model (set the matching `COMPACTBENCH_*_API_KEY`). The `openai` provider also serves any OpenAI-compatible endpoint — vLLM, llama.cpp, LM Studio, OpenRouter — via `COMPACTBENCH_OPENAI_BASE_URL`.
 
 Already have production code in [LangChain](https://compactbench.github.io/compactbench/integrations/#langchain) or [LlamaIndex](https://compactbench.github.io/compactbench/integrations/#llamaindex)? Wrap it with `compactbench.integrations` — `pip install 'compactbench[langchain]'` or `compactbench[llamaindex]` — and benchmark what you're already running.
 
@@ -88,15 +88,15 @@ See [docs/submitting.md](docs/submitting.md) for the full submission protocol.
 
 ## Project status
 
-**v0.1.0 — first public release (2026-04-17).** The v1 stack ships:
+**v0.2.0 (2026-08-24).** Fixes a packaging fault that made the 0.1.0 wheel unusable — it shipped without any benchmark content, so `compactbench suites list` failed on a fresh `pip install`. Upgrade if you are on 0.1.0. The stack ships:
 
-- **Core**: DSL parser, case generation, scoring engine, real providers (Groq / Google AI Studio / Ollama)
+- **Core**: DSL parser, case generation, scoring engine, five real providers (Groq / Google AI Studio / Ollama / Anthropic / OpenAI, the last of which also reaches any OpenAI-compatible server) plus a deterministic mock
 - **Methods**: four built-in compactors (`naive-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`)
 - **Runtime**: end-to-end `compactbench run` with drift cycles, JSONL event log, `--resume`
 - **Leaderboard**: PR-based submission flow on GitHub-hosted runners, static site fed by a qualification + ranking core
-- **Content**: 15 public Elite practice templates + 15 hidden ranked templates across three launch families (`buried_constraint`, `decision_override`, `entity_confusion`)
+- **Content**: 20 public Elite practice templates across four families (`buried_constraint`, `decision_override`, `entity_confusion`, `reference_resolution`), plus a hidden ranked set
 
-See [CHANGELOG.md](CHANGELOG.md) for the full v0.1.0 breakdown. Post-launch work (more template families, framework integrations, shadow evaluation automation, custom domain) is tracked in [GitHub issues](https://github.com/compactbench/compactbench/issues).
+See [CHANGELOG.md](CHANGELOG.md) for the full breakdown. Post-launch work (more template families, framework integrations, shadow evaluation automation, custom domain) is tracked in [GitHub issues](https://github.com/compactbench/compactbench/issues).
 
 ## Contributing
 

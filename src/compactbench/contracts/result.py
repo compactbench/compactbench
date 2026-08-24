@@ -113,6 +113,9 @@ class RunResult(BaseModel):
     scorer_version: str
     target_provider: str
     target_model: str
+    # See RunStartEvent.endpoint_kind. Carried through to the leaderboard
+    # segment so self-hosted runs are never ranked against vendor-hosted ones.
+    endpoint_kind: str = "default"
     started_at: datetime
     completed_at: datetime
     cases: list[CaseResult]

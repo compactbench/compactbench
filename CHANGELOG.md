@@ -7,14 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-24
+
+Four months of merged work that was never released, plus the packaging fix that
+makes it reachable. **If you installed 0.1.0, upgrade** — that wheel shipped
+without any benchmark content, so `compactbench suites list` failed on a clean
+install and no benchmark could be run from PyPI at all.
+
+### Fixed
+- **The published wheel now contains the benchmark suites.** The `force-include`
+  mapping that bundles `benchmarks/public` landed in #21, *after* the v0.1.0 tag,
+  so the released artifact had zero templates and the documented first command
+  exited 1. CI and the release workflow now install the built wheel into a clean
+  environment and assert the CLI can see `starter` and `elite_practice`, so this
+  class of packaging regression cannot ship again.
+- `.env` is now actually read. Every provider reads `os.environ` directly, and
+  the `Settings` object that parsed `.env` was imported by nothing — the
+  documented way to supply API keys silently did nothing. The CLI now loads
+  `COMPACTBENCH_*` variables from `.env` before any provider is constructed.
+  A real environment variable still wins over the file.
+- An empty `COMPACTBENCH_OPENAI_BASE_URL` no longer marks a genuine OpenAI run
+  as self-hosted. The client was gated on truthiness and the provenance flag on
+  identity, so `""` produced a run stamped as having gone somewhere it hadn't.
+- A base URL without an `http://` or `https://` scheme is now rejected at
+  construction instead of failing much later with an opaque connection error.
+- `uv.lock` regenerated (90 → 145 packages; it had not been touched since the
+  initial scaffold and was missing the `anthropic` and `openai` entries
+  entirely). All workflows now install with `--locked`, so CI fails on lock
+  drift rather than silently re-resolving against live PyPI on every run — which
+  matters for a project whose central claim is reproducibility.
+- The test suite no longer inherits the developer's environment: an autouse
+  fixture clears `COMPACTBENCH_*`, fixing `test_requires_api_key` failing for
+  anyone with a base URL exported (i.e. exactly the local-model users).
+
 ### Added
+- **Endpoint provenance.** `run_start` and `RunResult` now carry `endpoint_kind`
+  (`"default"` or `"custom"`), sourced from the provider, and it is part of the
+  leaderboard's ranking segment. Without it a locally-served model submitted as
+  `--provider openai --model gpt-4o` was ranked against genuine gpt-4o — the
+  provider and model fields are both caller-supplied strings. `--resume` also
+  checks it, so a run cannot be half-executed against a hosted model and
+  finished against a local one under the same alias. The URL itself is never
+  stored; results files get shared and the host is often internal.
 - `OpenAIProvider` accepts a `base_url` (constructor argument or
   `COMPACTBENCH_OPENAI_BASE_URL`), so the `openai` provider also serves any
   OpenAI-compatible endpoint — vLLM, llama.cpp server, LM Studio, Together,
-  Fireworks, OpenRouter. When a base URL is set the API key becomes optional,
-  because self-hosted servers generally do not check one.
-- Responses carry `raw["custom_base_url"]`, recording whether a run went to a
-  non-default endpoint without storing the URL itself.
+  Fireworks, OpenRouter (#37, thanks @jaaabir). When a base URL is set the API
+  key becomes optional, because self-hosted servers generally do not check one.
+- Anthropic and OpenAI providers (#19).
+- LangChain (#16) and LlamaIndex (#17) integration adapters.
+- Zero-install Colab notebook (#18) with a CI smoke test that rebuilds it from
+  its generator and executes every embedded command against the mock provider.
+- Case-level parallelism and a `--estimate` cost projector (#22).
+- Prompt caching via `cached_prefix` on `CompletionRequest` (#23).
+- `reference_resolution` template family (#27) — a fourth family, 5 templates —
+  and a per-item-type diagnostic breakdown in `compactbench score`.
+- Per-cycle / per-case / per-run `TokenUsage` telemetry (#28).
+
+### Changed
+- Cost catalogue refreshed and made self-policing: `--estimate` now prints the
+  price vintage alongside the dollar figure, and a test fails once the catalogue
+  is more than 120 days old. Anthropic entries updated to the current lineup;
+  the previous table priced models that have since been superseded and had no
+  entry for any current one, so `--estimate` either quoted stale rates or
+  refused to answer.
+- Pinned GitHub Action SHAs bumped (#34).
+- Docs corrected to describe the project that actually exists: four template
+  families and 20 practice templates (not three and 15), five real providers
+  (not three), and `~900` calls for a full Elite practice run (not `~450`).
 
 ## [0.1.0] — 2026-04-17
 
@@ -141,5 +201,6 @@ across three launch families.
   - `compactbench generate --template <key> --seed <int>` command wired up
   - Three regression fixtures pinning the starter templates at seed=42, medium
 
-[Unreleased]: https://github.com/compactbench/compactbench/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/compactbench/compactbench/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/compactbench/compactbench/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/compactbench/compactbench/releases/tag/v0.1.0

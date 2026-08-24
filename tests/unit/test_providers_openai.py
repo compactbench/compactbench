@@ -248,3 +248,50 @@ async def test_default_client_is_not_flagged_as_custom(monkeypatch: pytest.Monke
 
     resp = await provider.complete(CompletionRequest(model="m", prompt="p"))
     assert resp.raw["custom_base_url"] is False
+
+
+async def test_empty_base_url_env_is_not_treated_as_custom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exported-but-empty base URL must not mark a real OpenAI run as custom.
+
+    Regression for the two-gate mismatch: the client was gated on truthiness
+    (so "" correctly fell back to api.openai.com) while provenance was gated on
+    identity (`"" is not None` → True), stamping a genuine hosted run as
+    self-hosted. That is the one direction the flag must never get wrong.
+    """
+    monkeypatch.setenv("COMPACTBENCH_OPENAI_BASE_URL", "")
+    provider = OpenAIProvider(api_key="k")
+    assert provider.endpoint_kind == "default"
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+    resp = await provider.complete(CompletionRequest(model="m", prompt="p"))
+    assert resp.raw["custom_base_url"] is False
+
+
+async def test_whitespace_only_base_url_is_not_treated_as_custom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("COMPACTBENCH_OPENAI_BASE_URL", "   ")
+    provider = OpenAIProvider(api_key="k")
+    assert provider.endpoint_kind == "default"
+
+
+@pytest.mark.parametrize("bad", ["localhost:8000/v1", "not a url", "ftp://host/v1"])
+async def test_base_url_without_http_scheme_is_rejected(bad: str) -> None:
+    """A scheme-less base URL is the likeliest typo here; fail at construction.
+
+    The SDK accepts any string, so these previously surfaced as an opaque
+    connection error part-way into a run rather than immediately.
+    """
+    with pytest.raises(ProviderError, match="must start with http"):
+        OpenAIProvider(api_key="k", base_url=bad)
+
+
+async def test_endpoint_kind_is_custom_for_a_base_url() -> None:
+    provider = OpenAIProvider(api_key="k", base_url="http://localhost:8000/v1")
+    assert provider.endpoint_kind == "custom"
+
+
+async def test_endpoint_kind_is_default_without_a_base_url() -> None:
+    assert OpenAIProvider(api_key="k").endpoint_kind == "default"

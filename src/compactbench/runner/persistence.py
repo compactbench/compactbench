@@ -38,6 +38,10 @@ class RunStartEvent(BaseModel):
     scorer_version: str
     target_provider: str
     target_model: str
+    # Where the calls actually went. "default" = the provider's own vendor
+    # endpoint; "custom" = an OpenAI-compatible or remote host reached via a
+    # base URL. Defaulted so pre-0.2.0 results files still parse.
+    endpoint_kind: str = "default"
     difficulty: str
     drift_cycles: int
     seed_group: str
@@ -202,6 +206,7 @@ def to_run_result(path: Path) -> RunResult:
         scorer_version=run_start.scorer_version,
         target_provider=run_start.target_provider,
         target_model=run_start.target_model,
+        endpoint_kind=run_start.endpoint_kind,
         started_at=run_start.started_at,
         completed_at=completed_at,
         cases=cases,

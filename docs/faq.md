@@ -36,11 +36,12 @@ If you've only ever trained or prompted against the public set, the ranked set i
 
 ## Are all the templates the same family?
 
-No — v1 ships three families:
+No — v1 ships four families:
 
 - **buried_constraint** — a critical "never do X" rule that must survive under distractors
 - **decision_override** — a later decision supersedes an earlier one
 - **entity_confusion** — multiple entities with overlapping names or roles
+- **reference_resolution** — pronouns and back-references that must still resolve to the right antecedent after compaction
 
 More families are on the roadmap (see `docs/elite-program.md`). Contributors can propose new families via GitHub issues.
 

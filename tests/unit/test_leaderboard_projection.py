@@ -202,3 +202,77 @@ def test_rank_rows_segments_by_benchmark_version() -> None:
     ranked = rank_rows([v1, v2])
     ranks_by_name = {r["method_name"]: r["rank"] for r in ranked}
     assert ranks_by_name == {"v1_entry": 1, "v2_entry": 1}
+
+
+def test_rank_rows_segments_by_endpoint_kind() -> None:
+    """A self-hosted run must not be ranked against the vendor-hosted model.
+
+    ``target_provider`` and ``target_model`` are both caller-supplied strings,
+    so a locally-served model submitted as ``--provider openai --model gpt-4o``
+    is indistinguishable from genuine gpt-4o on those two fields alone. Without
+    ``endpoint_kind`` in the segment the two compete numerically, which is a
+    comparability failure the whole leaderboard rests on avoiding.
+    """
+
+    def _row(method_name: str, endpoint_kind: str, overall: float) -> LeaderboardRow:
+        run = RunResult(
+            run_id="r",
+            method_name=method_name,
+            method_version="1.0.0",
+            suite_key="elite",
+            suite_version="1.0.0",
+            scorer_version="1.0.0",
+            target_provider="openai",
+            target_model="gpt-4o",
+            endpoint_kind=endpoint_kind,
+            started_at=datetime(2026, 4, 17, tzinfo=UTC),
+            completed_at=datetime(2026, 4, 17, tzinfo=UTC),
+            cases=[],
+            overall_score=overall,
+            drift_resistance=0.9,
+            constraint_retention=0.85,
+            contradiction_rate=0.02,
+            compression_ratio=6.0,
+        )
+        return project_row(
+            run,
+            tier="Elite-Mid",
+            handle="a",
+            org=None,
+            published_at=datetime(2026, 4, 17, tzinfo=UTC),
+        )
+
+    hosted = _row("hosted", "default", overall=0.40)
+    self_hosted = _row("self_hosted", "custom", overall=0.95)
+
+    ranked = rank_rows([self_hosted, hosted])
+
+    # Same provider and model string, but different endpoints — each is rank 1
+    # in its own segment rather than the self-hosted run topping the real one.
+    assert {r["method_name"]: r["rank"] for r in ranked} == {"hosted": 1, "self_hosted": 1}
+
+
+def test_project_row_defaults_endpoint_kind_for_pre_0_2_results() -> None:
+    """A results file written before endpoint_kind existed still projects."""
+    run = RunResult(
+        run_id="r",
+        method_name="m",
+        method_version="1.0.0",
+        suite_key="elite",
+        suite_version="1.0.0",
+        scorer_version="1.0.0",
+        target_provider="groq",
+        target_model="llama",
+        started_at=datetime(2026, 4, 17, tzinfo=UTC),
+        completed_at=datetime(2026, 4, 17, tzinfo=UTC),
+        cases=[],
+        overall_score=0.5,
+        drift_resistance=0.9,
+        constraint_retention=0.85,
+        contradiction_rate=0.02,
+        compression_ratio=6.0,
+    )
+    row = project_row(
+        run, tier="Elite-Mid", handle="a", org=None, published_at=datetime(2026, 4, 17, tzinfo=UTC)
+    )
+    assert row["endpoint_kind"] == "default"

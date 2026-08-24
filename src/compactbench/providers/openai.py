@@ -23,6 +23,30 @@ from compactbench.providers.base import (
 )
 from compactbench.providers.errors import ProviderError, ProviderResponseError
 
+_ALLOWED_URL_SCHEMES = ("http://", "https://")
+
+
+def _validate_base_url(url: str | None) -> str | None:
+    """Reject a base URL that the SDK would silently accept and then fail on.
+
+    ``AsyncOpenAI`` takes any string. A scheme-less value like
+    ``localhost:8000/v1`` — the single most likely typo for this feature's
+    audience — is accepted at construction and only surfaces much later as an
+    opaque connection error, typically part-way into a paid run. Fail here
+    instead, naming the offending value.
+    """
+    if url is None:
+        return None
+    cleaned = url.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith(_ALLOWED_URL_SCHEMES):
+        raise ProviderError(
+            f"COMPACTBENCH_OPENAI_BASE_URL must start with http:// or https:// — got {url!r}. "
+            f"Did you mean 'http://{cleaned}'?"
+        )
+    return cleaned
+
 
 class OpenAIProvider(Provider):
     """Async OpenAI client with rate-limit + transient-error backoff."""
@@ -44,7 +68,15 @@ class OpenAIProvider(Provider):
                 "openai SDK is not installed. Install with: pip install 'compactbench[providers]'"
             ) from exc
 
-        resolved_url = base_url or os.environ.get("COMPACTBENCH_OPENAI_BASE_URL")
+        # `or None` matters: an exported-but-empty COMPACTBENCH_OPENAI_BASE_URL
+        # (docker `-e VAR`, a bare `VAR=` in .env, an unset CI secret) resolves to
+        # "". Without this, the client correctly falls back to api.openai.com while
+        # `self._base_url` stays "" — and `"" is not None` is True, so the run would
+        # be stamped as having gone somewhere other than OpenAI. That is provenance
+        # lying in the direction that matters, so normalise falsy to None once, here.
+        resolved_url = _validate_base_url(
+            base_url or os.environ.get("COMPACTBENCH_OPENAI_BASE_URL") or None
+        )
         resolved_key = api_key or os.environ.get("COMPACTBENCH_OPENAI_API_KEY")
         if not resolved_key:
             if not resolved_url:
@@ -64,6 +96,11 @@ class OpenAIProvider(Provider):
         self._base_url = resolved_url
         self._max_retries = max_retries
         self._base_backoff_seconds = base_backoff_seconds
+
+    @property
+    def endpoint_kind(self) -> str:
+        """``"custom"`` when pointed at an OpenAI-compatible server rather than OpenAI."""
+        return "custom" if self._base_url is not None else "default"
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError

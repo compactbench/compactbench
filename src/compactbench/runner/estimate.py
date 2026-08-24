@@ -21,6 +21,7 @@ import tiktoken
 
 from compactbench.engine import derive_case_seed, generate_case
 from compactbench.runner.costs import (
+    CATALOGUE_UPDATED,
     ModelCost,
     dollars,
     free_tier_daily_limit,
@@ -148,6 +149,11 @@ def format_estimate(est: EstimateResult) -> str:
         )
     else:
         lines.append(f"  estimated total: ~${est.cost_usd:,.2f} USD")
+        # Without this the dollar figure reads as authoritative. It is a
+        # snapshot, and provider pricing moves; say so where the number is.
+        lines.append(
+            f"  prices as of {CATALOGUE_UPDATED} — verify against the provider before relying on this"
+        )
     lines.append("")
 
     if est.daily_limit is not None:
