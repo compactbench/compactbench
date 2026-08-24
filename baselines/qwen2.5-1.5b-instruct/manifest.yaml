@@ -38,14 +38,26 @@ notes: |
   built-in methods. The controls make the rest readable and cost nothing to run —
   they make no model calls at all.
 
-  Observed range on this model:
+  Observed range on this model (7 arms, with cost):
 
-    oracle            0.633   full context — the ceiling
-    hybrid-ledger     0.432   best method, 22.5x compression
-    naive-summary     0.395   only 2.6x compression
-    truncate-last-n   0.263   keep the last 10 turns
-    structured-state  0.249   see caveat below
-    null              0.235   empty artifact — the floor
+    arm                   overall  calls   tokens   full-context %
+    oracle                  0.633    196  148,857     100%   <- ceiling
+    hybrid-ledger           0.432    316  151,808      68%
+    naive-summary           0.395    256  293,587      62%
+    hierarchical-summary    0.305    570  274,167      48%
+    truncate-last-n         0.263    196   63,698      42%   <- last 10 turns
+    structured-state        0.249    256   91,605      39%   <- see caveat
+    null                    0.235    196   36,056      37%   <- floor
+
+  Cost is worth reading alongside score, because the ordering is not the same:
+
+  - `hybrid-ledger` dominates. Best score, and it spends roughly what the oracle
+    spends — about half of `naive-summary`'s tokens.
+  - `hierarchical-summary` is the most expensive arm by call count (570, nearly
+    3x the oracle) and scores *below* single-call `naive-summary`. Chunked
+    summarisation is not paying for itself here.
+  - `naive-summary` burns more tokens (293k) than `hierarchical-summary` (274k)
+    despite fewer calls, because it passes the whole transcript in one prompt.
 
   Two things a reader should not misinterpret:
 

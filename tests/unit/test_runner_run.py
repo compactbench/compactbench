@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from compactbench.dsl import DifficultyLevel
+from compactbench.providers import MockProvider
 from compactbench.runner import (
     ResumeError,
     RunArgs,
@@ -282,3 +283,46 @@ async def test_concurrency_semaphore_caps_active_tasks(
     assert max_concurrent <= 2
     # And we should have actually reached the cap at least once in a real parallel run.
     assert max_concurrent >= 2
+
+
+async def test_cycle_result_carries_the_methods_own_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A method's diagnostics must survive into results.jsonl.
+
+    Artifacts are not persisted, so before this the only trace of a truncated
+    summary or an unparsable JSON state was an unexplained low score. A
+    submitter had no way to tell "my method is bad" from "my method's output was
+    silently cut to fit the artifact limit".
+    """
+    import compactbench.runner.run as run_mod
+
+    # A model that overruns the artifact's 8000-character summary cap. This used
+    # to raise a ValidationError out of the compactor and abort the whole run.
+    def _long_response_provider(_key: str) -> MockProvider:
+        return MockProvider(default="x" * 20_000)
+
+    monkeypatch.setattr(run_mod, "_instantiate_provider", _long_response_provider)
+
+    out = tmp_path / "results.jsonl"
+    await run_experiment(
+        RunArgs(
+            method_spec="built-in:naive-summary",
+            suite_key="starter",
+            provider_key="mock",
+            model="m",
+            difficulty=DifficultyLevel.MEDIUM,
+            drift_cycles=0,
+            case_count_per_template=1,
+            seed_group="default",
+            benchmarks_dir=Path("benchmarks/public"),
+            output_path=out,
+            resume=False,
+            concurrency=1,
+        )
+    )
+
+    result = to_run_result(out)
+    assert result.cases, "run should have completed cases rather than aborting"
+    all_warnings = [w for case in result.cases for cyc in case.cycles for w in cyc.warnings]
+    assert any("truncated" in w for w in all_warnings), all_warnings

@@ -250,6 +250,11 @@ async def _execute_case(
                 drift_delta=drift_delta,
                 latency_ms=result.latency_ms,
                 token_usage=result.token_usage,
+                # Copied off the artifact, which is not itself persisted. These
+                # are the method's own diagnostics — a truncated summary, an
+                # unparsable JSON state — and without them a low score is
+                # unexplainable from the results file alone.
+                warnings=list(result.artifact.warnings),
             )
         )
         cycle_scores.append(result.scorecard.penalized_cycle_score)

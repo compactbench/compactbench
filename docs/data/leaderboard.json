@@ -125,8 +125,29 @@
       "target_model": "qwen2.5:1.5b-instruct",
       "target_provider": "ollama",
       "tier": "Elite-Light"
+    },
+    {
+      "benchmark_version": "elite_practice@1.0.0",
+      "compression_ratio": 2.9795483319552827,
+      "constraint_retention": 0.3055555555555556,
+      "contradiction_rate": 0.016666666666666666,
+      "drift_resistance": 0.6591666666666667,
+      "elite_score": 0.4297512261215737,
+      "endpoint_kind": "default",
+      "handle": null,
+      "method_name": "hierarchical-summary",
+      "method_version": "1.0.0",
+      "org": "compactbench",
+      "overall_score": 0.304781746031746,
+      "published_at": "2026-08-24T05:37:26.434219+00:00",
+      "rank": null,
+      "row_kind": "baseline",
+      "scorer_version": "2.0.0",
+      "target_model": "qwen2.5:1.5b-instruct",
+      "target_provider": "ollama",
+      "tier": "Elite-Light"
     }
   ],
   "schema_version": "1.0.0",
-  "updated_at": "2026-08-24T04:36:25.158562+00:00"
+  "updated_at": "2026-08-24T06:37:23.004982+00:00"
 }

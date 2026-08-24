@@ -86,6 +86,13 @@ class CycleResult(BaseModel):
     # billed" — e.g. cache-only or offline providers). Older ``results.jsonl``
     # files from before token telemetry existed will deserialize with ``None``.
     token_usage: TokenUsage | None = None
+    # Warnings the compaction method reported for this cycle, copied off the
+    # artifact so they survive into results.jsonl. Artifacts themselves are not
+    # persisted, so without this a method's own diagnostics were unrecoverable:
+    # a submitter whose summary got truncated to fit the artifact limit, or whose
+    # JSON state failed to parse, had no way to see it from their results file —
+    # only an unexplained low score. Empty list means "the method reported none".
+    warnings: list[str] = Field(default_factory=list)
 
 
 class CaseResult(BaseModel):

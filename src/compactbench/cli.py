@@ -320,6 +320,23 @@ def score(
     summary.add_row("compression_ratio", f"{run_result.compression_ratio:.2f}x")
     console.print(summary)
 
+    # Warnings the method reported about its own output. Surfaced because a low
+    # score with a truncated summary or an unparsable JSON state behind it is a
+    # different problem from a low score on a well-formed artifact, and the
+    # submitter is the one who has to tell them apart.
+    warning_counts: dict[str, int] = {}
+    for case in run_result.cases:
+        for cyc in case.cycles:
+            for warning in cyc.warnings:
+                warning_counts[warning] = warning_counts.get(warning, 0) + 1
+    if warning_counts:
+        warn_table = Table(title="Method warnings")
+        warn_table.add_column("Count", justify="right")
+        warn_table.add_column("Warning")
+        for warning, count in sorted(warning_counts.items(), key=lambda kv: -kv[1]):
+            warn_table.add_row(str(count), warning)
+        console.print(warn_table)
+
     usage = run_result.token_usage
     if usage is not None and usage.call_count > 0:
         tokens = Table(title="Token usage")
