@@ -58,12 +58,12 @@ Implement the `Compactor` interface and register it.
 from compactbench.compactors import Compactor
 from compactbench.contracts import CompactionArtifact, Transcript
 
+
 class MyCompactor(Compactor):
     name = "my-method"
     version = "0.1.0"
 
-    async def compact(self, transcript: Transcript, config: dict) -> CompactionArtifact:
-        ...
+    async def compact(self, transcript: Transcript, config: dict) -> CompactionArtifact: ...
 ```
 
 Then run:
