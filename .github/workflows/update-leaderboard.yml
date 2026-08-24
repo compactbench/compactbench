@@ -35,7 +35,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install package
-        run: uv sync --extra providers
+        run: uv sync --extra providers --locked
 
       - name: Rebuild leaderboard.json
         run: uv run python scripts/rebuild_leaderboard.py

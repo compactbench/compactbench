@@ -54,6 +54,23 @@ jobs:
       - name: Build wheel + sdist
         run: uv build
 
+      # Same guard as CI: never publish a distribution whose CLI cannot find
+      # its own benchmark content. This is the check that would have caught the
+      # broken 0.1.0 wheel before it reached PyPI.
+      - name: Smoke-test the built wheel in a clean environment
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          uv venv "$work/venv"
+          uv pip install --python "$work/venv/bin/python" dist/*.whl
+          cd "$work"
+          out="$("$work/venv/bin/compactbench" suites list)"
+          echo "$out"
+          for suite in starter elite_practice; do
+            echo "$out" | grep -q "$suite" \
+              || { echo "::error::refusing to publish: wheel cannot see the '$suite' suite"; exit 1; }
+          done
+
       - name: Verify version matches tag
         run: |
           tag_version="${GITHUB_REF_NAME#v}"

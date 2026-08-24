@@ -29,6 +29,10 @@ class LeaderboardRow(TypedDict):
     benchmark_version: str
     target_provider: str
     target_model: str
+    # "default" = the provider's own endpoint; "custom" = an OpenAI-compatible
+    # or remote host. Part of the ranking segment: a self-hosted model submitted
+    # under a hosted model's name must never be ranked against the real thing.
+    endpoint_kind: str
     scorer_version: str
     elite_score: float
     overall_score: float
@@ -68,6 +72,7 @@ def project_row(
         benchmark_version=f"{run_result.suite_key}@{run_result.suite_version}",
         target_provider=run_result.target_provider,
         target_model=run_result.target_model,
+        endpoint_kind=run_result.endpoint_kind,
         scorer_version=run_result.scorer_version,
         elite_score=score,
         overall_score=run_result.overall_score,
@@ -88,11 +93,12 @@ def rank_rows(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
     output list is returned in ``(segment, rank ascending)`` order.
     """
 
-    def _segment(row: LeaderboardRow) -> tuple[str, str, str, str]:
+    def _segment(row: LeaderboardRow) -> tuple[str, str, str, str, str]:
         return (
             row["benchmark_version"],
             row["target_provider"],
             row["target_model"],
+            row["endpoint_kind"],
             row["scorer_version"],
         )
 
@@ -106,7 +112,7 @@ def rank_rows(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
         )
 
     # Group first, then sort + number inside each group.
-    segments: dict[tuple[str, str, str, str], list[LeaderboardRow]] = {}
+    segments: dict[tuple[str, str, str, str, str], list[LeaderboardRow]] = {}
     for row in rows:
         segments.setdefault(_segment(row), []).append(row)
 

@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 
 from compactbench import __version__
-from compactbench.config import default_benchmarks_dir
+from compactbench.config import default_benchmarks_dir, load_dotenv
 
 app = typer.Typer(
     name="compactbench",
@@ -43,6 +43,10 @@ def main(
     ),
 ) -> None:
     """CompactBench CLI."""
+    # Runs before any subcommand, so providers constructed downstream see the
+    # variables. `.env` is documented as the way to supply API keys; without
+    # this it had no effect on any provider.
+    load_dotenv()
 
 
 @app.command()

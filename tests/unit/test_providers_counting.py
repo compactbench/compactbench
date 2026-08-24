@@ -151,3 +151,20 @@ async def test_wrapped_accessor_returns_underlying_provider() -> None:
     inner = MockProvider(default="x")
     counting = CountingProvider(inner)
     assert counting.wrapped is inner
+
+
+def test_counting_provider_forwards_endpoint_kind() -> None:
+    """The runner always wraps the real provider, so the wrapper must delegate.
+
+    Without this the provenance signal is silently lost for every run: the
+    wrapper would inherit the ABC default and report "default" no matter where
+    the underlying provider actually sends its calls.
+    """
+
+    class _Custom(MockProvider):
+        @property
+        def endpoint_kind(self) -> str:
+            return "custom"
+
+    assert CountingProvider(_Custom()).endpoint_kind == "custom"
+    assert CountingProvider(MockProvider()).endpoint_kind == "default"

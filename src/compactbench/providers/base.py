@@ -60,3 +60,23 @@ class Provider(ABC):
     @abstractmethod
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         """Issue a completion request and return a normalized response."""
+
+    @property
+    def endpoint_kind(self) -> str:
+        """``"default"`` or ``"custom"`` — where this provider's calls actually go.
+
+        The leaderboard ranks within ``(benchmark_version, target_provider,
+        target_model, scorer_version)`` segments so that methods evaluated
+        against different models never compete numerically. ``target_provider``
+        and ``target_model`` are both caller-supplied strings, so without this
+        signal a locally-served model submitted as ``--provider openai --model
+        gpt-4o`` lands in the segment for *genuine* gpt-4o and is ranked against
+        it. That is a comparability failure, which is the one thing a
+        leaderboard cannot afford.
+
+        Providers that can be pointed somewhere other than their vendor default
+        override this. Deliberately coarse: the URL itself is frequently an
+        internal host and ``results.jsonl`` files get shared, so only the fact
+        that the endpoint differed is recorded, never the value.
+        """
+        return "default"

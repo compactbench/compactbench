@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,8 @@ from compactbench.dsl import (
     validate_template,
 )
 from compactbench.runner.costs import (
+    CATALOGUE_UPDATED,
+    MAX_CATALOGUE_AGE_DAYS,
     MODEL_COSTS,
     dollars,
     free_tier_daily_limit,
@@ -212,3 +215,36 @@ class TestFormatEstimate:
     def test_no_free_tier_section_when_limit_unknown(self) -> None:
         report = format_estimate(self._sample(limit=None))
         assert "Free-tier check" not in report
+
+
+def test_costs_catalogue_is_not_stale() -> None:
+    """Fail once the price table is old enough that quoting it is misleading.
+
+    ``--estimate`` answers "can I afford this run?", which is the first question
+    a new user asks. The catalogue previously sat four months out of date while
+    still printing confident dollar figures for models that had been superseded,
+    and nothing anywhere surfaced that. This test is the tripwire: when it goes
+    red, re-check the published rates and bump ``CATALOGUE_UPDATED``.
+    """
+    updated = date.fromisoformat(CATALOGUE_UPDATED)
+    age_days = (date.today() - updated).days
+    assert age_days <= MAX_CATALOGUE_AGE_DAYS, (
+        f"cost catalogue is {age_days} days old (limit {MAX_CATALOGUE_AGE_DAYS}). "
+        f"Re-check provider pricing, update MODEL_COSTS, and bump CATALOGUE_UPDATED."
+    )
+
+
+def test_estimate_output_states_the_price_vintage() -> None:
+    """A dollar figure with no date reads as authoritative; it is a snapshot."""
+    est = estimate_run(
+        templates=_load_starter(),
+        suite_key="starter",
+        suite_version="1.0.0",
+        seed_group="default",
+        case_count_per_template=1,
+        difficulty=DifficultyLevel.MEDIUM,
+        drift_cycles=1,
+        provider_key="anthropic",
+        model="claude-opus-5",
+    )
+    assert CATALOGUE_UPDATED in format_estimate(est)

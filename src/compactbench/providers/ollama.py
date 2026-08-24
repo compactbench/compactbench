@@ -18,6 +18,8 @@ from compactbench.providers.base import (
 )
 from compactbench.providers.errors import ProviderError
 
+_DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+
 
 class OllamaProvider(Provider):
     """Async Ollama client (runs models locally)."""
@@ -39,11 +41,21 @@ class OllamaProvider(Provider):
             ) from exc
 
         resolved_url = base_url or os.environ.get(
-            "COMPACTBENCH_OLLAMA_BASE_URL", "http://localhost:11434"
+            "COMPACTBENCH_OLLAMA_BASE_URL", _DEFAULT_OLLAMA_HOST
         )
         self._client: Any = AsyncClient(host=resolved_url)
+        self._base_url = resolved_url
         self._max_retries = max_retries
         self._base_backoff_seconds = base_backoff_seconds
+
+    @property
+    def endpoint_kind(self) -> str:
+        """``"custom"`` when pointed at a non-local Ollama host.
+
+        A local Ollama server is the expected default and stays ``"default"``;
+        anything else is a remote host whose identity the run should record.
+        """
+        return "default" if self._base_url == _DEFAULT_OLLAMA_HOST else "custom"
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         import httpx
