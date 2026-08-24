@@ -1,0 +1,39 @@
+# Maintainer baseline run — published as unranked reference rows.
+#
+# Run against a LOCAL model deliberately. Every row here is reproducible by
+# anyone with no API key and no spend:
+#
+#     ollama pull qwen2.5:1.5b-instruct
+#     compactbench run --method built-in:<method> --suite elite_practice \
+#         --provider ollama --model qwen2.5:1.5b-instruct \
+#         --difficulty elite --case-count 1 --drift-cycles 2 \
+#         --seed-group baseline-v1 --output <method>.jsonl
+#
+# A leaderboard whose reference numbers can only be reproduced by someone with a
+# paid account is a weaker artifact than one anybody can re-derive.
+#
+# READ THE SCORES WITH THAT IN MIND: a 1.5B model running on CPU scores far
+# below frontier models. These rows are a reproducible FLOOR and a demonstration
+# that the pipeline works end to end — not a claim about what good compaction
+# looks like. The `oracle` row is the number to anchor on: it sees the full
+# uncompacted transcript, so it bounds what is achievable on THIS model.
+
+published_by: compactbench
+model: qwen2.5:1.5b-instruct
+provider: ollama
+suite: elite_practice
+difficulty: elite
+seed_group: baseline-v1
+case_count_per_template: 1
+drift_cycles: 2
+
+# Elite-Light (>=2x) is the honest tier for this profile. The shipped elite
+# transcripts are ~531 tokens, so the higher tiers demand artifacts small enough
+# to be uninformative; that is a known content problem, not a property of the
+# methods. See docs/reviews/2026-08-handover-review.md.
+compression_tier: Elite-Light
+
+notes: |
+  Includes the three control arms (oracle, null, truncate-last-n) alongside the
+  four built-in methods. The controls make the rest readable and cost nothing to
+  run — they make no model calls at all.

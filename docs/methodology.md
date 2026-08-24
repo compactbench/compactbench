@@ -64,11 +64,32 @@ penalized_cycle_score = cycle_score * (1 - contradiction_rate)
 ## Drift resistance
 
 ```
-drift_delta_n   = cycle_score_n - cycle_score_0
-drift_resistance = clamp(1 + mean(drift_delta_n for n >= 1), 0, 1)
+drift_resistance = clamp(mean(cycle_score_n for n >= 1) / cycle_score_0, 0, 1)
 ```
 
-A method that holds steady scores 1.0. A method that degrades across cycles scores below 1.0 proportionally.
+The fraction of the first cycle's score that later cycles retain. A method that holds steady scores 1.0; one that halves scores 0.5. Improvement clamps at 1.0 — a method that scores better after re-compaction has lost nothing, and letting it exceed 1.0 would let noise buy ranking weight.
+
+!!! warning "Changed in scorer 2.0.0"
+    This was previously `clamp(1 + mean(cycle_score_n - cycle_score_0))` — an *additive* distance from the first cycle. That measured whether scores **changed**, not whether they were any **good**: a method scoring 0.0 on every cycle was perfectly stable and scored a full **1.0**, collecting 30% of `elite_score` for the worst possible result. Scores from scorer 1.0.0 are not comparable to 2.0.0, and the leaderboard segments on `scorer_version` so the two never mix.
+
+Drift resistance is **undefined**, not perfect, when it cannot be measured — fewer than two cycles, or a zero baseline. It reports `0.0` in those cases so it can never be a source of free score, and qualification refuses to rank a run configured with zero drift cycles.
+
+### The model's own drift floor
+
+A method's raw drift number should not be read against 1.0. The `oracle` control is handed the **full, uncompacted transcript**, so it loses nothing to compaction — and it still does not score 1.0. Measured on `elite_practice` at elite difficulty against a small local model, it comes in at **0.882**.
+
+The reason is that each drift cycle extends the transcript with continuation turns, so later cycles present a longer input and the model degrades on it. That decay belongs to the model, not to the compaction method.
+
+To isolate what compaction actually cost, normalise against the oracle measured on the same (suite, model, profile):
+
+```
+compaction_attributable_drift = clamp(method_drift / oracle_drift, 0, 1)
+```
+
+- `1.0` — the method drifted no more than full context did.
+- `0.5` — the method lost twice as much as the model alone would have.
+
+`compactbench.scoring.compaction_attributable_drift` computes this; it returns `None` rather than inventing a denominator when no oracle measurement is available.
 
 ## Compression ratio
 

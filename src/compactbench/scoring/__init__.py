@@ -25,6 +25,7 @@ from compactbench.scoring.contradictions import (
 from compactbench.scoring.diagnostics import ItemTypeBreakdown, item_type_breakdown
 from compactbench.scoring.drift import (
     MIN_CYCLES_FOR_DRIFT,
+    compaction_attributable_drift,
     drift_deltas,
     drift_resistance,
     is_measurable,
@@ -38,6 +39,7 @@ __all__ = [
     "ItemTypeBreakdown",
     "ScoringError",
     "artifact_tokens",
+    "compaction_attributable_drift",
     "compression_ratio",
     "contains_normalized",
     "contradiction_rate",
