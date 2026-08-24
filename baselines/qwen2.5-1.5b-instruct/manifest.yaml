@@ -35,5 +35,35 @@ compression_tier: Elite-Light
 
 notes: |
   Includes the three control arms (oracle, null, truncate-last-n) alongside the
-  four built-in methods. The controls make the rest readable and cost nothing to
-  run — they make no model calls at all.
+  built-in methods. The controls make the rest readable and cost nothing to run —
+  they make no model calls at all.
+
+  Observed range on this model:
+
+    oracle            0.633   full context — the ceiling
+    hybrid-ledger     0.432   best method, 22.5x compression
+    naive-summary     0.395   only 2.6x compression
+    truncate-last-n   0.263   keep the last 10 turns
+    structured-state  0.249   see caveat below
+    null              0.235   empty artifact — the floor
+
+  Two things a reader should not misinterpret:
+
+  1. `structured-state` at 422x compression is NOT an impressive compression
+     result — it is the signature of a near-empty artifact. This model returns
+     well-formed JSON with every substantive section empty, and fills
+     `unresolved_items` with the distractor topics while missing the actual
+     constraint. That is a model-capability result, not a parser bug: verified by
+     inspecting the raw response. A 1.5B model cannot do structured state
+     extraction on this task. Expect this arm to look completely different on a
+     capable model.
+
+  2. NONE of these runs would qualify for a ranked leaderboard slot. Every one
+     fails the 0.40 per-family mean floor, because the model is too small. That
+     is the floors working correctly, and it is why these publish as unranked
+     reference rows rather than entries.
+
+  The genuinely interesting result is that `truncate-last-n` beats `null` by only
+  0.028. Keeping ten turns of recent verbatim context buys almost nothing here,
+  which is the benchmark's core claim confirmed by measurement: what matters is
+  stated early and buried under distractors.
