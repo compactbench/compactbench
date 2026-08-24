@@ -32,11 +32,48 @@ def find_offenders(root: Path) -> list[tuple[Path, int, str]]:
     return offenders
 
 
+def _validate_configs(root: Path) -> list[str]:
+    """Run the strict config validator over every submission config found.
+
+    The evaluation workflow validates the one submission it is about to run,
+    bound to the directory the PR touched. This is the cheaper, earlier signal:
+    it runs on every PR with no secrets in scope, so a contributor sees a
+    malformed config immediately instead of after a maintainer applies a label.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from ruamel.yaml import YAML
+    from validate_submission_config import ConfigError, validate_config
+
+    problems: list[str] = []
+    for cfg_path in sorted(root.glob("*/*/config.yaml")):
+        if TEMPLATE_DIR in cfg_path.parents:
+            continue
+        submission_dir = cfg_path.parent.as_posix()
+        try:
+            raw = YAML(typ="safe").load(cfg_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            problems.append(f"{cfg_path}: unparsable YAML: {exc}")
+            continue
+        try:
+            validate_config(raw, expected_dir=submission_dir)
+        except ConfigError as exc:
+            problems.append(f"{cfg_path}: {exc}")
+    return problems
+
+
 def main() -> int:
     root = Path("submissions")
     if not root.exists():
         print("No submissions/ directory found — nothing to validate.")
         return 0
+
+    config_problems = _validate_configs(root)
+    if config_problems:
+        print("Submission validator FAILED — invalid config.yaml:")
+        for problem in config_problems:
+            print(f"  {problem}")
+        return 1
+
     offenders = find_offenders(root)
     if not offenders:
         print("Submission validator: no unresolved FILL_ME placeholders.")
