@@ -112,6 +112,29 @@ Three of the five item types behave correctly — they are unanswerable without 
 
 **Known limitation, being fixed.** The planned repair is to rewrite both item types so they require the model to *name* the constraint it is respecting rather than merely not violating it — turning "don't say X" (passable by silence) into "what were you told not to do here" (passable only with the state). Until that lands, read every `overall_score` against the 0.235 floor rather than against 0. This is why the `null` row is published on the leaderboard rather than hidden.
 
+### What `elite_score` still gives away, and why it cannot be exploited
+
+The published `null` row shows `elite_score` **0.469** against the full-context oracle's **0.629** — an artifact containing nothing scores 75% of what perfect information scores on the composite. That number is on the board deliberately; here is where it comes from:
+
+```
+0.40 x overall  0.235          = 0.094
+0.30 x drift    0.750          = 0.225   <- consistently scoring badly is still "stable"
+0.20 x constraint 0.250        = 0.050
+0.10 x compression bonus 1.00  = 0.100   <- 510x maxes the bonus
+                                 -----
+                                 0.469
+```
+
+Roughly two-thirds of that is structural rather than earned. `drift_resistance` is deliberately **scale-free** — it measures retention, so a method that scores 0.235 on every cycle has genuinely retained everything it had. That is correct for the metric in isolation, but it means the 30% weight `elite_score` gives it rewards *stability* independently of *quality*.
+
+**This is not a route onto the leaderboard.** Qualification blocks the strategy at three independent points, verified by submitting the real null run under an ordinary method name:
+
+- compression above 50x is rejected as a degenerate artifact;
+- the per-family mean floor of 0.40 fails on three of the four families;
+- and control arms are never ranked regardless.
+
+So it is a weighting question rather than an open hole: `elite_score`'s composite is more generous to a do-nothing method than it should be, even though nothing can actually rank that way. Revisiting the weights is a scorer-version change and wants real submission data to calibrate against, so it is documented here rather than adjusted on a guess. The candidate fix is to score `overall` and `drift` **relative to the oracle and null bounds** measured on the same suite and model, rather than against 0 and 1.
+
 ## Compression ratio
 
 ```

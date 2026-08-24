@@ -1,5 +1,48 @@
 {
-  "entries": [],
+  "entries": [
+    {
+      "benchmark_version": "elite_practice@1.0.0",
+      "compression_ratio": 0.8643550685569646,
+      "constraint_retention": 0.5555555555555556,
+      "contradiction_rate": 0.0,
+      "drift_resistance": 0.8825,
+      "elite_score": 0.6291944444444445,
+      "endpoint_kind": "default",
+      "handle": null,
+      "method_name": "oracle",
+      "method_version": "1.0.0",
+      "org": "compactbench",
+      "overall_score": 0.6333333333333333,
+      "published_at": "2026-08-24T01:27:20.758792+00:00",
+      "rank": null,
+      "row_kind": "control",
+      "scorer_version": "2.0.0",
+      "target_model": "qwen2.5:1.5b-instruct",
+      "target_provider": "ollama",
+      "tier": "Elite-Light"
+    },
+    {
+      "benchmark_version": "elite_practice@1.0.0",
+      "compression_ratio": 510.55,
+      "constraint_retention": 0.25,
+      "contradiction_rate": 0.0,
+      "drift_resistance": 0.75,
+      "elite_score": 0.4690238095238095,
+      "endpoint_kind": "default",
+      "handle": null,
+      "method_name": "null",
+      "method_version": "1.0.0",
+      "org": "compactbench",
+      "overall_score": 0.2350595238095238,
+      "published_at": "2026-08-24T01:34:29.227260+00:00",
+      "rank": null,
+      "row_kind": "control",
+      "scorer_version": "2.0.0",
+      "target_model": "qwen2.5:1.5b-instruct",
+      "target_provider": "ollama",
+      "tier": "Elite-Light"
+    }
+  ],
   "schema_version": "1.0.0",
-  "updated_at": "2026-04-17T00:00:00+00:00"
+  "updated_at": "2026-08-24T01:43:18.243333+00:00"
 }
