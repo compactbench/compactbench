@@ -34,8 +34,27 @@ CompactBench needs a model provider to evaluate compacted context. Any of the fo
 | Google AI Studio | `google-ai-studio` | `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY` | yes — free on Gemini 2.0 Flash, RPM limits apply |
 | Anthropic | `anthropic` | `COMPACTBENCH_ANTHROPIC_API_KEY` | credit-based — $5 starter credit with a new account |
 | OpenAI | `openai` | `COMPACTBENCH_OPENAI_API_KEY` | credit-based — usage-priced, no true free tier |
+| OpenAI-compatible | `openai` | `COMPACTBENCH_OPENAI_BASE_URL` | depends on the server — see below |
 | Ollama (local) | `ollama` | `COMPACTBENCH_OLLAMA_BASE_URL` | local only — constrained by your machine |
 | Mock (tests) | `mock` | (no config needed) | n/a — returns canned "hello" responses; scores are non-interpretable but the full pipeline runs, useful for CI + pipeline smokes |
+
+!!! info "Self-hosted and third-party OpenAI-compatible servers"
+    vLLM, llama.cpp's server, LM Studio, Together, Fireworks and OpenRouter all speak the
+    same `/v1/chat/completions` wire format, so they need a URL rather than a provider of
+    their own. Point the `openai` provider at one with `COMPACTBENCH_OPENAI_BASE_URL`:
+
+    ```bash
+    export COMPACTBENCH_OPENAI_BASE_URL=http://localhost:8000/v1
+    compactbench run --method built-in:hybrid-ledger --suite starter \
+                     --provider openai --model my-served-model
+    ```
+
+    When a base URL is set the API key becomes optional, since self-hosted servers
+    generally do not check one. Hosted gateways still need `COMPACTBENCH_OPENAI_API_KEY`.
+
+    Runs against a custom base URL are flagged in each response's `raw.custom_base_url`,
+    so a results file records that it did not go to OpenAI. The URL itself is **not**
+    stored — it is frequently an internal host and results files get shared.
 
 !!! tip "Running the full Elite practice suite"
     15 templates × default 5 cases × 2 drift cycles × ~3 eval items per cycle = ~450 LLM calls, which exceeds Groq's free-tier daily token limit. For real evaluation runs use **Anthropic**, **OpenAI**, or a paid **Groq** account. The benchmark auto-detects daily-quota 429s and surfaces them immediately (it will not retry futilely).

@@ -2,6 +2,12 @@
 
 Requires ``compactbench[providers]`` (installs the ``openai`` SDK) and a
 ``COMPACTBENCH_OPENAI_API_KEY`` environment variable.
+
+Also serves any **OpenAI-compatible** endpoint via ``COMPACTBENCH_OPENAI_BASE_URL``
+— vLLM, llama.cpp's server, LM Studio, Together, Fireworks, OpenRouter and friends
+all speak the same ``/v1/chat/completions`` wire format, so they need a URL rather
+than a new provider. When a base URL is set the API key becomes optional, because
+self-hosted servers generally do not check one.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ class OpenAIProvider(Provider):
         self,
         *,
         api_key: str | None = None,
+        base_url: str | None = None,
         max_retries: int = 3,
         base_backoff_seconds: float = 2.0,
     ) -> None:
@@ -37,13 +44,24 @@ class OpenAIProvider(Provider):
                 "openai SDK is not installed. Install with: pip install 'compactbench[providers]'"
             ) from exc
 
+        resolved_url = base_url or os.environ.get("COMPACTBENCH_OPENAI_BASE_URL")
         resolved_key = api_key or os.environ.get("COMPACTBENCH_OPENAI_API_KEY")
         if not resolved_key:
-            raise ProviderError(
-                "OpenAI API key required. Set COMPACTBENCH_OPENAI_API_KEY or pass api_key=."
-            )
+            if not resolved_url:
+                raise ProviderError(
+                    "OpenAI API key required. Set COMPACTBENCH_OPENAI_API_KEY or pass api_key=."
+                )
+            # A self-hosted OpenAI-compatible server usually ignores the key, but the
+            # SDK still refuses to construct without one. Requiring a real key here
+            # would make the base-url path unusable for the local-model case it exists
+            # to serve; a hosted gateway that *does* check will reject this and say so.
+            resolved_key = "not-required"
 
-        self._client: Any = AsyncOpenAI(api_key=resolved_key)
+        kwargs: dict[str, Any] = {"api_key": resolved_key}
+        if resolved_url:
+            kwargs["base_url"] = resolved_url
+        self._client: Any = AsyncOpenAI(**kwargs)
+        self._base_url = resolved_url
         self._max_retries = max_retries
         self._base_backoff_seconds = base_backoff_seconds
 
@@ -116,5 +134,9 @@ class OpenAIProvider(Provider):
                 "finish_reason": getattr(choice, "finish_reason", None),
                 "id": getattr(response, "id", None),
                 "cached_tokens": cached_tokens,
+                # Provenance without disclosure: a leaderboard reviewer needs to know
+                # a run did not go to OpenAI, but the URL itself is often an internal
+                # host and results files get shared, so record only that it differed.
+                "custom_base_url": self._base_url is not None,
             },
         )
