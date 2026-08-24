@@ -33,6 +33,13 @@ jobs:
           # Check out the submitter's PR branch — this contains the method source.
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+          # fetch-depth: 0 is REQUIRED. The default is a depth-1 clone, in which
+          # the PR's base commit does not exist, so the `git diff base head`
+          # below failed with "fatal: bad object" on every single run — the
+          # error was swallowed by `|| true` and reported to the submitter as
+          # "PR does not touch any submissions/ directory". This workflow had
+          # therefore never once evaluated a submission successfully.
+          fetch-depth: 0
 
       - name: Set up uv + Python
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
@@ -101,31 +108,45 @@ jobs:
             echo "::error::HIDDEN_REPO_TOKEN secret is not configured. Ranked evaluation cannot proceed without hidden-set access. Add the secret under Settings → Secrets and variables → Actions, then re-label the PR."
             exit 1
           fi
-          git clone --depth 1 \
-            "https://x-access-token:${HIDDEN_REPO_TOKEN}@github.com/compactbench/compactbench-hidden.git" \
+          # Do NOT embed the token in the clone URL: git persists the remote
+          # verbatim in /tmp/hidden/.git/config, leaving a credential that
+          # regenerates the entire hidden set sitting on disk in the same job
+          # that later executes submitter-supplied code. Pass it via an askpass
+          # helper instead, then drop the remote and the .git directory once the
+          # working tree is materialised.
+          askpass="$(mktemp)"
+          printf '#!/bin/sh\necho "$HIDDEN_REPO_TOKEN"\n' > "$askpass"
+          chmod 700 "$askpass"
+          GIT_ASKPASS="$askpass" git clone --depth 1 \
+            "https://x-access-token@github.com/compactbench/compactbench-hidden.git" \
             /tmp/hidden
+          rm -f "$askpass"
+          # The working tree is all the runner needs; .git only carries history
+          # and credentials from here on.
+          rm -rf /tmp/hidden/.git
           echo "hidden_dir=/tmp/hidden/ranked" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve submission config
+      # Validate every submitter-controlled value against a strict allow-list
+      # BEFORE it reaches any command line, and write the result to a file
+      # rather than $GITHUB_ENV.
+      #
+      # The previous version interpolated five raw config values into a file and
+      # `cat`-ed it into $GITHUB_ENV. A newline in any of them injected arbitrary
+      # environment variables into this job — which holds HIDDEN_REPO_TOKEN and
+      # the provider API keys. With `provider: ollama` plus an injected
+      # COMPACTBENCH_OLLAMA_BASE_URL, the runner would have POSTed every hidden
+      # ranked case to an attacker-controlled host as a prompt, with no submitter
+      # code executing at all. See scripts/validate_submission_config.py.
+      - name: Validate submission config
         id: cfg
         env:
           SUBMISSION_DIR: ${{ steps.submission.outputs.submission_dir }}
         run: |
-          python -c "
-          import os, sys, yaml
-          cfg_path = os.environ['SUBMISSION_DIR'] + '/config.yaml'
-          if not os.path.isfile(cfg_path):
-              print(f'::error::{cfg_path} not found in submission dir', file=sys.stderr)
-              sys.exit(1)
-          data = yaml.safe_load(open(cfg_path).read())
-          with open('${{ github.workspace }}/cfg.env', 'w') as fp:
-              fp.write(f\"CLASS_PATH={data['method']['class_path']}\n\")
-              fp.write(f\"PROVIDER={data['runtime']['provider']}\n\")
-              fp.write(f\"MODEL={data['runtime']['model']}\n\")
-              fp.write(f\"DRIFT_CYCLES={data['runtime'].get('drift_cycles', 2)}\n\")
-              fp.write(f\"CASE_COUNT={data['runtime'].get('case_count_per_template', 5)}\n\")
-          "
-          cat cfg.env >> "$GITHUB_ENV"
+          set -euo pipefail
+          uv run python scripts/validate_submission_config.py \
+            "$SUBMISSION_DIR/config.yaml" "$SUBMISSION_DIR" > validated-config.json
+          echo "Validated submission config:"
+          cat validated-config.json
 
       - name: Run against ranked suite
         id: run
@@ -133,6 +154,16 @@ jobs:
           COMPACTBENCH_GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
         run: |
+          set -euo pipefail
+          # Values come from the validated JSON, read with jq -r into locals.
+          # They never transit $GITHUB_ENV, and each has already been matched
+          # against an allow-list or pattern that excludes whitespace.
+          CLASS_PATH="$(jq -r .class_path validated-config.json)"
+          PROVIDER="$(jq -r .provider validated-config.json)"
+          MODEL="$(jq -r .model validated-config.json)"
+          DRIFT_CYCLES="$(jq -r .drift_cycles validated-config.json)"
+          CASE_COUNT="$(jq -r .case_count_per_template validated-config.json)"
+
           uv run compactbench run \
             --method "$CLASS_PATH" \
             --benchmarks-dir "${{ steps.hidden.outputs.hidden_dir }}" \
@@ -223,13 +254,22 @@ jobs:
               "canonical hidden-run results."
             );
 
+      # The comment body is passed via env, NOT interpolated into the script.
+      # `body: `${{ steps.summary.outputs.body }}`` placed submitter-influenced
+      # text (the method name reaches this through `compactbench score` output)
+      # directly inside a JS template literal, where a backtick or ${...} breaks
+      # out and executes arbitrary JavaScript in a step holding a write-scoped
+      # GITHUB_TOKEN. github-script exposes env to the script, so this is both
+      # safer and simpler.
       - name: Post score comment to PR
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          COMMENT_BODY: ${{ steps.summary.outputs.body }}
         with:
           script: |
             await github.rest.issues.createComment({
               issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${{ steps.summary.outputs.body }}`,
+              body: process.env.COMMENT_BODY,
             });

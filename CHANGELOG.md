@@ -45,6 +45,43 @@ method that did nothing intelligent would have topped the first leaderboard.
   results file has no `run_end` event is rejected, so a crashed run cannot
   publish a partial score and stopping early is not a way to cherry-pick.
 
+### Security — submission evaluation pipeline
+
+- **The evaluation workflow could never succeed, and reported it as the submitter's fault.**
+  It checked out the PR head at the default `fetch-depth: 1`, then ran
+  `git diff <base> <head>`. The base commit does not exist in a shallow clone, so
+  the diff failed, the failure was swallowed by `|| true`, and the job exited with
+  "PR does not touch any submissions/<handle>/<method>/ directory". Every
+  submission would have been turned away with a misleading error. Now `fetch-depth: 0`.
+- **The hidden ranked set was exfiltrable with no code execution.** The config step
+  interpolated five unvalidated submitter-controlled YAML values into a file and
+  appended it to `$GITHUB_ENV`. A newline in `runtime.model` injected arbitrary
+  job-wide environment variables; since `OllamaProvider` passes
+  `COMPACTBENCH_OLLAMA_BASE_URL` straight to its client, a submission with
+  `provider: ollama` would have caused the runner to POST **every hidden ranked
+  case to an attacker-controlled host as a prompt**. No `method.py` runs on that
+  path, so sandboxing submitter code would not have closed it. All values now go
+  through `scripts/validate_submission_config.py` — allow-listed provider,
+  whitespace-free model pattern, bounded integers, control characters rejected,
+  and `class_path` required to sit inside the submission directory the PR
+  actually touched. Values never transit `$GITHUB_ENV`; the runner reads them
+  from validated JSON. 35 tests cover it, including the concrete attack payload.
+- **Script injection in the score comment.** `body: \`${{ steps.summary.outputs.body }}\``
+  placed submitter-influenced text (the method name reaches it via
+  `compactbench score` output) inside a JS template literal, where a backtick or
+  `${...}` escapes into arbitrary JavaScript in a step holding a write-scoped
+  `GITHUB_TOKEN`. Passed via `process.env` instead.
+- **The hidden-set token no longer persists on disk.** It was embedded in the
+  clone URL, which git writes verbatim into `/tmp/hidden/.git/config` — leaving a
+  credential that regenerates the entire hidden set readable by submitter code
+  executing later in the same job. Now passed via `GIT_ASKPASS`, with the `.git`
+  directory removed once the working tree exists.
+- `scripts/validate_submissions.py` now validates every submission config, not
+  just greps for leftover `FILL_ME` placeholders, so contributors get the error
+  on their PR instead of after a maintainer applies the `evaluate` label.
+- `ollama` and `mock` are no longer accepted as ranked-evaluation providers. Both
+  can be pointed at an arbitrary host, and the evaluator must control where calls go.
+
 ### Added — control arms
 - `oracle`, `null`, and `truncate-last-n` built-ins. None makes a model call, so
   they are free and deterministic to run alongside any experiment. A score in
