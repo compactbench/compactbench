@@ -23,7 +23,13 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from compactbench.contracts import CaseResult, RunResult, TokenUsage
 
-SCORER_VERSION: str = "1.0.0"
+# Bumped to 2.0.0 in 0.2.0. Scores from 1.0.0 are NOT comparable to these:
+# drift_resistance changed from an additive distance (which scored consistent
+# total failure a perfect 1.0) to a retention ratio, the JSON state parser now
+# recovers objects wrapped in prose that previously scored as total loss, and
+# compaction methods no longer receive the turn tags that labelled the answer.
+# The leaderboard segments on scorer_version, so old and new rows never mix.
+SCORER_VERSION: str = "2.0.0"
 
 
 class RunStartEvent(BaseModel):
@@ -195,7 +201,7 @@ def to_run_result(path: Path) -> RunResult:
         contradiction_rate = agg["contradiction_rate"]
         compression_ratio = agg["compression_ratio"]
         token_usage = sum_case_token_usage(cases)
-        notes = ["run_end event missing: results may be incomplete"]
+        notes = [INCOMPLETE_RUN_NOTE]
 
     return RunResult(
         run_id=run_start.run_id,
@@ -237,12 +243,24 @@ def sum_case_token_usage(case_results: list[CaseResult]) -> TokenUsage | None:
     return total
 
 
+#: Stable marker attached to a RunResult reconstructed from a results file that
+#: has no ``run_end`` event — i.e. the run crashed, was killed, or is still in
+#: flight. Qualification refuses to rank a run carrying it: the aggregates are
+#: derived from whichever cases happened to land, so a run that died after its
+#: easiest cases completed would otherwise publish a flattering partial score,
+#: and stopping early would be a cheap way to cherry-pick.
+INCOMPLETE_RUN_NOTE = "run_end event missing: results may be incomplete"
+
+
 def aggregate_run_metrics(case_results: list[CaseResult]) -> dict[str, float]:
     """Compute run-level aggregate metrics from a list of case results."""
     if not case_results:
+        # A run with no cases retained nothing — 0.0, not 1.0. The old default
+        # meant an empty or crashed run reported perfect drift resistance, which
+        # then flowed straight into elite_score as 30% of a ranking-eligible number.
         return {
             "overall_score": 0.0,
-            "drift_resistance": 1.0,
+            "drift_resistance": 0.0,
             "constraint_retention": 0.0,
             "contradiction_rate": 0.0,
             "compression_ratio": 0.0,
@@ -265,7 +283,7 @@ def aggregate_run_metrics(case_results: list[CaseResult]) -> dict[str, float]:
 
     return {
         "overall_score": _mean([cr.case_score for cr in case_results]),
-        "drift_resistance": _mean([cr.drift_resistance for cr in case_results], default=1.0),
+        "drift_resistance": _mean([cr.drift_resistance for cr in case_results], default=0.0),
         "constraint_retention": _mean(constraint_scores),
         "contradiction_rate": _mean([cycle.scorecard.contradiction_rate for cycle in all_cycles]),
         "compression_ratio": _mean([cycle.scorecard.compression_ratio for cycle in all_cycles]),

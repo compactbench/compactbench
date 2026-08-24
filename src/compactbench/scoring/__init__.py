@@ -23,11 +23,17 @@ from compactbench.scoring.contradictions import (
     response_violates,
 )
 from compactbench.scoring.diagnostics import ItemTypeBreakdown, item_type_breakdown
-from compactbench.scoring.drift import drift_deltas, drift_resistance
+from compactbench.scoring.drift import (
+    MIN_CYCLES_FOR_DRIFT,
+    drift_deltas,
+    drift_resistance,
+    is_measurable,
+)
 from compactbench.scoring.errors import ScoringError
 from compactbench.scoring.scorer import WEIGHTS, score_cycle, score_item
 
 __all__ = [
+    "MIN_CYCLES_FOR_DRIFT",
     "WEIGHTS",
     "ItemTypeBreakdown",
     "ScoringError",
@@ -41,6 +47,7 @@ __all__ = [
     "drift_resistance",
     "exact",
     "forbidden_absent",
+    "is_measurable",
     "item_type_breakdown",
     "response_violates",
     "run_check",

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
-from compactbench.compactors import NaiveSummaryCompactor
+from compactbench.compactors import Compactor, NaiveSummaryCompactor
+from compactbench.contracts import CompactionArtifact, GeneratedCase, Transcript
+from compactbench.contracts.case import Turn, TurnRole
 from compactbench.dsl import DifficultyLevel, parse_template_file
 from compactbench.engine import generate_case
 from compactbench.providers import MockProvider
@@ -15,7 +18,7 @@ from compactbench.runner.cycle import execute_cycle
 pytestmark = pytest.mark.unit
 
 
-def _load_starter_case() -> object:
+def _load_starter_case() -> GeneratedCase:
     from pathlib import Path
 
     starter = Path(__file__).resolve().parents[2] / "benchmarks" / "public" / "starter"
@@ -37,7 +40,6 @@ def _mock_provider_for_run() -> MockProvider:
 
 
 async def test_cycle_zero_skips_continuation() -> None:
-    from compactbench.contracts import GeneratedCase
 
     case: GeneratedCase = _load_starter_case()  # type: ignore[assignment]
     provider = _mock_provider_for_run()
@@ -59,7 +61,7 @@ async def test_cycle_zero_skips_continuation() -> None:
 
 
 async def test_cycle_one_adds_continuation_turns() -> None:
-    from compactbench.contracts import CompactionArtifact, GeneratedCase, StructuredState
+    from compactbench.contracts import CompactionArtifact, StructuredState
 
     case: GeneratedCase = _load_starter_case()  # type: ignore[assignment]
     # For cycle 1: 1 continuation call + 1 compact call + 3 eval calls = 5 responses
@@ -91,7 +93,6 @@ async def test_cycle_one_adds_continuation_turns() -> None:
 
 
 async def test_cycle_records_latency() -> None:
-    from compactbench.contracts import GeneratedCase
 
     case: GeneratedCase = _load_starter_case()  # type: ignore[assignment]
     provider = _mock_provider_for_run()
@@ -110,7 +111,6 @@ async def test_cycle_records_latency() -> None:
 
 
 async def test_cycle_produces_valid_json_serializable_artifact() -> None:
-    from compactbench.contracts import GeneratedCase
 
     case: GeneratedCase = _load_starter_case()  # type: ignore[assignment]
     provider = _mock_provider_for_run()
@@ -129,3 +129,63 @@ async def test_cycle_produces_valid_json_serializable_artifact() -> None:
     serialized = result.artifact.model_dump_json()
     parsed = json.loads(serialized)
     assert "structured_state" in parsed
+
+
+async def test_compactor_never_sees_turn_tags() -> None:
+    """Generation metadata must not reach the method — it is the answer key.
+
+    `tags` marks which turns are distractors and which carries the constraint.
+    A method that simply keeps the non-`distractor` turns recovers every recall
+    item at high compression with no model call at all, which would top the
+    leaderboard while doing nothing a compactor does. Tags stay on the generated
+    case for diagnostics; the runner strips them at the compaction boundary.
+    """
+    seen: list[str] = []
+
+    class _TagSpy(Compactor):
+        name = "tag-spy"
+        version = "1.0.0"
+
+        async def compact(
+            self,
+            transcript: Transcript,
+            config: dict[str, Any] | None = None,
+            previous_artifact: CompactionArtifact | None = None,
+        ) -> CompactionArtifact:
+            for turn in transcript.turns:
+                seen.extend(turn.tags)
+            return CompactionArtifact(summaryText="x")
+
+    case = _load_starter_case()
+    assert any(t.tags for t in case.transcript.turns), "fixture must actually carry tags"
+
+    provider = MockProvider()
+    await execute_cycle(
+        case=case,
+        compactor=_TagSpy(provider, "m"),
+        provider=provider,
+        model="m",
+        transcript=case.transcript,
+        cycle_number=0,
+        previous_artifact=None,
+        case_seed=1,
+    )
+
+    assert seen == []
+
+
+def test_without_tags_leaves_content_and_roles_intact() -> None:
+    """Stripping tags must not perturb what is actually being compacted."""
+    original = Transcript(
+        turns=[
+            Turn(id=0, role=TurnRole.USER, content="keep this", tags=["critical_constraint"]),
+            Turn(id=1, role=TurnRole.ASSISTANT, content="and this", tags=["distractor"]),
+        ]
+    )
+    stripped = original.without_tags()
+    assert [t.tags for t in stripped.turns] == [[], []]
+    assert [(t.id, t.role, t.content) for t in stripped.turns] == [
+        (t.id, t.role, t.content) for t in original.turns
+    ]
+    # Source is frozen and must be unchanged — scoring and diagnostics still use it.
+    assert [t.tags for t in original.turns] == [["critical_constraint"], ["distractor"]]

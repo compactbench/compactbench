@@ -5,6 +5,11 @@ and are loaded by file path in WO-007 (runner).
 """
 
 from compactbench.compactors.base import Compactor
+from compactbench.compactors.controls import (
+    NullCompactor,
+    OracleCompactor,
+    TruncateLastNCompactor,
+)
 from compactbench.compactors.errors import CompactorError, UnknownCompactorError
 from compactbench.compactors.hierarchical_summary import HierarchicalSummaryCompactor
 from compactbench.compactors.hybrid_ledger import HybridLedgerCompactor
@@ -16,7 +21,18 @@ _BUILT_IN: dict[str, type[Compactor]] = {
     StructuredStateCompactor.name: StructuredStateCompactor,
     HierarchicalSummaryCompactor.name: HierarchicalSummaryCompactor,
     HybridLedgerCompactor.name: HybridLedgerCompactor,
+    # Control arms. Not compaction methods — reference points that make every
+    # other score readable. Cheap enough (zero model calls) to run every time.
+    OracleCompactor.name: OracleCompactor,
+    NullCompactor.name: NullCompactor,
+    TruncateLastNCompactor.name: TruncateLastNCompactor,
 }
+
+#: Keys that are controls rather than competing methods. The leaderboard shows
+#: them as reference rows and never ranks them against submissions.
+CONTROL_KEYS: frozenset[str] = frozenset(
+    {OracleCompactor.name, NullCompactor.name, TruncateLastNCompactor.name}
+)
 
 
 def list_built_ins() -> list[str]:
@@ -35,12 +51,16 @@ def get_built_in(key: str) -> type[Compactor]:
 
 
 __all__ = [
+    "CONTROL_KEYS",
     "Compactor",
     "CompactorError",
     "HierarchicalSummaryCompactor",
     "HybridLedgerCompactor",
     "NaiveSummaryCompactor",
+    "NullCompactor",
+    "OracleCompactor",
     "StructuredStateCompactor",
+    "TruncateLastNCompactor",
     "UnknownCompactorError",
     "get_built_in",
     "list_built_ins",

@@ -9,6 +9,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] — 2026-08-24
 
+### Scoring integrity — **scorer_version 1.0.0 → 2.0.0**
+
+Scores produced by scorer 1.0.0 are **not comparable** to these. The leaderboard
+segments on `scorer_version`, so old and new rows never mix. Four defects meant a
+method that did nothing intelligent would have topped the first leaderboard.
+
+- **Compaction methods no longer receive the answer key.** Generated turns carry
+  `tags` — `distractor` on filler, `critical_constraint` on the turn holding the
+  answer — and the runner handed them straight to the method. A five-line
+  compactor with no model call that keeps the non-`distractor` turns recovered
+  100% of the recall items at ~9x compression. Tags are now stripped at the
+  compaction boundary (this also closes the same leak through the LangChain and
+  LlamaIndex adapters); they remain on the case for diagnostics.
+- **`drift_resistance` no longer rewards consistent failure.** It was
+  `clamp(1 + mean(score[n] - score[0]))` — a measure of whether scores *change*,
+  not whether they are any good — so a method scoring 0.0 on every cycle was
+  perfectly stable and scored **1.0**, collecting 30% of `elite_score` for the
+  worst possible result. It is now a retention ratio,
+  `mean(later) / first`, and is 0.0 when unmeasurable (fewer than two cycles, or
+  a zero baseline) rather than a free 1.0. Empty and crashed runs aggregate to
+  0.0 drift resistance instead of 1.0.
+- **The JSON state parser recovers objects wrapped in prose.** It required the
+  response to be bare JSON or a fenced block, so `Here is the state: {...}`, a
+  trailing `Hope that helps!`, and `<think>` preambles all produced a fully
+  empty state that scored as total information loss — measuring the parser
+  rather than the method, and worst on exactly the small and local models the
+  benchmark should be free to run on. Brace matching is string- and
+  escape-aware, so quoted code containing `}` no longer truncates the object.
+- **Qualification closes four routes to an unearned rank.** Control arms are
+  never ranked; compression above 50x is rejected as a degenerate/empty artifact
+  (the `null` arm measures ~450x and previously cleared every tier and maxed the
+  compression bonus); runs configured with zero drift cycles are unrankable,
+  since drift is 30% of the score and they never measured it; and a run whose
+  results file has no `run_end` event is rejected, so a crashed run cannot
+  publish a partial score and stopping early is not a way to cherry-pick.
+
+### Added — control arms
+- `oracle`, `null`, and `truncate-last-n` built-ins. None makes a model call, so
+  they are free and deterministic to run alongside any experiment. A score in
+  isolation is uninterpretable: the oracle bounds what is achievable when
+  compaction loses nothing, and the null arm exposes how many points are
+  available with no information at all. Measured against a real model, the
+  oracle scores **0.650**, not 1.0 — so a method scoring 0.5 has not lost half
+  the information, it is at 77% of the achievable ceiling.
+- `compactbench qualify --results <file>` — runs the leaderboard floors locally
+  and prints every reason a run would be rejected. Previously a submitter could
+  only discover a disqualification by opening a PR and waiting for a maintainer,
+  after having already spent the API budget on the run.
+- `CompactionArtifact` accepts either Python field names or the camelCase wire
+  aliases (`populate_by_name`). `summary_text=` previously raised
+  "Extra inputs are not permitted" while `summaryText=` worked — a confusing
+  first failure for anyone writing a method, which the docs' own example
+  half-tripped over by mixing the two styles.
+
 Four months of merged work that was never released, plus the packaging fix that
 makes it reachable. **If you installed 0.1.0, upgrade** — that wheel shipped
 without any benchmark content, so `compactbench suites list` failed on a clean

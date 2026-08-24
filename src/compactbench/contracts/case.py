@@ -29,6 +29,23 @@ class Transcript(BaseModel):
 
     turns: list[Turn]
 
+    def without_tags(self) -> Transcript:
+        """Return a copy with every turn's ``tags`` cleared.
+
+        ``tags`` are generation metadata — ``distractor`` marks filler turns and
+        e.g. ``critical_constraint`` marks the turn holding the answer. Handing
+        them to a compaction method is handing it the answer key: a five-line
+        method with no model call that simply drops ``distractor``-tagged turns
+        recovers 100% of the recall items at ~9x compression, which would top
+        the leaderboard while doing nothing a real compactor does.
+
+        The runner calls this immediately before invoking a method, so no
+        compactor — built-in, submitted, or reached through the LangChain and
+        LlamaIndex adapters — can see them. Tags stay on the generated case for
+        diagnostics and fixtures, which is where they are actually useful.
+        """
+        return Transcript(turns=[t.model_copy(update={"tags": []}) for t in self.turns])
+
     def chars_by_role(self) -> dict[TurnRole, int]:
         """Total character count of turn content, grouped by role.
 

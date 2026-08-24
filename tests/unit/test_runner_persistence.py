@@ -178,9 +178,15 @@ def test_to_run_result_raises_without_run_start(tmp_path: Path) -> None:
 
 
 def test_aggregate_with_empty_list() -> None:
+    """A run with no cases retained nothing — every aggregate is zero.
+
+    Regression: drift_resistance defaulted to 1.0 here, so an empty or crashed
+    run reported perfect drift resistance. That is 30% of elite_score awarded
+    for having produced no data at all.
+    """
     metrics = aggregate_run_metrics([])
     assert metrics["overall_score"] == 0.0
-    assert metrics["drift_resistance"] == 1.0
+    assert metrics["drift_resistance"] == 0.0
 
 
 def test_aggregate_computes_means() -> None:

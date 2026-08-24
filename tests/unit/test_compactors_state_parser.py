@@ -111,3 +111,52 @@ def test_oversized_strings_truncated() -> None:
     state, warnings = parse_state(text)
     assert len(state.locked_decisions[0]) == 500
     assert any("truncating" in w.lower() for w in warnings)
+
+
+class TestRecoveryFromRealModelOutput:
+    """Shapes real models actually emit around the JSON object.
+
+    Before these were handled the parser returned a fully empty state for each
+    one, which the scorer read as total information loss. That measured the
+    parser rather than the compaction method, and it did so worst on small and
+    local models — exactly the ones the benchmark wants to be free to run on.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "text"),
+        [
+            ("prose preamble", 'Here is the state:\n\n{"immutable_facts": ["a"]}'),
+            ("trailing prose", '{"immutable_facts": ["a"]}\n\nHope that helps.'),
+            (
+                "prose around a fence",
+                'Sure!\n\n```json\n{"immutable_facts": ["a"]}\n```\n\nLet me know.',
+            ),
+            ("reasoning preamble", '<think>extracting…</think>\n{"immutable_facts": ["a"]}'),
+            ("thinking tag variant", '<thinking>hmm</thinking>{"immutable_facts": ["a"]}'),
+        ],
+    )
+    def test_recovers_the_object(self, label: str, text: str) -> None:
+        state, _ = parse_state(text)
+        assert state.immutable_facts == ["a"], label
+
+    def test_brace_inside_a_string_does_not_truncate_the_object(self) -> None:
+        """Forbidden behaviours frequently quote code containing braces."""
+        text = 'Note:\n{"forbidden_behaviors": ["never write fn() { eval() }"], "immutable_facts": ["a"]}'
+        state, _ = parse_state(text)
+        assert state.immutable_facts == ["a"]
+        assert state.forbidden_behaviors == ["never write fn() { eval() }"]
+
+    def test_recovery_is_flagged_in_warnings(self) -> None:
+        """A method whose model needs rescuing should be able to see that."""
+        _, warnings = parse_state('Here:\n{"immutable_facts": ["a"]}')
+        assert any("surrounding prose" in w for w in warnings)
+
+    def test_genuinely_unparsable_output_still_yields_an_empty_state(self) -> None:
+        state, warnings = parse_state("I'm sorry, I can't do that.")
+        assert state.immutable_facts == []
+        assert any("no parsable JSON" in w for w in warnings)
+
+    def test_clean_json_produces_no_warnings(self) -> None:
+        """The recovery path must not add noise to responses that were fine."""
+        _, warnings = parse_state('{"immutable_facts": ["a"]}')
+        assert warnings == []

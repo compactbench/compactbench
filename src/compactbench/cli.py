@@ -463,3 +463,74 @@ def suites_list(
         raise typer.Exit(code=1)
 
     console.print(table)
+
+
+@app.command()
+def qualify(
+    results: Path = typer.Option(..., "--results", "-r", exists=True, readable=True),
+    tier: str = typer.Option(
+        "Elite-Mid",
+        "--tier",
+        help="Compression tier to check against: Elite-Light, Elite-Mid, or Elite-Aggressive.",
+    ),
+    drift_cycles: int = typer.Option(
+        2,
+        "--drift-cycles",
+        min=0,
+        help="Drift cycles the run was configured with. Must match the run being checked.",
+    ),
+) -> None:
+    """Check whether a results file would qualify for the leaderboard, and why not.
+
+    Runs the same floors the submission pipeline applies, locally. Without this a
+    submitter could only discover a disqualification by opening a PR and waiting
+    for a maintainer — after having already spent the API budget on the run.
+    """
+    from rich.table import Table
+
+    from compactbench.leaderboard import qualify as qualify_run
+    from compactbench.leaderboard.ranking import TIER_FLOORS, elite_score
+    from compactbench.runner import to_run_result
+
+    if tier not in TIER_FLOORS:
+        console.print(f"[red]unknown tier {tier!r}. Valid: {sorted(TIER_FLOORS)}[/red]")
+        raise typer.Exit(code=1)
+
+    try:
+        run_result = to_run_result(results)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    outcome = qualify_run(
+        run_result,
+        tier=tier,  # pyright: ignore[reportArgumentType]
+        expected_drift_cycles=drift_cycles,
+    )
+
+    table = Table(title=f"Qualification — {run_result.method_name} @ {tier}")
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+    table.add_row("overall_score", f"{run_result.overall_score:.3f}")
+    table.add_row("drift_resistance", f"{run_result.drift_resistance:.3f}")
+    table.add_row("constraint_retention", f"{run_result.constraint_retention:.3f}")
+    table.add_row("contradiction_rate", f"{run_result.contradiction_rate:.3f}")
+    table.add_row("compression_ratio", f"{run_result.compression_ratio:.2f}x")
+    score_value = elite_score(
+        overall_score=run_result.overall_score,
+        drift_resistance=run_result.drift_resistance,
+        constraint_retention=run_result.constraint_retention,
+        compression_ratio=run_result.compression_ratio,
+        tier=tier,  # pyright: ignore[reportArgumentType]
+    )
+    table.add_row("elite_score", f"{score_value:.3f}")
+    console.print(table)
+
+    if outcome.qualified:
+        console.print("[green]QUALIFIED[/green] — this run meets every leaderboard floor.")
+        return
+
+    console.print("[red]NOT QUALIFIED[/red]")
+    for reason in outcome.reasons:
+        console.print(f"  • {reason}")
+    raise typer.Exit(code=1)
