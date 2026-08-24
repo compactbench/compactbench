@@ -12,15 +12,23 @@ Thanks for your interest. This project lives and dies by community submissions o
 | Improve docs or examples | PR to `docs/` directly |
 | Fix something in core | PR to `src/compactbench/` with tests |
 
-## Open workorders — pickup welcome
+## What needs doing — pickup welcome
 
-Three planned workorders from [docs/architecture/workorders.md](docs/architecture/workorders.md) are open as GitHub issues and labeled `help wanted`:
+The three workorders previously listed here (WO-008/009/010) all shipped in 2026-04 and their issues are closed. Below is what is actually open, taken from the [August 2026 handover review](docs/reviews/2026-08-handover-review.md), which lists everything with evidence and file references.
 
-- **[#5 WO-008](https://github.com/compactbench/compactbench/issues/5)** — Submission evaluation workflow + leaderboard site. GitHub Actions + a little Python + static site.
-- **[#6 WO-009](https://github.com/compactbench/compactbench/issues/6)** — Launch Elite templates (3 families, public + hidden). Mostly YAML authoring; **good starter issue**.
-- **[#7 WO-010](https://github.com/compactbench/compactbench/issues/7)** — Docs polish + PyPI 0.1.0 release + launch prep. Writers + release-workflow folks.
+**Good first contributions**
 
-Each issue has a detailed scope, dependencies, acceptance criteria, and starter pointers. Comment on the issue before you start if you want to claim it — we'll coordinate reviewers and unblock anything infrastructure-related (self-hosted runner access, hidden-repo access, PyPI trusted-publishing setup).
+- **Run a baseline on a model we don't cover.** The board's reference rows come from one small local model. Running any built-in method against a different model and opening a PR with the `results.jsonl` is genuinely useful and needs no design decisions. `compactbench qualify --results <file>` tells you locally whether it would rank.
+- **A new template family.** Real compaction failure modes with no coverage yet: numeric/quantitative state, tool-call and file state for coding agents, temporal ordering, retracted information, cumulative arithmetic. Mostly YAML authoring against [`benchmarks/schemas/template-v1.json`](benchmarks/schemas/template-v1.json).
+- **Docs and worked examples.** There is still no "what does a good score look like" guide beyond the [methodology](docs/methodology.md) page.
+
+**Substantial, and where the project most needs help**
+
+- **Realistic case scale.** Our "elite" transcripts are ~531 tokens; the regime this benchmark describes starts around 100k. This is the deepest open problem — see [related work](docs/related-work.md#where-compactbench-is-currently-weaker).
+- **Judge-based grading.** Several checks are substring matches that reject correct paraphrases.
+- **Free-points evaluation items.** Roughly a third of items are "did the model avoid saying X", which an empty answer passes. The `null` control now measures this on every run; fixing it needs a content pass across the templates.
+
+Open an issue describing what you want to take on before starting anything substantial, so we can agree on scope before you spend time. Small fixes need no ceremony — just open the PR.
 
 ## Development setup
 

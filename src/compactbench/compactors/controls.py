@@ -33,29 +33,19 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from compactbench.compactors._utils import fit_summary_text
 from compactbench.compactors.base import Compactor
 from compactbench.contracts import CompactionArtifact, Transcript
 from compactbench.providers import Provider
 
-# CompactionArtifact caps summary_text at 8000 characters. That is a sensible
-# ceiling for a *compaction* artifact but it also bounds how much context the
-# oracle can carry, so the oracle records a warning when it has to cut. At
-# current suite sizes (elite transcripts run ~2k characters) nothing is cut.
-_SUMMARY_TEXT_LIMIT = 8000
+# Controls share the artifact's summary cap with every other compactor. At
+# current suite sizes (elite transcripts run ~2k characters) nothing is cut, but
+# the oracle stops being a true upper bound if a transcript ever exceeds it, so
+# the truncation is recorded as a warning rather than passing silently.
 
 
 def _render_turns(transcript: Transcript) -> str:
     return "\n".join(f"{turn.role.value}: {turn.content}" for turn in transcript.turns)
-
-
-def _fit(text: str) -> tuple[str, list[str]]:
-    """Trim ``text`` to the artifact's summary cap, reporting whether it cut."""
-    if len(text) <= _SUMMARY_TEXT_LIMIT:
-        return text, []
-    return text[:_SUMMARY_TEXT_LIMIT], [
-        f"transcript exceeded the {_SUMMARY_TEXT_LIMIT}-character artifact summary cap "
-        f"and was truncated: this control is no longer a true upper bound for this case"
-    ]
 
 
 class OracleCompactor(Compactor):
@@ -79,7 +69,7 @@ class OracleCompactor(Compactor):
         config: dict[str, Any] | None = None,
         previous_artifact: CompactionArtifact | None = None,
     ) -> CompactionArtifact:
-        text, warnings = _fit(_render_turns(transcript))
+        text, warnings = fit_summary_text(_render_turns(transcript))
         return CompactionArtifact(
             summaryText=text,
             selectedSourceTurnIds=[t.id for t in transcript.turns],
@@ -135,7 +125,7 @@ class TruncateLastNCompactor(Compactor):
         previous_artifact: CompactionArtifact | None = None,
     ) -> CompactionArtifact:
         kept = transcript.turns[-self.n :]
-        text, warnings = _fit(_render_turns(Transcript(turns=list(kept))))
+        text, warnings = fit_summary_text(_render_turns(Transcript(turns=list(kept))))
         return CompactionArtifact(
             summaryText=text,
             selectedSourceTurnIds=[t.id for t in kept],

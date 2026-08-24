@@ -79,3 +79,31 @@ def drift_resistance(cycle_scores: list[float]) -> float:
     later = cycle_scores[1:]
     retained = (sum(later) / len(later)) / baseline
     return max(0.0, min(1.0, retained))
+
+
+def compaction_attributable_drift(
+    method_drift: float, oracle_drift: float, *, epsilon: float = 1e-9
+) -> float | None:
+    """Isolate the drift a *method* caused from the drift the *model* caused.
+
+    Even the ``oracle`` control — which is handed the full, uncompacted
+    transcript and therefore loses nothing to compaction — does not score 1.0
+    here. Measured on the shipped elite suite it comes in around 0.88, because
+    each drift cycle extends the transcript with continuation turns and the
+    model degrades on the longer input. That decay belongs to the model, not to
+    the compaction method.
+
+    Reading a method's raw ``drift_resistance`` against 1.0 therefore charges it
+    for the model's own degradation. Dividing by the oracle's drift on the same
+    (suite, model, profile) removes that floor:
+
+        1.0  → the method drifted no more than full context did
+        0.5  → the method lost twice as much as the model alone would have
+
+    Returns ``None`` when there is no usable oracle measurement to normalise
+    against — the caller should report the raw figure and say so rather than
+    invent a denominator.
+    """
+    if oracle_drift <= epsilon:
+        return None
+    return max(0.0, min(1.0, method_drift / oracle_drift))

@@ -1,0 +1,69 @@
+# Maintainer baseline run — published as unranked reference rows.
+#
+# Run against a LOCAL model deliberately. Every row here is reproducible by
+# anyone with no API key and no spend:
+#
+#     ollama pull qwen2.5:1.5b-instruct
+#     compactbench run --method built-in:<method> --suite elite_practice \
+#         --provider ollama --model qwen2.5:1.5b-instruct \
+#         --difficulty elite --case-count 1 --drift-cycles 2 \
+#         --seed-group baseline-v1 --output <method>.jsonl
+#
+# A leaderboard whose reference numbers can only be reproduced by someone with a
+# paid account is a weaker artifact than one anybody can re-derive.
+#
+# READ THE SCORES WITH THAT IN MIND: a 1.5B model running on CPU scores far
+# below frontier models. These rows are a reproducible FLOOR and a demonstration
+# that the pipeline works end to end — not a claim about what good compaction
+# looks like. The `oracle` row is the number to anchor on: it sees the full
+# uncompacted transcript, so it bounds what is achievable on THIS model.
+
+published_by: compactbench
+model: qwen2.5:1.5b-instruct
+provider: ollama
+suite: elite_practice
+difficulty: elite
+seed_group: baseline-v1
+case_count_per_template: 1
+drift_cycles: 2
+
+# Elite-Light (>=2x) is the honest tier for this profile. The shipped elite
+# transcripts are ~531 tokens, so the higher tiers demand artifacts small enough
+# to be uninformative; that is a known content problem, not a property of the
+# methods. See docs/reviews/2026-08-handover-review.md.
+compression_tier: Elite-Light
+
+notes: |
+  Includes the three control arms (oracle, null, truncate-last-n) alongside the
+  built-in methods. The controls make the rest readable and cost nothing to run —
+  they make no model calls at all.
+
+  Observed range on this model:
+
+    oracle            0.633   full context — the ceiling
+    hybrid-ledger     0.432   best method, 22.5x compression
+    naive-summary     0.395   only 2.6x compression
+    truncate-last-n   0.263   keep the last 10 turns
+    structured-state  0.249   see caveat below
+    null              0.235   empty artifact — the floor
+
+  Two things a reader should not misinterpret:
+
+  1. `structured-state` at 422x compression is NOT an impressive compression
+     result — it is the signature of a near-empty artifact. This model returns
+     well-formed JSON with every substantive section empty, and fills
+     `unresolved_items` with the distractor topics while missing the actual
+     constraint. That is a model-capability result, not a parser bug: verified by
+     inspecting the raw response. A 1.5B model cannot do structured state
+     extraction on this task. Expect this arm to look completely different on a
+     capable model.
+
+  2. NONE of these runs would qualify for a ranked leaderboard slot. Every one
+     fails the 0.40 per-family mean floor, because the model is too small. That
+     is the floors working correctly, and it is why these publish as unranked
+     reference rows rather than entries.
+
+  The genuinely interesting result is that `truncate-last-n` beats `null` by only
+  0.028. Keeping ten turns of recent verbatim context buys almost nothing here,
+  which is the benchmark's core claim confirmed by measurement: what matters is
+  stated early and buried under distractors.

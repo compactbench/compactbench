@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from compactbench.compactors._state_parser import parse_state
-from compactbench.compactors._utils import render_transcript, uniq_preserve_order
+from compactbench.compactors._utils import fit_summary_text, render_transcript, uniq_preserve_order
 from compactbench.compactors.base import Compactor
 from compactbench.contracts import CompactionArtifact, StructuredState, Transcript
 from compactbench.providers import CompletionRequest
@@ -67,11 +67,12 @@ class HybridLedgerCompactor(Compactor):
         merged = _merge_ledger(delta, previous_artifact)
         cycles_accumulated = _cycles_accumulated(previous_artifact)
 
+        header_fitted, length_warnings = fit_summary_text(header)
         return CompactionArtifact(
-            summaryText=header,
+            summaryText=header_fitted,
             structured_state=merged,
             selectedSourceTurnIds=[t.id for t in transcript.turns],
-            warnings=warnings,
+            warnings=[*warnings, *length_warnings],
             methodMetadata={
                 "method": self.name,
                 "version": self.version,

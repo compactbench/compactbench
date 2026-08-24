@@ -10,7 +10,11 @@ from __future__ import annotations
 import pytest
 
 from compactbench.scoring import drift_deltas, drift_resistance
-from compactbench.scoring.drift import MIN_CYCLES_FOR_DRIFT, is_measurable
+from compactbench.scoring.drift import (
+    MIN_CYCLES_FOR_DRIFT,
+    compaction_attributable_drift,
+    is_measurable,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -95,3 +99,28 @@ class TestRetentionRatio:
         being guarded against is the zero-baseline case above, not this one.
         """
         assert drift_resistance([0.9, 0.9]) == drift_resistance([0.1, 0.1]) == 1.0
+
+
+class TestCompactionAttributableDrift:
+    """Separating model-caused decay from compaction-caused decay.
+
+    The oracle sees the full transcript and still measures ~0.88 drift on the
+    shipped suite, because each cycle lengthens the input. Charging a method for
+    that floor overstates how much *compaction* cost.
+    """
+
+    def test_matching_the_oracle_means_no_compaction_drift(self) -> None:
+        assert compaction_attributable_drift(0.88, 0.88) == pytest.approx(1.0)
+
+    def test_losing_twice_as_much_as_the_model_alone(self) -> None:
+        assert compaction_attributable_drift(0.44, 0.88) == pytest.approx(0.5)
+
+    def test_beating_the_oracle_clamps_to_one(self) -> None:
+        assert compaction_attributable_drift(0.95, 0.88) == 1.0
+
+    def test_no_usable_oracle_returns_none_rather_than_inventing_one(self) -> None:
+        """A missing denominator must surface as 'unknown', not as a number."""
+        assert compaction_attributable_drift(0.5, 0.0) is None
+
+    def test_total_collapse_is_zero(self) -> None:
+        assert compaction_attributable_drift(0.0, 0.88) == 0.0

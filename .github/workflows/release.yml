@@ -18,7 +18,9 @@ name: Release to PyPI
 #
 # Release flow:
 #
-#   1. Bump [tool.hatch] version in pyproject.toml and __init__.py.
+#   1. Bump `version` in pyproject.toml. (Do NOT edit __init__.py — it derives
+#      __version__ from installed package metadata, so there is nothing to bump
+#      there. This instruction was wrong from launch until 0.2.0.)
 #   2. Update CHANGELOG: move [Unreleased] to [X.Y.Z] with a date.
 #   3. Tag: `git tag -s vX.Y.Z -m 'release X.Y.Z' && git push origin vX.Y.Z`
 #   4. Approve the `pypi` environment in GitHub Actions.

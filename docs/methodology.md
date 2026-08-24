@@ -64,11 +64,76 @@ penalized_cycle_score = cycle_score * (1 - contradiction_rate)
 ## Drift resistance
 
 ```
-drift_delta_n   = cycle_score_n - cycle_score_0
-drift_resistance = clamp(1 + mean(drift_delta_n for n >= 1), 0, 1)
+drift_resistance = clamp(mean(cycle_score_n for n >= 1) / cycle_score_0, 0, 1)
 ```
 
-A method that holds steady scores 1.0. A method that degrades across cycles scores below 1.0 proportionally.
+The fraction of the first cycle's score that later cycles retain. A method that holds steady scores 1.0; one that halves scores 0.5. Improvement clamps at 1.0 — a method that scores better after re-compaction has lost nothing, and letting it exceed 1.0 would let noise buy ranking weight.
+
+!!! warning "Changed in scorer 2.0.0"
+    This was previously `clamp(1 + mean(cycle_score_n - cycle_score_0))` — an *additive* distance from the first cycle. That measured whether scores **changed**, not whether they were any **good**: a method scoring 0.0 on every cycle was perfectly stable and scored a full **1.0**, collecting 30% of `elite_score` for the worst possible result. Scores from scorer 1.0.0 are not comparable to 2.0.0, and the leaderboard segments on `scorer_version` so the two never mix.
+
+Drift resistance is **undefined**, not perfect, when it cannot be measured — fewer than two cycles, or a zero baseline. It reports `0.0` in those cases so it can never be a source of free score, and qualification refuses to rank a run configured with zero drift cycles.
+
+### The model's own drift floor
+
+A method's raw drift number should not be read against 1.0. The `oracle` control is handed the **full, uncompacted transcript**, so it loses nothing to compaction — and it still does not score 1.0. Measured on `elite_practice` at elite difficulty against a small local model, it comes in at **0.882**.
+
+The reason is that each drift cycle extends the transcript with continuation turns, so later cycles present a longer input and the model degrades on it. That decay belongs to the model, not to the compaction method.
+
+To isolate what compaction actually cost, normalise against the oracle measured on the same (suite, model, profile):
+
+```
+compaction_attributable_drift = clamp(method_drift / oracle_drift, 0, 1)
+```
+
+- `1.0` — the method drifted no more than full context did.
+- `0.5` — the method lost twice as much as the model alone would have.
+
+`compactbench.scoring.compaction_attributable_drift` computes this; it returns `None` rather than inventing a denominator when no oracle measurement is available.
+
+## The free-points floor
+
+Not every point in a score reflects retained state. The `null` control — an artifact containing **nothing at all** — scores **0.235 overall** on `elite_practice` at elite difficulty. Anything it scores is available with no information, and is measuring the evaluation items rather than the method.
+
+Measured per item type on that run:
+
+| Item type | Weight | N | Perfect on an empty artifact | Mean |
+|---|---|---|---|---|
+| `planning_soundness` | 1.0 | 30 | **30** | **1.000** |
+| `forbidden_behavior_retention` | 3.0 | 45 | **18** | **0.400** |
+| `locked_decision_retention` | 3.0 | 27 | 0 | 0.000 |
+| `immutable_fact_recall` | 2.0 | 9 | 0 | 0.000 |
+| `entity_integrity` | 1.0 | 45 | 0 | 0.000 |
+
+Three of the five item types behave correctly — they are unanswerable without retained state. Two do not:
+
+- **`planning_soundness` currently measures nothing.** Every item passes on an empty artifact. It contributes weight to every score while carrying no signal.
+- **`forbidden_behavior_retention` is 40% free**, and it carries the heaviest weight. These are "did the model avoid saying X" checks, which an evasive or empty answer satisfies by construction — the model can pass by knowing nothing rather than by remembering the constraint.
+
+**Known limitation, being fixed.** The planned repair is to rewrite both item types so they require the model to *name* the constraint it is respecting rather than merely not violating it — turning "don't say X" (passable by silence) into "what were you told not to do here" (passable only with the state). Until that lands, read every `overall_score` against the 0.235 floor rather than against 0. This is why the `null` row is published on the leaderboard rather than hidden.
+
+### What `elite_score` still gives away, and why it cannot be exploited
+
+The published `null` row shows `elite_score` **0.469** against the full-context oracle's **0.629** — an artifact containing nothing scores 75% of what perfect information scores on the composite. That number is on the board deliberately; here is where it comes from:
+
+```
+0.40 x overall  0.235          = 0.094
+0.30 x drift    0.750          = 0.225   <- consistently scoring badly is still "stable"
+0.20 x constraint 0.250        = 0.050
+0.10 x compression bonus 1.00  = 0.100   <- 510x maxes the bonus
+                                 -----
+                                 0.469
+```
+
+Roughly two-thirds of that is structural rather than earned. `drift_resistance` is deliberately **scale-free** — it measures retention, so a method that scores 0.235 on every cycle has genuinely retained everything it had. That is correct for the metric in isolation, but it means the 30% weight `elite_score` gives it rewards *stability* independently of *quality*.
+
+**This is not a route onto the leaderboard.** Qualification blocks the strategy at three independent points, verified by submitting the real null run under an ordinary method name:
+
+- compression above 50x is rejected as a degenerate artifact;
+- the per-family mean floor of 0.40 fails on three of the four families;
+- and control arms are never ranked regardless.
+
+So it is a weighting question rather than an open hole: `elite_score`'s composite is more generous to a do-nothing method than it should be, even though nothing can actually rank that way. Revisiting the weights is a scorer-version change and wants real submission data to calibrate against, so it is documented here rather than adjusted on a guess. The candidate fix is to score `overall` and `drift` **relative to the oracle and null bounds** measured on the same suite and model, rather than against 0 and 1.
 
 ## Compression ratio
 
