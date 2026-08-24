@@ -91,6 +91,27 @@ compaction_attributable_drift = clamp(method_drift / oracle_drift, 0, 1)
 
 `compactbench.scoring.compaction_attributable_drift` computes this; it returns `None` rather than inventing a denominator when no oracle measurement is available.
 
+## The free-points floor
+
+Not every point in a score reflects retained state. The `null` control — an artifact containing **nothing at all** — scores **0.235 overall** on `elite_practice` at elite difficulty. Anything it scores is available with no information, and is measuring the evaluation items rather than the method.
+
+Measured per item type on that run:
+
+| Item type | Weight | N | Perfect on an empty artifact | Mean |
+|---|---|---|---|---|
+| `planning_soundness` | 1.0 | 30 | **30** | **1.000** |
+| `forbidden_behavior_retention` | 3.0 | 45 | **18** | **0.400** |
+| `locked_decision_retention` | 3.0 | 27 | 0 | 0.000 |
+| `immutable_fact_recall` | 2.0 | 9 | 0 | 0.000 |
+| `entity_integrity` | 1.0 | 45 | 0 | 0.000 |
+
+Three of the five item types behave correctly — they are unanswerable without retained state. Two do not:
+
+- **`planning_soundness` currently measures nothing.** Every item passes on an empty artifact. It contributes weight to every score while carrying no signal.
+- **`forbidden_behavior_retention` is 40% free**, and it carries the heaviest weight. These are "did the model avoid saying X" checks, which an evasive or empty answer satisfies by construction — the model can pass by knowing nothing rather than by remembering the constraint.
+
+**Known limitation, being fixed.** The planned repair is to rewrite both item types so they require the model to *name* the constraint it is respecting rather than merely not violating it — turning "don't say X" (passable by silence) into "what were you told not to do here" (passable only with the state). Until that lands, read every `overall_score` against the 0.235 floor rather than against 0. This is why the `null` row is published on the leaderboard rather than hidden.
+
 ## Compression ratio
 
 ```
