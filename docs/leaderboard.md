@@ -2,10 +2,33 @@
 
 Live rankings of compaction methods, segmented by benchmark version and target model. Submitted via PR; evaluated on GitHub Actions; ranked by `elite_score`. See [methodology](methodology.md) for how scores are computed.
 
+!!! info "Reading the board: baselines and controls"
+    Rows tagged **baseline** are maintainer runs of the built-in methods. Rows tagged
+    **control** are reference points, not compaction methods. Neither is ranked — they are
+    published so that submitted scores mean something.
+
+    The two controls that matter most:
+
+    - **`oracle`** hands the model the *full, uncompacted transcript*. It is the ceiling:
+      what you score when compaction loses nothing. It is **not 1.0** — on a small local
+      model it scores around 0.65, because some evaluation items are simply hard for that
+      model. A method at 0.5 has therefore not lost half the information; it is at roughly
+      77% of what was achievable.
+    - **`null`** returns an empty artifact. Every point it scores is a point available with
+      *no information at all*, which tells you how much of a score is a free pass rather
+      than retained state.
+
+    Read a method's score as its position between those two numbers, not as a percentage.
+
 <div id="leaderboard-status" style="margin: 1rem 0; color: var(--md-default-fg-color--light);"></div>
 <div id="leaderboard-root"></div>
 
 <style>
+.cb-tag { font-size: 0.7em; text-transform: uppercase; letter-spacing: .08em;
+          border: 1px solid currentColor; border-radius: 3px; padding: 0 .35em;
+          opacity: .65; vertical-align: middle; }
+tr.cb-control td, tr.cb-baseline td { opacity: .78; font-style: italic; }
+
 .cb-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
 .cb-table th, .cb-table td { padding: 0.45rem 0.65rem; border-bottom: 1px solid var(--md-default-fg-color--lightest); text-align: left; }
 .cb-table th { background: var(--md-default-bg-color--light, #f0f0f0); font-weight: 600; cursor: pointer; }
@@ -73,10 +96,12 @@ Live rankings of compaction methods, segmented by benchmark version and target m
           <th class="num">Compression</th>
         </tr></thead>
         <tbody>
-          ${rows.map(r => `<tr>
+          ${rows.map(r => `<tr class="cb-${escapeHtml(r.row_kind || "submission")}">
             <td class="num">${r.rank ?? "—"}</td>
-            <td>${escapeHtml(r.method_name)} <small>(${escapeHtml(r.method_version)})</small></td>
-            <td>${r.handle ? `@${escapeHtml(r.handle)}` : "—"}${r.org ? ` · ${escapeHtml(r.org)}` : ""}</td>
+            <td>${escapeHtml(r.method_name)} <small>(${escapeHtml(r.method_version)})</small>${
+              r.row_kind === "control" ? ' <span class="cb-tag">control</span>' :
+              r.row_kind === "baseline" ? ' <span class="cb-tag">baseline</span>' : ""}</td>
+            <td>${r.handle ? `@${escapeHtml(r.handle)}` : (r.row_kind && r.row_kind !== "submission" ? "maintainer" : "—")}${r.org ? ` · ${escapeHtml(r.org)}` : ""}</td>
             <td>${escapeHtml(r.tier)}</td>
             <td class="num">${fmt(r.elite_score, 3)}</td>
             <td class="num">${fmt(r.overall_score, 3)}</td>

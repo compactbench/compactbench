@@ -1,4 +1,4 @@
-"""Rebuild docs/data/leaderboard.json from every merged submission's results.jsonl.
+"""Rebuild docs/data/leaderboard.json from merged submissions and maintainer baselines.
 
 Invoked by .github/workflows/update-leaderboard.yml. Reads:
 
@@ -10,6 +10,18 @@ For each run it:
 1. Parses the event log into a :class:`RunResult`.
 2. Runs qualification checks. Rejected runs are omitted with a warning.
 3. Projects to a leaderboard row.
+
+It also reads every ``baselines/<model-slug>/<method>.jsonl`` produced by the
+maintainer, alongside the ``manifest.yaml`` describing that run profile. Those
+publish as **reference rows**: visible on the board, never ranked against
+submissions. Two reasons they exist:
+
+- The board is not empty before the first submission arrives, so a visitor can
+  see what the numbers look like and what there is to beat (see issue #38).
+- The control arms (``oracle``, ``null``, ``truncate-last-n``) are the only way
+  to read any other score. The oracle sees the full uncompacted transcript, so
+  it bounds what is achievable on that model; the null arm returns nothing, so
+  it exposes how many points are available with no information at all.
 
 Then ranks the rows and writes the canonical leaderboard JSON.
 """
@@ -24,6 +36,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from compactbench.compactors import CONTROL_KEYS
 from compactbench.leaderboard import (
     CompressionTier,
     LeaderboardRow,
@@ -34,10 +47,67 @@ from compactbench.leaderboard import (
 from compactbench.runner import to_run_result
 
 SUBMISSIONS_DIR = Path("submissions")
+BASELINES_DIR = Path("baselines")
 LEADERBOARD_PATH = Path("docs/data/leaderboard.json")
 SCHEMA_VERSION = "1.0.0"
 
 _VALID_TIERS = {"Elite-Light", "Elite-Mid", "Elite-Aggressive"}
+
+
+def _baseline_rows(warnings: list[str], yaml: YAML) -> list[LeaderboardRow]:
+    """Project maintainer baseline runs into unranked reference rows.
+
+    Layout::
+
+        baselines/<model-slug>/manifest.yaml
+        baselines/<model-slug>/<method>.jsonl
+
+    Baselines deliberately bypass ``qualify()``. Qualification decides what may
+    *compete*, and these do not compete — the control arms are specifically
+    designed to fail it (``null`` reports absurd compression by returning
+    nothing; ``oracle`` compresses ~1x by returning everything). Excluding them
+    for failing a competition check they are not entered in would remove exactly
+    the rows that make the board interpretable.
+    """
+    rows: list[LeaderboardRow] = []
+    if not BASELINES_DIR.is_dir():
+        return rows
+
+    for model_dir in sorted(p for p in BASELINES_DIR.iterdir() if p.is_dir()):
+        manifest_path = model_dir / "manifest.yaml"
+        if not manifest_path.exists():
+            warnings.append(f"skipped {model_dir}: no manifest.yaml")
+            continue
+        with manifest_path.open(encoding="utf-8") as fp:
+            manifest: Any = yaml.load(fp)  # pyright: ignore[reportUnknownMemberType]
+        if not isinstance(manifest, dict):
+            warnings.append(f"skipped {model_dir}: manifest.yaml is not a mapping")
+            continue
+
+        tier = str(manifest.get("compression_tier", "Elite-Light"))
+        if tier not in _VALID_TIERS:
+            warnings.append(f"skipped {model_dir}: invalid compression_tier {tier!r}")
+            continue
+
+        for results_path in sorted(model_dir.glob("*.jsonl")):
+            try:
+                run_result = to_run_result(results_path)
+            except Exception as exc:
+                warnings.append(f"skipped {results_path}: could not parse: {exc}")
+                continue
+
+            kind = "control" if run_result.method_name in CONTROL_KEYS else "baseline"
+            rows.append(
+                project_row(
+                    run_result,
+                    tier=tier,  # pyright: ignore[reportArgumentType]
+                    handle=None,
+                    org=str(manifest.get("published_by", "compactbench")),
+                    published_at=run_result.completed_at,
+                    row_kind=kind,
+                )
+            )
+    return rows
 
 
 def main() -> int:
@@ -118,6 +188,8 @@ def main() -> int:
                     published_at=run_result.completed_at,
                 )
             )
+
+    rows.extend(_baseline_rows(warnings, yaml))
 
     ranked = rank_rows(rows)
 
