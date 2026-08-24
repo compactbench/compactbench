@@ -14,6 +14,7 @@ from compactbench.contracts import (
     Scorecard,
 )
 from compactbench.leaderboard import qualify
+from compactbench.runner.persistence import INCOMPLETE_RUN_NOTE
 
 pytestmark = pytest.mark.unit
 
@@ -150,3 +151,103 @@ def test_multiple_reasons_accumulate() -> None:
     )
     assert not result.qualified
     assert len(result.reasons) >= 2  # compression + contradiction + no cases
+
+
+def _simple_run(
+    *,
+    method_name: str = "some-method",
+    compression_ratio: float = 6.0,
+    contradiction_rate: float = 0.0,
+    drift_resistance: float = 0.9,
+) -> RunResult:
+    return RunResult(
+        run_id="r",
+        method_name=method_name,
+        method_version="1.0.0",
+        suite_key="elite_practice",
+        suite_version="1.0.0",
+        scorer_version="1.0.0",
+        target_provider="ollama",
+        target_model="m",
+        started_at=datetime(2026, 8, 24, tzinfo=UTC),
+        completed_at=datetime(2026, 8, 24, tzinfo=UTC),
+        cases=[_case("buried_constraint_v1")],
+        overall_score=0.6,
+        drift_resistance=drift_resistance,
+        constraint_retention=0.6,
+        contradiction_rate=contradiction_rate,
+        compression_ratio=compression_ratio,
+    )
+
+
+class TestDegenerateAndControlRuns:
+    """Guards for the ways a non-method used to score well."""
+
+    def test_null_control_cannot_qualify(self) -> None:
+        """The arm that returns nothing must never be rankable.
+
+        It reports ~450x compression on the shipped suites, which cleared every
+        tier and maxed the compression bonus while retaining no information.
+        """
+        result = qualify(
+            _simple_run(method_name="null", compression_ratio=450.0),
+            tier="Elite-Mid",
+            expected_drift_cycles=2,
+        )
+        assert not result.qualified
+        assert any("control arm" in r for r in result.reasons)
+
+    def test_oracle_control_cannot_qualify(self) -> None:
+        result = qualify(
+            _simple_run(method_name="oracle", compression_ratio=1.0),
+            tier="Elite-Light",
+            expected_drift_cycles=2,
+        )
+        assert not result.qualified
+        assert any("control arm" in r for r in result.reasons)
+
+    def test_implausible_compression_is_rejected_even_for_a_named_method(self) -> None:
+        """A submitted method returning an empty artifact is caught on the number.
+
+        Renaming the null strategy is not a way around the control check.
+        """
+        result = qualify(
+            _simple_run(method_name="totally-legit-method", compression_ratio=450.0),
+            tier="Elite-Mid",
+            expected_drift_cycles=2,
+        )
+        assert not result.qualified
+        assert any("plausible maximum" in r for r in result.reasons)
+
+    def test_zero_drift_cycles_cannot_qualify(self) -> None:
+        """`--drift-cycles 0` was the cheapest route to 30% of elite_score."""
+        result = qualify(_simple_run(), tier="Elite-Mid", expected_drift_cycles=0)
+        assert not result.qualified
+        assert any("drift resistance is measurable" in r for r in result.reasons)
+
+    def test_a_normal_run_still_qualifies(self) -> None:
+        """The new floors must not reject legitimate submissions."""
+        # 1 drift cycle = 2 total cycles, the minimum at which drift is
+        # measurable, and what the shared `_case` helper builds.
+        result = qualify(_simple_run(), tier="Elite-Mid", expected_drift_cycles=1)
+        assert result.qualified, result.reasons
+
+
+def test_incomplete_run_cannot_qualify() -> None:
+    """A crashed or in-flight run must not be rankable.
+
+    `read_run_result` reconstructs aggregates from whichever cases landed when
+    there is no `run_end` event. Ranking that publishes an unrepresentative
+    number, and makes "kill the run once the easy cases are through" a cheap
+    way to cherry-pick a score.
+    """
+    run = _simple_run().model_copy(update={"notes": [INCOMPLETE_RUN_NOTE]})
+    result = qualify(run, tier="Elite-Mid", expected_drift_cycles=1)
+    assert not result.qualified
+    assert any("incomplete" in r for r in result.reasons)
+
+
+def test_complete_run_with_other_notes_still_qualifies() -> None:
+    """Only the incomplete marker disqualifies — notes are otherwise free-form."""
+    run = _simple_run().model_copy(update={"notes": ["ran on a rainy Tuesday"]})
+    assert qualify(run, tier="Elite-Mid", expected_drift_cycles=1).qualified

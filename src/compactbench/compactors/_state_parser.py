@@ -33,12 +33,27 @@ _MAX_STRING_LENGTH = 500
 def parse_state(text: str) -> tuple[StructuredState, list[str]]:
     """Parse a JSON-object response into a :class:`StructuredState` and warnings."""
     warnings: list[str] = []
-    cleaned = _strip_code_fences(text)
+    cleaned = _strip_code_fences(_strip_reasoning_blocks(text))
     try:
         data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        warnings.append(f"response was not valid JSON: {exc}")
-        return StructuredState(), warnings
+    except json.JSONDecodeError:
+        # Models routinely wrap the object in prose ("Here is the state:", a
+        # trailing "Hope that helps!"), and reasoning models emit a preamble
+        # before it. Falling straight through to an empty state scored those
+        # responses as total information loss — measuring the parser rather
+        # than the compaction method, and doing it worst on exactly the small
+        # and local models this benchmark wants to be runnable on. Recover the
+        # first balanced JSON object instead.
+        extracted = _extract_first_json_object(cleaned)
+        if extracted is None:
+            warnings.append("response contained no parsable JSON object")
+            return StructuredState(), warnings
+        try:
+            data = json.loads(extracted)
+        except json.JSONDecodeError as exc:
+            warnings.append(f"response was not valid JSON: {exc}")
+            return StructuredState(), warnings
+        warnings.append("extracted JSON object from surrounding prose")
 
     if not isinstance(data, dict):
         warnings.append(f"expected JSON object, got {type(data).__name__}; treating as empty state")
@@ -50,6 +65,58 @@ def parse_state(text: str) -> tuple[StructuredState, list[str]]:
     }
     sections["entity_map"] = _clean_entity_map(obj.get("entity_map"), warnings)
     return StructuredState.model_validate(sections), warnings
+
+
+def _strip_reasoning_blocks(text: str) -> str:
+    """Drop ``<think>``-style reasoning preambles some models emit before the answer.
+
+    These arrive ahead of the JSON and are not part of it. Removing them here
+    keeps the fence/decoder path below simple.
+    """
+    out = text
+    for tag in ("think", "thinking", "reasoning"):
+        open_tag, close_tag = f"<{tag}>", f"</{tag}>"
+        while open_tag in out and close_tag in out:
+            start = out.index(open_tag)
+            end = out.index(close_tag, start) + len(close_tag)
+            out = out[:start] + out[end:]
+    return out
+
+
+def _extract_first_json_object(text: str) -> str | None:
+    """Return the first balanced ``{...}`` span in ``text``, or None.
+
+    Brace-counting is string- and escape-aware, so a ``}`` inside a value (very
+    common — forbidden behaviours quote code) does not terminate the object
+    early. Deliberately simple: it recovers the overwhelmingly common
+    "prose around one object" shape without pulling in a JSON5 dependency.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return None
 
 
 def _strip_code_fences(text: str) -> str:

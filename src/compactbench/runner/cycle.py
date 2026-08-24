@@ -76,7 +76,12 @@ async def execute_cycle(
             cycle_number,
         )
 
-    artifact = await compactor.compact(working_transcript, previous_artifact=previous_artifact)
+    # Strip generation metadata before the method sees the transcript — `tags`
+    # label which turns are distractors and which holds the constraint, so
+    # passing them through is an answer-key leak. See Transcript.without_tags.
+    artifact = await compactor.compact(
+        working_transcript.without_tags(), previous_artifact=previous_artifact
+    )
     responses = await evaluate_items(case.evaluation_items, artifact, provider, model)
     scorecard = score_cycle(
         case,

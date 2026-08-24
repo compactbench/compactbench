@@ -35,7 +35,12 @@ class StructuredState(BaseModel):
 class CompactionArtifact(BaseModel):
     """Canonical artifact returned by a compactor for a single compaction step."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # populate_by_name lets submitters construct this with either the Python
+    # field name or the camelCase wire alias. Without it `summary_text=...`
+    # raised "Extra inputs are not permitted" while `summaryText=...` worked —
+    # a confusing failure for the first thing anyone writing a method does, and
+    # one the docs' own example half-tripped over by mixing the two styles.
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
     schema_version: str = Field(default=ARTIFACT_SCHEMA_VERSION, alias="schemaVersion")
     summary_text: Annotated[str, StringConstraints(max_length=8000)] = Field(
