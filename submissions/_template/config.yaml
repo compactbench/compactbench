@@ -7,11 +7,13 @@ method:
 
 # Runtime configuration used by the evaluation runner.
 runtime:
-  provider: groq                  # one of: groq, google-ai-studio, ollama, mock
+  provider: groq                  # ranked evaluation accepts: groq, google-ai-studio, anthropic, openai
+                                  # (ollama and mock are for LOCAL development only — they are
+                                  #  rejected by the evaluator, which must control where calls go)
   model: llama-3.3-70b-versatile  # model key the provider accepts
   compression_tier: Elite-Mid     # Elite-Light (>=2x) | Elite-Mid (>=4x) | Elite-Aggressive (>=8x)
-  drift_cycles: 2
-  case_count_per_template: 20
+  drift_cycles: 2                 # 1-5; must be >= 1 or drift resistance is unmeasurable
+  case_count_per_template: 20     # 1-100
 
 # Public attribution on the leaderboard.
 attribution:
