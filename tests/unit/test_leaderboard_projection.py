@@ -276,3 +276,95 @@ def test_project_row_defaults_endpoint_kind_for_pre_0_2_results() -> None:
         run, tier="Elite-Mid", handle="a", org=None, published_at=datetime(2026, 4, 17, tzinfo=UTC)
     )
     assert row["endpoint_kind"] == "default"
+
+
+class TestReferenceRows:
+    """Baselines and controls publish, but must never compete with submissions."""
+
+    def _row(self, name: str, kind: str, overall: float) -> LeaderboardRow:
+        run = RunResult(
+            run_id="r",
+            method_name=name,
+            method_version="1.0.0",
+            suite_key="elite_practice",
+            suite_version="1.0.0",
+            scorer_version="2.0.0",
+            target_provider="ollama",
+            target_model="qwen2.5:1.5b-instruct",
+            started_at=datetime(2026, 8, 24, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 24, tzinfo=UTC),
+            cases=[],
+            overall_score=overall,
+            drift_resistance=0.9,
+            constraint_retention=0.8,
+            contradiction_rate=0.0,
+            compression_ratio=5.0,
+        )
+        return project_row(
+            run,
+            tier="Elite-Mid",
+            handle=None,
+            org=None,
+            published_at=datetime(2026, 8, 24, tzinfo=UTC),
+            row_kind=kind,
+        )
+
+    def test_submissions_are_ranked_and_reference_rows_are_not(self) -> None:
+        """The oracle sees the full uncompacted transcript — ranking it against a
+        real compaction method is a category error, and the null arm would place
+        on a board that exists to expose its limits."""
+        ranked = rank_rows(
+            [
+                self._row("oracle", "control", 0.99),
+                self._row("submitted-method", "submission", 0.55),
+                self._row("null", "control", 0.30),
+                self._row("hybrid-ledger", "baseline", 0.60),
+            ]
+        )
+        by_name = {r["method_name"]: r["rank"] for r in ranked}
+        assert by_name["submitted-method"] == 1
+        assert by_name["oracle"] is None
+        assert by_name["null"] is None
+        assert by_name["hybrid-ledger"] is None
+
+    def test_a_high_scoring_control_does_not_displace_a_submission(self) -> None:
+        ranked = rank_rows(
+            [self._row("oracle", "control", 0.99), self._row("mine", "submission", 0.10)]
+        )
+        assert [r["method_name"] for r in ranked if r["rank"] == 1] == ["mine"]
+
+    def test_ranked_rows_precede_reference_rows(self) -> None:
+        ranked = rank_rows(
+            [self._row("oracle", "control", 0.99), self._row("mine", "submission", 0.10)]
+        )
+        assert ranked[0]["row_kind"] == "submission"
+        assert ranked[-1]["row_kind"] == "control"
+
+    def test_default_row_kind_is_submission(self) -> None:
+        """Existing callers keep competing without changing anything."""
+        run = RunResult(
+            run_id="r",
+            method_name="m",
+            method_version="1.0.0",
+            suite_key="e",
+            suite_version="1.0.0",
+            scorer_version="2.0.0",
+            target_provider="groq",
+            target_model="llama",
+            started_at=datetime(2026, 8, 24, tzinfo=UTC),
+            completed_at=datetime(2026, 8, 24, tzinfo=UTC),
+            cases=[],
+            overall_score=0.5,
+            drift_resistance=0.9,
+            constraint_retention=0.8,
+            contradiction_rate=0.0,
+            compression_ratio=5.0,
+        )
+        row = project_row(
+            run,
+            tier="Elite-Mid",
+            handle=None,
+            org=None,
+            published_at=datetime(2026, 8, 24, tzinfo=UTC),
+        )
+        assert row["row_kind"] == "submission"

@@ -21,6 +21,14 @@ class LeaderboardRow(TypedDict):
     """Public row shape. Keep this stable — it is the public contract."""
 
     rank: int | None
+    # What this row is, and whether it competes:
+    #   "submission" — a submitted method; ranked.
+    #   "baseline"   — a maintainer reference run of a built-in method. Published
+    #                  so the board is never empty and so submitters have
+    #                  something to beat, but not ranked against submissions.
+    #   "control"    — oracle / null / truncate-last-n. Reference points that
+    #                  make every other number readable; never ranked.
+    row_kind: str
     method_name: str
     method_version: str
     handle: str | None
@@ -50,10 +58,14 @@ def project_row(
     handle: str | None,
     org: str | None,
     published_at: datetime,
+    row_kind: str = "submission",
 ) -> LeaderboardRow:
-    """Turn a qualified :class:`RunResult` into a :class:`LeaderboardRow`.
+    """Turn a :class:`RunResult` into a :class:`LeaderboardRow`.
 
     ``rank`` is set to ``None`` here; caller assigns ranks after sorting.
+    ``row_kind`` distinguishes ranked submissions from published reference rows
+    (maintainer baselines and control arms), which appear on the board but never
+    compete against submissions.
     """
     score = elite_score(
         overall_score=run_result.overall_score,
@@ -64,6 +76,7 @@ def project_row(
     )
     return LeaderboardRow(
         rank=None,
+        row_kind=row_kind,
         method_name=run_result.method_name,
         method_version=run_result.method_version,
         handle=handle,
@@ -111,9 +124,17 @@ def rank_rows(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
             published_at=datetime.fromisoformat(row["published_at"]),
         )
 
+    # Reference rows (maintainer baselines and control arms) are published but
+    # never numbered: ranking `oracle` — which sees the full uncompacted
+    # transcript — against a real compaction method is a category error, and
+    # `null` would place on a board it exists to expose the limits of. They are
+    # emitted after the ranked rows within each segment, ordered by score.
+    competing = [r for r in rows if r["row_kind"] == "submission"]
+    reference = [r for r in rows if r["row_kind"] != "submission"]
+
     # Group first, then sort + number inside each group.
     segments: dict[tuple[str, str, str, str, str], list[LeaderboardRow]] = {}
-    for row in rows:
+    for row in competing:
         segments.setdefault(_segment(row), []).append(row)
 
     ranked: list[LeaderboardRow] = []
@@ -122,4 +143,9 @@ def rank_rows(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
             ranked_row: LeaderboardRow = dict(row)  # pyright: ignore[reportAssignmentType]
             ranked_row["rank"] = i
             ranked.append(ranked_row)
+
+    for row in sorted(reference, key=lambda r: (_segment(r), _key(r))):
+        unranked: LeaderboardRow = dict(row)  # pyright: ignore[reportAssignmentType]
+        unranked["rank"] = None
+        ranked.append(unranked)
     return ranked
