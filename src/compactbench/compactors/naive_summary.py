@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from compactbench.compactors._utils import render_transcript
+from compactbench.compactors._utils import fit_summary_text, render_transcript
 from compactbench.compactors.base import Compactor
 from compactbench.contracts import CompactionArtifact, StructuredState, Transcript
 from compactbench.providers import CompletionRequest
@@ -37,11 +37,12 @@ class NaiveSummaryCompactor(Compactor):
     ) -> CompactionArtifact:
         prompt = _PROMPT.format(transcript=render_transcript(transcript))
         response = await self.provider.complete(CompletionRequest(model=self.model, prompt=prompt))
+        summary, length_warnings = fit_summary_text(response.text.strip())
         return CompactionArtifact(
-            summaryText=response.text.strip(),
+            summaryText=summary,
             structured_state=StructuredState(),
             selectedSourceTurnIds=[t.id for t in transcript.turns],
-            warnings=[],
+            warnings=length_warnings,
             methodMetadata={
                 "method": self.name,
                 "version": self.version,

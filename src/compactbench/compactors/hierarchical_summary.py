@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from compactbench.compactors._state_parser import parse_state
-from compactbench.compactors._utils import chunk, render_transcript, render_turns
+from compactbench.compactors._utils import chunk, fit_summary_text, render_transcript, render_turns
 from compactbench.compactors.base import Compactor
 from compactbench.contracts import CompactionArtifact, Transcript
 from compactbench.providers import CompletionRequest
@@ -95,11 +95,12 @@ class HierarchicalSummaryCompactor(Compactor):
 
         total_calls = len(chunk_summaries) + (1 if len(chunk_summaries) > 1 else 0) + 1
 
+        final_summary_fitted, length_warnings = fit_summary_text(final_summary)
         return CompactionArtifact(
-            summaryText=final_summary,
+            summaryText=final_summary_fitted,
             structured_state=state,
             selectedSourceTurnIds=[t.id for t in transcript.turns],
-            warnings=warnings,
+            warnings=[*warnings, *length_warnings],
             methodMetadata={
                 "method": self.name,
                 "version": self.version,
