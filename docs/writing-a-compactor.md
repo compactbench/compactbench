@@ -85,9 +85,7 @@ async def compact(
     previous_artifact: CompactionArtifact | None = None,
 ) -> CompactionArtifact:
     carried_locked = (
-        list(previous_artifact.structured_state.locked_decisions)
-        if previous_artifact
-        else []
+        list(previous_artifact.structured_state.locked_decisions) if previous_artifact else []
     )
     # ... merge with newly observed decisions ...
 ```

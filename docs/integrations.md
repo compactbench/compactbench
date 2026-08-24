@@ -30,15 +30,21 @@ from compactbench.providers import GroqProvider
 
 summariser = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
+
 async def summarise(messages: list[BaseMessage]) -> str:
-    response = await summariser.ainvoke([
-        SystemMessage(content=(
-            "Summarise the conversation, preserving every constraint, "
-            "decision, and unresolved task. Reply with the summary only."
-        )),
-        *messages,
-    ])
+    response = await summariser.ainvoke(
+        [
+            SystemMessage(
+                content=(
+                    "Summarise the conversation, preserving every constraint, "
+                    "decision, and unresolved task. Reply with the summary only."
+                )
+            ),
+            *messages,
+        ]
+    )
     return str(response.content)
+
 
 compactor = LangChainCompactor(
     # The CompactBench provider + model are for the *target* model that
@@ -88,6 +94,7 @@ The dict keys are optional — missing keys fall back to sensible defaults. `sum
 ```python
 from langchain_core.messages.utils import trim_messages
 
+
 def trim(messages: list[BaseMessage]) -> list[BaseMessage]:
     return trim_messages(
         messages,
@@ -95,6 +102,7 @@ def trim(messages: list[BaseMessage]) -> list[BaseMessage]:
         token_counter=len,  # swap for a real tokenizer
         strategy="last",
     )
+
 
 compactor = LangChainCompactor(
     provider=GroqProvider(),
@@ -114,6 +122,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage
 
 memory = ConversationSummaryMemory(llm=ChatOpenAI(model="gpt-4o-mini"))
+
 
 def compact_with_legacy_memory(messages: list[BaseMessage]) -> str:
     # ConversationSummaryMemory consumes messages in (human, ai) pairs.
@@ -153,10 +162,12 @@ from compactbench.providers import GroqProvider
 
 summariser_llm = OpenAI(model="gpt-4o-mini", temperature=0)
 
+
 def summarise(messages: list[ChatMessage]) -> str:
     memory = ChatSummaryMemoryBuffer.from_defaults(llm=summariser_llm, token_limit=500)
     memory.set(messages)
     return "\n".join(str(m.content) for m in memory.get())
+
 
 compactor = LlamaIndexCompactor(
     provider=GroqProvider(),  # answers eval items
@@ -192,6 +203,7 @@ async def structured(messages: list[ChatMessage]) -> dict:
 ```python
 def keep_last_n(messages: list[ChatMessage], n: int = 6) -> list[ChatMessage]:
     return messages[-n:]
+
 
 compactor = LlamaIndexCompactor(
     provider=GroqProvider(),
