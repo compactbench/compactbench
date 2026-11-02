@@ -2,13 +2,17 @@
 
 Each run writes a sequence of events to a single ``results.jsonl`` file:
 
-- one ``run_start`` event at the top with run metadata
+- one ``run_start`` event with everything needed to reproduce the run
 - one ``case_complete`` event per completed case (streamed as they finish)
-- one ``run_end`` event at the bottom with run-level aggregates
+- one ``run_end`` event with run-level aggregates
 
-Writer flushes after every event so partial results survive crashes and
-``--resume`` can pick up where we left off. Reader aggregates the stream into
-a :class:`RunResult`.
+The writer flushes after every event so partial results survive crashes and
+``--resume`` can pick up where it left off. Results files hold scores only —
+no conversation text, questions or artifacts — so they are safe to share;
+those live in the optional traces file.
+
+Aggregates are always recomputed from the case events when a file is read, so
+a hand-edited ``run_end`` can't change what a run reports.
 """
 
 from __future__ import annotations
@@ -21,37 +25,47 @@ from typing import IO, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from compactbench.contracts import CaseResult, RunResult, TokenUsage
+from compactbench.contracts import CaseResult, RunMetrics, RunResult, TokenUsage, add_usage
+from compactbench.scoring.metrics import compute_metrics
 
-# Bumped to 2.0.0 in 0.2.0. Scores from 1.0.0 are NOT comparable to these:
-# drift_resistance changed from an additive distance (which scored consistent
-# total failure a perfect 1.0) to a retention ratio, the JSON state parser now
-# recovers objects wrapped in prose that previously scored as total loss, and
-# compaction methods no longer receive the turn tags that labelled the answer.
-# The leaderboard segments on scorer_version, so old and new rows never mix.
-SCORER_VERSION: str = "2.0.0"
+# 3.0.0 — benchmark v2: scenario families, true drift loop, structured probes
+# scored mechanically, family-balanced score. Not comparable with 2.0.0 or
+# 1.0.0; the leaderboard segments on scorer_version, so rows never mix.
+SCORER_VERSION: str = "3.0.0"
+RESULTS_SCHEMA: str = "2"
+
+#: Stable marker attached to a RunResult reconstructed from a results file that
+#: has no ``run_end`` event — the run crashed, was killed, or is still running.
+#: Qualification refuses to rank it: its aggregates cover only the cases that
+#: happened to finish, and stopping early must not be a way to cherry-pick.
+INCOMPLETE_RUN_NOTE = "run_end event missing: results may be incomplete"
 
 
 class RunStartEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     event: Literal["run_start"] = "run_start"
+    results_schema: str = RESULTS_SCHEMA
     run_id: str
     method_name: str
     method_version: str
-    suite_key: str
+    suite: str
     suite_version: str
-    scorer_version: str
-    target_provider: str
-    target_model: str
-    # Where the calls actually went. "default" = the provider's own vendor
-    # endpoint; "custom" = an OpenAI-compatible or remote host reached via a
-    # base URL. Defaulted so pre-0.2.0 results files still parse.
-    endpoint_kind: str = "default"
+    season: str | None = None
     difficulty: str
-    drift_cycles: int
+    drift_cycles: int = Field(ge=0)
+    cases_per_family: int = Field(ge=1)
     seed_group: str
-    case_count_per_template: int
+    compactor_provider: str
+    compactor_model: str
+    compactor_endpoint_kind: str = "default"
+    reader_provider: str
+    reader_model: str
+    reader_endpoint_kind: str = "default"
+    reader_effort: str | None = None
+    budget_tokens: int | None = None
+    controls: bool = False
+    scorer_version: str
     started_at: datetime
 
 
@@ -67,13 +81,7 @@ class RunEndEvent(BaseModel):
 
     event: Literal["run_end"] = "run_end"
     completed_at: datetime
-    overall_score: float = Field(ge=0.0, le=1.0)
-    drift_resistance: float = Field(ge=0.0, le=1.0)
-    constraint_retention: float = Field(ge=0.0, le=1.0)
-    contradiction_rate: float = Field(ge=0.0, le=1.0)
-    compression_ratio: float = Field(ge=0.0)
-    # ``None`` for legacy result files written before token telemetry shipped;
-    # a populated ``TokenUsage`` for anything produced by a recent runner.
+    metrics: RunMetrics
     token_usage: TokenUsage | None = None
     notes: list[str] = Field(default_factory=list[str])
 
@@ -114,12 +122,8 @@ class ResultsWriter:
 def iter_events(path: Path) -> Iterator[ResultEvent]:
     """Yield every event parsed from ``path``.
 
-    The final line is allowed to be truncated/partial without raising — a
-    crash or kill between ``write()`` and ``flush()`` can leave the JSONL
-    file ending mid-record, and ``--resume`` needs to recover from that by
-    silently dropping the dangling line. Corruption anywhere *earlier* in
-    the file still raises, because that indicates real damage, not an
-    interrupted append.
+    A truncated final line (a crash between ``write`` and ``flush``) is dropped
+    silently so ``--resume`` can recover; corruption anywhere earlier raises.
     """
     with path.open(encoding="utf-8") as fp:
         lines = fp.readlines()
@@ -131,12 +135,7 @@ def iter_events(path: Path) -> Iterator[ResultEvent]:
         try:
             yield _EVENT_ADAPTER.validate_json(text)
         except Exception as exc:
-            is_final_line = line_num - 1 == last_index
-            # A truncated final line lacks the trailing newline the writer
-            # appends to every complete event. Tolerate it on resume;
-            # complete mid-file events should have a newline, so any
-            # parse failure there is real corruption.
-            if is_final_line and not line.endswith("\n"):
+            if line_num - 1 == last_index and not line.endswith("\n"):
                 return
             raise ValueError(f"invalid event at {path}:{line_num}: {exc}") from exc
 
@@ -161,130 +160,67 @@ def completed_case_ids(path: Path) -> set[str]:
     }
 
 
+def sum_case_token_usage(cases: list[CaseResult]) -> TokenUsage | None:
+    total: TokenUsage | None = None
+    for case in cases:
+        total = add_usage(total, case.token_usage)
+    return total
+
+
 def to_run_result(path: Path) -> RunResult:
     """Aggregate every event in ``path`` into a :class:`RunResult`.
 
-    Raises :class:`ValueError` if there is no ``run_start`` event.
+    Raises :class:`ValueError` if there is no ``run_start`` event or the file
+    was written by a different results schema.
     """
     run_start: RunStartEvent | None = None
     cases: list[CaseResult] = []
     run_end: RunEndEvent | None = None
 
-    for event in iter_events(path):
-        if isinstance(event, RunStartEvent):
-            run_start = event
-        elif isinstance(event, CaseCompleteEvent):
-            cases.append(event.case_result)
-        else:
-            run_end = event
+    try:
+        for event in iter_events(path):
+            if isinstance(event, RunStartEvent):
+                run_start = event
+            elif isinstance(event, CaseCompleteEvent):
+                cases.append(event.case_result)
+            else:
+                run_end = event
+    except ValueError as exc:
+        raise ValueError(
+            f"{exc}\n(results files from CompactBench 0.2 and earlier use a different "
+            "format and can't be read by this version)"
+        ) from exc
 
     if run_start is None:
         raise ValueError(f"{path}: no run_start event found")
 
-    if run_end is not None:
-        end: RunEndEvent = run_end
-        completed_at = end.completed_at
-        overall_score = end.overall_score
-        drift_resistance = end.drift_resistance
-        constraint_retention = end.constraint_retention
-        contradiction_rate = end.contradiction_rate
-        compression_ratio = end.compression_ratio
-        token_usage = end.token_usage
-        notes = list(end.notes)
-    else:
-        # Run was interrupted — derive aggregates from whatever cases landed.
-        agg = aggregate_run_metrics(cases)
-        completed_at = run_start.started_at
-        overall_score = agg["overall_score"]
-        drift_resistance = agg["drift_resistance"]
-        constraint_retention = agg["constraint_retention"]
-        contradiction_rate = agg["contradiction_rate"]
-        compression_ratio = agg["compression_ratio"]
-        token_usage = sum_case_token_usage(cases)
-        notes = [INCOMPLETE_RUN_NOTE]
-
+    notes = list(run_end.notes) if run_end is not None else [INCOMPLETE_RUN_NOTE]
+    completed_at = run_end.completed_at if run_end is not None else run_start.started_at
     return RunResult(
         run_id=run_start.run_id,
         method_name=run_start.method_name,
         method_version=run_start.method_version,
-        suite_key=run_start.suite_key,
+        suite=run_start.suite,
         suite_version=run_start.suite_version,
+        season=run_start.season,
+        difficulty=run_start.difficulty,
+        drift_cycles=run_start.drift_cycles,
+        compactor_provider=run_start.compactor_provider,
+        compactor_model=run_start.compactor_model,
+        compactor_endpoint_kind=run_start.compactor_endpoint_kind,
+        reader_provider=run_start.reader_provider,
+        reader_model=run_start.reader_model,
+        reader_endpoint_kind=run_start.reader_endpoint_kind,
+        reader_effort=run_start.reader_effort,
+        seed_group=run_start.seed_group,
+        cases_per_family=run_start.cases_per_family,
+        budget_tokens=run_start.budget_tokens,
+        controls=run_start.controls,
         scorer_version=run_start.scorer_version,
-        target_provider=run_start.target_provider,
-        target_model=run_start.target_model,
-        endpoint_kind=run_start.endpoint_kind,
         started_at=run_start.started_at,
         completed_at=completed_at,
         cases=cases,
-        overall_score=overall_score,
-        drift_resistance=drift_resistance,
-        constraint_retention=constraint_retention,
-        contradiction_rate=contradiction_rate,
-        compression_ratio=compression_ratio,
-        token_usage=token_usage,
+        metrics=compute_metrics(cases),
+        token_usage=sum_case_token_usage(cases),
         notes=notes,
     )
-
-
-def sum_case_token_usage(case_results: list[CaseResult]) -> TokenUsage | None:
-    """Return the element-wise sum of every case's ``token_usage``.
-
-    Returns ``None`` when no case reported telemetry (typical for legacy files
-    or mock-only runs configured without a :class:`CountingProvider`). A mixed
-    set — some cases with telemetry, some without — rolls up to the sum of the
-    ones that did, which mildly understates the true total but is strictly
-    better than reporting no usage at all.
-    """
-    total: TokenUsage | None = None
-    for cr in case_results:
-        if cr.token_usage is None:
-            continue
-        total = cr.token_usage if total is None else total + cr.token_usage
-    return total
-
-
-#: Stable marker attached to a RunResult reconstructed from a results file that
-#: has no ``run_end`` event — i.e. the run crashed, was killed, or is still in
-#: flight. Qualification refuses to rank a run carrying it: the aggregates are
-#: derived from whichever cases happened to land, so a run that died after its
-#: easiest cases completed would otherwise publish a flattering partial score,
-#: and stopping early would be a cheap way to cherry-pick.
-INCOMPLETE_RUN_NOTE = "run_end event missing: results may be incomplete"
-
-
-def aggregate_run_metrics(case_results: list[CaseResult]) -> dict[str, float]:
-    """Compute run-level aggregate metrics from a list of case results."""
-    if not case_results:
-        # A run with no cases retained nothing — 0.0, not 1.0. The old default
-        # meant an empty or crashed run reported perfect drift resistance, which
-        # then flowed straight into elite_score as 30% of a ranking-eligible number.
-        return {
-            "overall_score": 0.0,
-            "drift_resistance": 0.0,
-            "constraint_retention": 0.0,
-            "contradiction_rate": 0.0,
-            "compression_ratio": 0.0,
-        }
-
-    def _mean(values: list[float], default: float = 0.0) -> float:
-        return sum(values) / len(values) if values else default
-
-    all_cycles = [cycle for cr in case_results for cycle in cr.cycles]
-
-    constraint_scores: list[float] = []
-    for cr in case_results:
-        for cycle in cr.cycles:
-            for item_score in cycle.scorecard.item_scores:
-                if item_score.item_type in (
-                    "locked_decision_retention",
-                    "forbidden_behavior_retention",
-                ):
-                    constraint_scores.append(item_score.score)
-
-    return {
-        "overall_score": _mean([cr.case_score for cr in case_results]),
-        "drift_resistance": _mean([cr.drift_resistance for cr in case_results], default=0.0),
-        "constraint_retention": _mean(constraint_scores),
-        "contradiction_rate": _mean([cycle.scorecard.contradiction_rate for cycle in all_cycles]),
-        "compression_ratio": _mean([cycle.scorecard.compression_ratio for cycle in all_cycles]),
-    }

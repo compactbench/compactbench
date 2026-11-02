@@ -1,8 +1,9 @@
 """Compaction artifact contract.
 
-Mirrors the JSON Schema locked in docs/architecture/decisions.md §B2.
 Every built-in and external compactor must return an instance of
-``CompactionArtifact`` that validates against this shape.
+``CompactionArtifact``. The reader sees it rendered as plain text by
+:func:`compactbench.rendering.render_artifact`; the cycle's token budget is
+measured on that rendering, so the field limits here are only sanity caps.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ class CompactionArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
     schema_version: str = Field(default=ARTIFACT_SCHEMA_VERSION, alias="schemaVersion")
-    summary_text: Annotated[str, StringConstraints(max_length=8000)] = Field(
+    summary_text: Annotated[str, StringConstraints(max_length=200_000)] = Field(
         default="", alias="summaryText"
     )
     structured_state: StructuredState = Field(default_factory=StructuredState)

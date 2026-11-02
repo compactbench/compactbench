@@ -1,60 +1,24 @@
-"""Scoring engine: checks, weighted aggregation, drift, contradictions, compression.
+"""Scoring: mechanical answer checks and run-level metrics.
 
-See docs/architecture/decisions.md §B3 for formulas and weights.
-Implemented in WO-004.
+See docs/methodology.md for every definition.
 """
 
-from compactbench.scoring.checks import (
-    contains_normalized,
-    exact,
-    forbidden_absent,
-    run_check,
-    set_match,
+from compactbench.scoring.answers import (
+    NOT_STATED_TOKEN,
+    counted,
+    is_not_stated,
+    normalize,
+    option_letter,
+    score_probe,
 )
-from compactbench.scoring.compression import (
-    artifact_tokens,
-    compression_ratio,
-    count_tokens,
-    transcript_tokens,
-)
-from compactbench.scoring.contradictions import (
-    contradiction_rate,
-    count_violations,
-    response_violates,
-)
-from compactbench.scoring.diagnostics import ItemTypeBreakdown, item_type_breakdown
-from compactbench.scoring.drift import (
-    MIN_CYCLES_FOR_DRIFT,
-    compaction_attributable_drift,
-    drift_deltas,
-    drift_resistance,
-    is_measurable,
-)
-from compactbench.scoring.errors import ScoringError
-from compactbench.scoring.scorer import WEIGHTS, score_cycle, score_item
+from compactbench.scoring.metrics import compute_metrics
 
 __all__ = [
-    "MIN_CYCLES_FOR_DRIFT",
-    "WEIGHTS",
-    "ItemTypeBreakdown",
-    "ScoringError",
-    "artifact_tokens",
-    "compaction_attributable_drift",
-    "compression_ratio",
-    "contains_normalized",
-    "contradiction_rate",
-    "count_tokens",
-    "count_violations",
-    "drift_deltas",
-    "drift_resistance",
-    "exact",
-    "forbidden_absent",
-    "is_measurable",
-    "item_type_breakdown",
-    "response_violates",
-    "run_check",
-    "score_cycle",
-    "score_item",
-    "set_match",
-    "transcript_tokens",
+    "NOT_STATED_TOKEN",
+    "compute_metrics",
+    "counted",
+    "is_not_stated",
+    "normalize",
+    "option_letter",
+    "score_probe",
 ]

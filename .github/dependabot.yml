@@ -1,7 +1,7 @@
 version: 2
 updates:
-  # Python package dependencies defined in pyproject.toml.
-  - package-ecosystem: "pip"
+  # Python dependencies (pyproject.toml + uv.lock).
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -13,12 +13,18 @@ updates:
       prefix: "deps"
       include: "scope"
     groups:
-      # Batch all non-security Python updates into a single weekly PR to reduce noise.
+      # One weekly PR for routine version bumps.
       python-dependencies:
+        applies-to: version-updates
         patterns: ["*"]
         update-types:
           - "minor"
           - "patch"
+      # Security bumps of transitive dependencies used to arrive as one PR each;
+      # batch them so the queue stays reviewable.
+      python-security:
+        applies-to: security-updates
+        patterns: ["*"]
     labels:
       - "dependencies"
       - "python"

@@ -7,6 +7,145 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Benchmark v2 — **scorer_version 2.0.0 → 3.0.0**. Case generation, the compaction loop and
+scoring are rewritten. Scores are not comparable with 0.2; v1 leaderboard rows are retired
+to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
+
+### Breaking
+
+- **Compactor interface.** `compact(self, request: CompactionRequest)` replaces
+  `compact(self, transcript, config=None, previous_artifact=None)`. After the first cycle,
+  `request.turns` holds only the turns since the last compaction and
+  `request.previous_artifact` holds the method's previous output — the earlier turns are
+  never resent. `config` moved to `self.config`. Classes with the old signature fail to
+  load with a migration message. LangChain and LlamaIndex adapters follow the same shape
+  (the previous artifact arrives as a leading system message).
+- **YAML templates and the DSL are removed.** Cases come from scenario families
+  (`compactbench.scenarios`); suites are `starter` and `practice`. `generate` takes
+  `--family`; `run` takes `--cases` instead of `--case-count`; `--benchmarks-dir` is gone.
+- **Results files use a new format** (`results_schema: "2"`). 0.2 files can't be read.
+- **Submission `config.yaml` is gone.** Seasons pin every evaluation setting; ranked
+  submissions are paused while the v2 evaluation pipeline is finished.
+
+### Added
+
+- **Scenario families**: `buried_constraint`, `decision_override`, `entity_confusion`,
+  `reference_resolution`, `numeric_precision`, `conditional_scope`, `task_continuity` and
+  `provenance_authority` — long, multi-cycle conversations (up to ~32k-token openings and
+  4 drift cycles at `elite`) where later cycles add and lift rules, override and revert
+  decisions, hand over ownership, switch choices by reference, correct exact figures,
+  change a rule's scope, move tickets across a board, and slip contradicting claims in
+  through fetched documents. On-topic procedural
+  filler (code, tests, logs, API responses, git history, metrics, notes), decoys built from
+  the case, and "never settled" questions. Deterministic and platform-stable.
+- **Structured probes, scored mechanically** — single choice, select-all, exact value
+  (money, date, number, version, identifier, text normalization) and list. No LLM judge;
+  hedging can't pay.
+- **A separate reader model** (`--reader-provider` / `--reader-model`) answers each cycle's
+  probes in batches, from the artifact only, fenced as untrusted data, with a JSON schema
+  where the provider supports one.
+- **Metrics**: family-balanced score with a 95% bootstrap interval, score by cycle, drift
+  resistance and decay on carried probes, stale-answer rate, trap rate (decoy-only
+  answers: other projects' rules, rejected proposals, injected values), hallucination rate,
+  per-family and per-category breakdowns, artifact tokens. Abstention probes count only
+  when missed, so an empty artifact scores 0.
+- **Controls on the same cases** (`--controls`): oracle and null scores per cycle and a
+  normalized score per family. The `oracle`, `null` and `truncate-last-n` built-ins are
+  ported to the new loop (`truncate-last-n` now keeps as many recent turns as fit the budget).
+- **Token budgets** (`--budget`, default 2048): over-budget artifacts are cut before the
+  reader sees them and flagged; ranked runs reject them.
+- **Traces** (`--traces`): every artifact, question and raw reader reply, per cycle.
+- **Seasons** (`--season`): a file pinning suite, difficulty, cycles, cases, budget, reader
+  and controls, with fixed or fresh-per-run sampling; `qualify --season` checks a run
+  against one.
+- **Suite packs** (`--suite-pack`): load private families and worlds — vocabulary,
+  filler and the wording of every sentence the families write (`Lexicon.phrases`) — and
+  spread a suite's cases across several worlds (`Suite.settings`).
+- **Mixed sessions** (`mixed`): every family in one conversation, sharing people,
+  components and one token budget; probes are tagged with their family, so scores still
+  break down per family. `practice` (and ranked Elite) are mixed sessions; the new
+  `drills` suite keeps one family per case for focused work. Families that draw facts
+  from the same vocabulary pool get disjoint shares of it.
+- **Sandboxed ranked evaluation.** `run --sandbox-image` runs the method in a container
+  (no network but the model proxy, read-only filesystem, no capabilities, resource
+  limits) and talks to it one request at a time over stdin/stdout; submitted code is never
+  imported by the harness. `compactbench proxy` holds the provider key, allows only
+  declared models and model-call endpoints, refuses streaming, enforces a token cap and
+  logs metadata only, and refuses requests that would have the provider reach the
+  internet for the method (server-side tools, MCP servers, content by URL). Keys are
+  sealed to the season's public key (X25519, HKDF-SHA256, AES-256-GCM), bound to their
+  submission. A datasheet (`docs/datasheet.md`).
+- **Published results are redacted** (`compactbench.redaction`). Results files from a
+  hidden suite carry probe keys named after the private world's people, rules and
+  tickets, and each cycle carries the method's own warning text. Published copies (ranked
+  submissions and baselines) replace keys with salted hashes — equal within a case, so
+  every metric is unchanged — and drop method text; the unredacted results are sealed
+  with the traces. A test fails if an unredacted hidden-suite file is committed.
+- **Any model.** Hosted OpenAI-compatible providers `openrouter`, `deepseek`, `mistral`,
+  `together`, `fireworks`, `xai` and `gemini` (keys from `COMPACTBENCH_<NAME>_API_KEY`),
+  and `custom`: a submitter's own OpenAI-compatible HTTPS endpoint, reached only through
+  the proxy and only at a public address, with an optional display name shown on the
+  leaderboard next to a "custom endpoint" label.
+- `Suite.probes_per_case`: keep a fixed, family-balanced subset of each case's probes,
+  asked at every compaction, so a run can afford many more cases. The score interval
+  resamples whole cases, so a mixed case's families move together.
+- `scripts/run_baselines.py` (season roster, `--parallel`, `--estimate`) and
+  `scripts/season_calibration.py` (per-family ceiling and floor for a season).
+- Maintainer tools: `scripts/item_analysis.py` (per-template validity, difficulty and
+  discrimination), `scripts/qa_sheet.py` (a human review sheet for a suite's questions),
+  `scripts/reader_robustness.py` (re-read traced artifacts with a second reader and
+  compare method orderings).
+- Per-probe control scores (`oracle_score`, `null_score` on each probe result), so any
+  grouping has its own ceiling and floor.
+- **Season 1** (`seasons/s1.yaml`): Elite 2.0.1, 4 drift cycles, 48 mixed cases of 20 probes,
+  1,024-token budget (Tight), `claude-haiku-5-5` reader at high effort, fresh sampling;
+  controls are measured once per season on a calibration sample rather than on every run.
+- **`sectioned-summary`** built-in: the multi-section summary format coding agents
+  commonly compact into, with a generic prompt. **`extractive`**: keeps pattern-matched
+  state sentences, newest first within the budget, with no model calls.
+- Larger public vocabulary (26 rules, 25 decision topics, 14 facts, 15 ticket titles) for
+  more varied cases.
+- **`anthropic-compaction`** built-in: Anthropic's server-side on-demand compaction
+  (beta `compact-2026-09-04`) run as shipped — default prompt, compacting again from the
+  signed block each cycle. OpenAI's Responses compaction returns an encrypted item that a
+  reader from another provider can't read, so it has no built-in.
+- **Reader effort** (`--reader-effort`, and `reader.effort` in seasons) is recorded with
+  the run and is part of the leaderboard segment.
+- Built-in methods size their output for the budget (with room for thinking), trim
+  their own artifact to fit it, oldest entries first, and use `low` reasoning effort
+  unless `effort` is set in their config.
+- `run --method-config` passes a JSON object to the method as `self.config`.
+- `compactbench.compactors.fit_to_budget` is public: trims an artifact to the token budget
+  the way the built-ins do. The submission template uses it, asks for low reasoning effort
+  and leaves output room for thinking, so it qualifies out of the box.
+- `families list`; `generate --text` prints a readable case.
+
+### Changed
+
+- Qualification: control arms never ranked; incomplete runs, runs without drift cycles or
+  a budget, over-budget cycles, more than 5% unusable reader answers, and readers on a
+  custom endpoint are rejected; season settings must match.
+- Ranking: by score within suite, scorer, reader and budget; ties on drift resistance,
+  then stale-answer rate. A rank is one plus the number of rows whose 95% interval lies
+  entirely above, so rows that can't be told apart share a rank. Leaderboard rows carry CIs, per-family scores and score by cycle.
+- `--estimate` projects the method, reader and control costs separately.
+- Rate-limited calls (HTTP 429) get up to 8 attempts and wait at least the server's
+  `retry-after`.
+- Providers no longer send sampling parameters by default, and gain `json_schema` and
+  `reasoning_effort` on `CompletionRequest`. The Anthropic SDK moves to 2.x (API version
+  `2026-10-21`); 529 responses are now retried; refusals and empty token-limit stops raise
+  clear errors. Cost catalogue refreshed.
+- Dependabot uses the `uv` ecosystem and batches security updates.
+
+### Removed
+
+- `compactbench.dsl`, `compactbench.engine`, the v1 scorer (`checks`, `contradictions`,
+  `drift`, `compression`, `diagnostics`), model-generated continuation turns, and
+  `benchmarks/public` / `benchmarks/schemas`.
+- The pull-request submission flow (`config.yaml`, `validate_submissions.py`,
+  `validate_submission_config.py`); ranked evaluation stays paused until the v2 pipeline
+  opens.
+
 ## [0.2.0] — 2026-08-24
 
 ### Scoring integrity — **scorer_version 1.0.0 → 2.0.0**

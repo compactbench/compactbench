@@ -5,7 +5,9 @@ from compactbench.providers.base import (
     CompletionRequest,
     CompletionResponse,
     Provider,
+    ReasoningEffort,
 )
+from compactbench.providers.compatible import HOSTED_PROVIDERS, HostedCompatibleProvider
 from compactbench.providers.counting import CountingProvider
 from compactbench.providers.errors import (
     ProviderError,
@@ -25,6 +27,7 @@ _REGISTRY: dict[str, type[Provider]] = {
     OllamaProvider.key: OllamaProvider,
     AnthropicProvider.key: AnthropicProvider,
     OpenAIProvider.key: OpenAIProvider,
+    **{cls.key: cls for cls in HOSTED_PROVIDERS},
 }
 
 
@@ -48,12 +51,14 @@ __all__ = [
     "CountingProvider",
     "GoogleAIStudioProvider",
     "GroqProvider",
+    "HostedCompatibleProvider",
     "MockProvider",
     "OllamaProvider",
     "OpenAIProvider",
     "Provider",
     "ProviderError",
     "ProviderResponseError",
+    "ReasoningEffort",
     "UnknownProviderError",
     "get_provider_cls",
     "list_providers",

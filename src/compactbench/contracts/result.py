@@ -1,12 +1,12 @@
 """Scoring and run-result contracts.
 
-Metric shapes mirror the formulas locked in docs/architecture/decisions.md §B3.
+Every number here is derived mechanically from structured probe answers; see
+``docs/methodology.md`` for the definitions.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,86 +50,149 @@ class TokenUsage(BaseModel):
         )
 
 
-class ItemScore(BaseModel):
+def add_usage(a: TokenUsage | None, b: TokenUsage | None) -> TokenUsage | None:
+    """Sum two optional usages, keeping ``None`` only when both are ``None``."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a + b
+
+
+class ProbeResult(BaseModel):
+    """How the reader did on one probe at one cycle. Holds no question text."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    item_key: str
-    item_type: str
+    key: str
+    category: str
+    format: str
+    origin_cycle: int = Field(ge=0)
     score: float = Field(ge=0.0, le=1.0)
-    weight: float = Field(gt=0.0)
-    check_type: str
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class Scorecard(BaseModel):
-    """Per-cycle aggregated scores."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    cycle_number: int = Field(ge=0)
-    cycle_score: float = Field(ge=0.0, le=1.0)
-    penalized_cycle_score: float = Field(ge=0.0, le=1.0)
-    contradiction_rate: float = Field(ge=0.0, le=1.0)
-    compression_ratio: float = Field(ge=0.0)
-    item_scores: list[ItemScore]
+    answered: bool = Field(description="False when the reader gave no parseable answer.")
+    stale: bool = Field(default=False, description="The answer matched a superseded value.")
+    abstained: bool = Field(default=False, description="The reader answered 'not stated'.")
+    expects_abstention: bool = Field(default=False)
+    stale_possible: bool = Field(default=False, description="The probe had superseded answers.")
+    trapped: bool = Field(default=False, description="The answer matched a decoy-only value.")
+    trap_possible: bool = Field(default=False, description="The probe offered decoy answers.")
+    family: str = Field(default="", description="Asking family in a mixed case; else empty.")
+    oracle_score: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Same probe answered from the full conversation."
+    )
+    null_score: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Same probe answered from nothing."
+    )
 
 
 class CycleResult(BaseModel):
+    """One compaction plus the reader's answers to that cycle's probes."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    cycle_number: int = Field(ge=0)
-    scorecard: Scorecard
-    drift_delta: float | None = None
+    cycle: int = Field(ge=0)
+    score: float = Field(ge=0.0, le=1.0)
+    probe_results: list[ProbeResult]
+    source_tokens: int = Field(ge=0, description="Tokens in the full conversation so far.")
+    input_tokens: int = Field(ge=0, description="Tokens the compactor received this cycle.")
+    artifact_tokens: int = Field(ge=0, description="Tokens of the rendered artifact.")
+    budget_tokens: int | None = Field(default=None, ge=1)
+    over_budget: bool = False
     latency_ms: int | None = None
-    # ``None`` means "not recorded for this cycle" and is distinct from a
-    # ``TokenUsage`` with all-zero fields (which means "zero tokens actually
-    # billed" — e.g. cache-only or offline providers). Older ``results.jsonl``
-    # files from before token telemetry existed will deserialize with ``None``.
-    token_usage: TokenUsage | None = None
-    # Warnings the compaction method reported for this cycle, copied off the
-    # artifact so they survive into results.jsonl. Artifacts themselves are not
-    # persisted, so without this a method's own diagnostics were unrecoverable:
-    # a submitter whose summary got truncated to fit the artifact limit, or whose
-    # JSON state failed to parse, had no way to see it from their results file —
-    # only an unexplained low score. Empty list means "the method reported none".
-    warnings: list[str] = Field(default_factory=list)
+    compactor_usage: TokenUsage | None = None
+    reader_usage: TokenUsage | None = None
+    control_usage: TokenUsage | None = None
+    oracle_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    null_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    warnings: list[str] = Field(
+        default_factory=list, description="The method's own warnings, copied off the artifact."
+    )
+
+    @property
+    def compression_ratio(self) -> float:
+        return self.source_tokens / max(self.artifact_tokens, 1)
 
 
 class CaseResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     case_id: str
-    template_key: str
+    family: str
     seed: int
     cycles: list[CycleResult]
-    case_score: float = Field(ge=0.0, le=1.0)
-    drift_resistance: float = Field(ge=0.0, le=1.0)
+    score: float = Field(ge=0.0, le=1.0, description="Mean probe score across every cycle.")
     token_usage: TokenUsage | None = None
 
 
+class FamilyMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    score: float = Field(ge=0.0, le=1.0)
+    normalized_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    oracle_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    null_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    cases: int = Field(ge=0)
+    probes: int = Field(ge=0)
+
+
+class CategoryMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    score: float = Field(ge=0.0, le=1.0)
+    probes: int = Field(ge=0)
+
+
+class RunMetrics(BaseModel):
+    """Run-level aggregates. ``score`` is the headline number."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    score: float = Field(ge=0.0, le=1.0, description="Family-balanced mean probe score.")
+    score_ci_low: float = Field(ge=0.0, le=1.0)
+    score_ci_high: float = Field(ge=0.0, le=1.0)
+    normalized_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    by_family: dict[str, FamilyMetrics] = Field(default_factory=dict)
+    by_category: dict[str, CategoryMetrics] = Field(default_factory=dict)
+    by_cycle: list[float] = Field(default_factory=list[float])
+    drift_resistance: float = Field(ge=0.0, le=1.0)
+    decay: float = Field(ge=-1.0, le=1.0, description="Cycle-0 minus final-cycle score.")
+    stale_rate: float = Field(ge=0.0, le=1.0)
+    trap_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    hallucination_rate: float = Field(ge=0.0, le=1.0)
+    compression_ratio: float = Field(ge=0.0)
+    mean_artifact_tokens: float = Field(ge=0.0)
+    budget_violations: int = Field(ge=0)
+    reader_error_rate: float = Field(ge=0.0, le=1.0)
+
+
 class RunResult(BaseModel):
-    """Top-level run artifact. Serialized one per line in results.jsonl."""
+    """Run metadata, every case result, and the aggregates computed from them."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     run_id: str
     method_name: str
     method_version: str
-    suite_key: str
+    suite: str
     suite_version: str
+    season: str | None = None
+    difficulty: str
+    drift_cycles: int = Field(ge=0)
+    compactor_provider: str
+    compactor_model: str
+    compactor_endpoint_kind: str = "default"
+    reader_provider: str
+    reader_model: str
+    reader_endpoint_kind: str = "default"
+    reader_effort: str | None = None
+    seed_group: str = "default"
+    cases_per_family: int = Field(default=0, ge=0)
+    budget_tokens: int | None = None
+    controls: bool = False
     scorer_version: str
-    target_provider: str
-    target_model: str
-    # See RunStartEvent.endpoint_kind. Carried through to the leaderboard
-    # segment so self-hosted runs are never ranked against vendor-hosted ones.
-    endpoint_kind: str = "default"
     started_at: datetime
     completed_at: datetime
     cases: list[CaseResult]
-    overall_score: float = Field(ge=0.0, le=1.0)
-    drift_resistance: float = Field(ge=0.0, le=1.0)
-    constraint_retention: float = Field(ge=0.0, le=1.0)
-    contradiction_rate: float = Field(ge=0.0, le=1.0)
-    compression_ratio: float = Field(ge=0.0)
+    metrics: RunMetrics
     token_usage: TokenUsage | None = None
     notes: list[str] = Field(default_factory=list)

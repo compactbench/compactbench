@@ -1,56 +1,34 @@
 # Submitting to the leaderboard
 
-Submissions are evaluated against a **hidden** ranked benchmark set by a maintainer-operated runner. This keeps the ranking defensible against overfitting.
+!!! note "Ranked submissions are paused"
+    Ranked evaluation is paused while the v2 evaluation pipeline is finished. This page
+    will describe how to submit when it reopens. Until then, everything below works today.
 
-## Overview
+Ranked scores will come from the **hidden Elite set**, sampled fresh for every ranked run
+from private worlds at the same difficulty as the public `practice` suite. There is
+nothing fixed to memorize.
 
-1. Write and test your compactor against the public `elite_practice` suite.
-2. Open a PR adding your method source to `submissions/<your-handle>/<method-name>/`.
-3. A maintainer labels the PR for evaluation.
-4. The self-hosted runner executes your method against Elite Ranked cases.
-5. Scores are posted back to the PR as a comment.
-6. If your method qualifies, the PR is merged and the leaderboard updates.
+## Build and test locally
 
-## Submission directory layout
+A method is a Python class that subclasses `compactbench.compactors.Compactor` — see
+[Writing a compactor](writing-a-compactor.md). Develop against the public `practice` suite
+with any model you like: a hosted one, a local one through Ollama, or your own
+OpenAI-compatible server.
 
+```bash
+compactbench run --method method.py:MyCompactor --suite practice --cases 4 \
+                 --provider openrouter --model qwen/qwen3-235b \
+                 --reader-provider anthropic --reader-model claude-haiku-5-5 \
+                 --reader-effort high --controls --output results.jsonl
+compactbench qualify --results results.jsonl
 ```
-submissions/
-└─ your-handle/
-   └─ method-name/
-      ├─ method.py          # subclass of Compactor, exports one public class
-      ├─ config.yaml        # method config (provider, model, compression tier, any method-specific knobs)
-      ├─ requirements.txt   # third-party pip dependencies beyond compactbench[providers]
-      └─ README.md          # one page on your approach
-```
 
-A starter scaffold lives at `submissions/_template/`.
+`qualify` applies the same floors the leaderboard does and lists every reason a run would
+be rejected. Ranked runs pin every setting — suite, difficulty, compactions, cases, token
+budget, and the reader model and its effort — through the season (`seasons/s1.yaml`).
 
-## Qualification requirements
+## Rules
 
-Your submission must pass all of these to land on the leaderboard:
-
-- Implements `Compactor` correctly; returns a valid `CompactionArtifact` on every call.
-- Declares a compression tier (`Elite-Light` / `Elite-Mid` / `Elite-Aggressive`) and clears the floor (≥ 2× / 4× / 8×).
-- Completes all configured cases and all configured drift cycles without errors.
-- Contradiction rate ≤ 0.10.
-- No single Elite family drops below 0.40 case-level pass rate (category diversity guard).
-- Dependencies are pinned in `requirements.txt` and install from PyPI.
-
-Full ranking formula and qualification details: [methodology](methodology.md).
-
-## What gets published
-
-On merge, the leaderboard publishes:
-
-- Your chosen method name
-- Your GitHub handle or declared org name
-- Overall, drift, constraint retention, contradiction, compression, and per-family scores
-- Benchmark version, scorer version, target model, method version
-
-The hidden test content itself is never published.
-
-## Resubmitting
-
-Push new commits to the same PR. Re-evaluation is gated on a maintainer adding the `reevaluate` label so we control runner spend.
-
-New versions of an already-ranked method should go under a new subfolder (`method-name-v2`) so the old entry stays pinned to its benchmark version.
+- Don't submit a method that has seen hidden content, or that was tuned on hidden results.
+- A method must not try to detect or fingerprint ranked cases.
+- Your method's source is published with its results — that is the audit trail.

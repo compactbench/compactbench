@@ -1,4 +1,4 @@
-"""Groq Cloud provider (Llama 3.3 70B, Kimi K2, etc.).
+"""Groq Cloud provider (GPT-OSS 120B / 20B, Qwen3.8 27B, etc.).
 
 Requires ``compactbench[providers]`` (installs the ``groq`` SDK) and a
 ``COMPACTBENCH_GROQ_API_KEY`` environment variable.
@@ -71,10 +71,20 @@ class GroqProvider(Provider):
         kwargs: dict[str, Any] = {
             "model": request.model,
             "messages": messages,
-            "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         }
-        if request.response_format:
+        if request.temperature is not None:
+            kwargs["temperature"] = request.temperature
+        # Groq's `json_schema` format is best-effort by default (`strict` is
+        # only honoured on some models), and only some models accept it at all;
+        # for the rest pass `response_format={"type": "json_object"}` instead.
+        # `reasoning_effort` is ignored: its accepted values vary per model.
+        if request.json_schema is not None:
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "response", "schema": request.json_schema},
+            }
+        elif request.response_format:
             kwargs["response_format"] = request.response_format
 
         async def _call() -> Any:

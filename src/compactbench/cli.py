@@ -1,23 +1,21 @@
-"""CompactBench command-line interface.
-
-Implemented incrementally. Each command raises ``NotImplementedError`` until its
-backing workorder lands. See docs/architecture/workorders.md.
-"""
+"""CompactBench command-line interface."""
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from compactbench import __version__
-from compactbench.config import default_benchmarks_dir, load_dotenv
+from compactbench.config import load_dotenv
 
 app = typer.Typer(
     name="compactbench",
-    help="Open benchmark for AI conversation compaction methods.",
+    help="The benchmark for LLM context compaction.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -44,89 +42,226 @@ def main(
 ) -> None:
     """CompactBench CLI."""
     # Runs before any subcommand, so providers constructed downstream see the
-    # variables. `.env` is documented as the way to supply API keys; without
-    # this it had no effect on any provider.
+    # variables. `.env` is documented as the way to supply API keys.
     load_dotenv()
+
+
+def _difficulty(value: str | None) -> Any:
+    from compactbench.scenarios import Difficulty
+
+    if value is None:
+        return None
+    try:
+        return Difficulty(value.lower())
+    except ValueError as exc:
+        console.print(
+            f"[red]unknown difficulty {value!r}. Valid: {[d.value for d in Difficulty]}[/red]"
+        )
+        raise typer.Exit(code=1) from exc
+
+
+def _effort(value: str | None) -> Any:
+    if value is None:
+        return None
+    if value not in ("low", "medium", "high"):
+        console.print(f"[red]unknown reader effort {value!r}. Valid: low, medium, high[/red]")
+        raise typer.Exit(code=1)
+    return value
+
+
+def _load_pack(path: Path | None) -> None:
+    from compactbench.scenarios import load_suite_pack
+
+    if path is None:
+        return
+    try:
+        suites = load_suite_pack(path)
+    except ImportError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"loaded suite pack {path}: {', '.join(s.key for s in suites)}")
 
 
 @app.command()
 def run(
     method: str = typer.Option(
-        ..., "--method", "-m", help="Method id: 'built-in:<key>' or '<path.py>:<ClassName>'."
+        ..., "--method", "-m", help="'built-in:<key>' or '<path.py>:<ClassName>'."
     ),
-    suite: str = typer.Option("starter", "--suite", "-s", help="Benchmark suite key."),
-    provider: str = typer.Option("mock", "--provider", "-p", help="Model provider key."),
-    model: str = typer.Option("mock-deterministic", "--model", help="Provider-specific model key."),
-    difficulty: str = typer.Option("medium", "--difficulty"),
-    drift_cycles: int = typer.Option(2, "--drift-cycles", min=0, max=5),
-    case_count: int = typer.Option(
-        5,
-        "--case-count",
-        min=1,
-        help=(
-            "Cases per template. 5 is enough for per-family std-dev to be "
-            "meaningful; 20+ is standard for ranked submissions. Lower values "
-            "run faster but give noisy scores."
-        ),
+    suite: str = typer.Option("starter", "--suite", "-s", help="Suite key (see `suites list`)."),
+    provider: str = typer.Option(
+        "mock", "--provider", "-p", help="Provider the method uses for its own calls."
+    ),
+    model: str = typer.Option("mock-deterministic", "--model", help="Model the method uses."),
+    reader_provider: str | None = typer.Option(
+        None, "--reader-provider", help="Provider for the reader (default: --provider)."
+    ),
+    reader_model: str | None = typer.Option(
+        None, "--reader-model", help="Model that answers the probes (default: --model)."
+    ),
+    reader_effort: str | None = typer.Option(
+        None,
+        "--reader-effort",
+        help="Reasoning effort for the reader (low|medium|high), where the provider supports it.",
+    ),
+    budget: int = typer.Option(
+        2048,
+        "--budget",
+        min=0,
+        help="Token budget for each artifact (cl100k_base). 0 disables the budget.",
+    ),
+    difficulty: str | None = typer.Option(
+        None, "--difficulty", help="Override the suite's difficulty: easy|medium|hard|elite."
+    ),
+    drift_cycles: int | None = typer.Option(
+        None, "--drift-cycles", min=0, max=8, help="Override the number of drift cycles."
+    ),
+    cases: int | None = typer.Option(
+        None, "--cases", min=1, help="Cases per family (default: the suite's)."
     ),
     seed_group: str = typer.Option("default", "--seed-group"),
-    benchmarks_dir: Path = typer.Option(
-        default_benchmarks_dir(),
-        "--benchmarks-dir",
-        help="Directory containing benchmark suites.",
+    controls: bool = typer.Option(
+        False,
+        "--controls/--no-controls",
+        help="Also answer every probe from the full conversation and from nothing, "
+        "so the run carries its own ceiling and floor.",
     ),
     output: Path = typer.Option(Path("results.jsonl"), "--output", "-o"),
-    resume: bool = typer.Option(
-        False, "--resume", help="Continue from existing output file (skip completed cases)."
+    traces: Path | None = typer.Option(
+        None,
+        "--traces",
+        help="Write full per-cycle traces (conversation, artifacts, answers) here. "
+        "Keep private for hidden suites.",
     ),
-    concurrency: int = typer.Option(
-        4,
-        "--concurrency",
-        min=1,
-        max=32,
-        help=(
-            "Maximum concurrent cases. Set to 1 for strict serial execution. "
-            "Higher values give near-linear wall-clock speedup until the provider's "
-            "rate limit dominates; 4 is a safe default on most free tiers."
-        ),
+    resume: bool = typer.Option(False, "--resume", help="Skip cases already in --output."),
+    concurrency: int = typer.Option(4, "--concurrency", min=1, max=32),
+    season: Path | None = typer.Option(
+        None, "--season", help="Season file; pins every setting except method and its model."
+    ),
+    suite_pack: Path | None = typer.Option(
+        None, "--suite-pack", help="Private suite pack (a .py file) to load first."
     ),
     estimate: bool = typer.Option(
-        False,
-        "--estimate",
-        help=(
-            "Print projected API calls, tokens, and dollar cost without making any "
-            "provider calls. Use this to size a run before committing real quota."
-        ),
+        False, "--estimate", help="Print projected calls, tokens and cost; make no API calls."
+    ),
+    method_config: str = typer.Option(
+        "{}", "--method-config", help="JSON object passed to the method as self.config."
+    ),
+    sandbox_image: str | None = typer.Option(
+        None,
+        "--sandbox-image",
+        help="Run the method inside this container image instead of importing it "
+        "(ranked evaluation). --method is resolved inside the container.",
+    ),
+    sandbox_network: str = typer.Option(
+        "none", "--sandbox-network", help="Docker network the sandbox joins (the model proxy's)."
+    ),
+    sandbox_runtime: str | None = typer.Option(
+        None, "--sandbox-runtime", help="Container runtime for the sandbox, e.g. runsc (gVisor)."
+    ),
+    sandbox_endpoint_kind: str = typer.Option(
+        "default",
+        "--sandbox-endpoint-kind",
+        help="'custom' when the method's calls go to the submitter's own endpoint.",
+    ),
+    sandbox_env: list[str] = typer.Option(
+        [],
+        "--sandbox-env",
+        help="KEY=VALUE set in the sandbox, e.g. ANTHROPIC_BASE_URL=http://proxy:8080/anthropic.",
+    ),
+    declared_name: str | None = typer.Option(
+        None, "--method-name", hidden=True, help="Sandbox mode: record the run under this name."
+    ),
+    declared_version: str | None = typer.Option(
+        None, "--method-version", hidden=True, help="Sandbox mode: and this version."
     ),
 ) -> None:
-    """Run a compaction method against a benchmark suite."""
+    """Run a compaction method against a suite."""
     import asyncio
 
-    from compactbench.dsl import DifficultyLevel
     from compactbench.runner import RunArgs, RunnerError, run_experiment
 
-    try:
-        diff = DifficultyLevel(difficulty.lower())
-    except ValueError as exc:
+    _load_pack(suite_pack)
+    season_key: str | None = None
+    budget_tokens: int | None = budget or None
+    level = _difficulty(difficulty)
+    if season is not None:
+        from compactbench.leaderboard import load_season
+
+        pinned = load_season(season)
+        if pinned.suite_pack:
+            _load_pack(season.parent / pinned.suite_pack)
+        season_key = pinned.key
+        suite, level = pinned.suite, pinned.difficulty
+        drift_cycles, cases = pinned.drift_cycles, pinned.cases_per_family
+        budget_tokens, controls = pinned.budget_tokens, pinned.controls
+        reader_provider, reader_model = pinned.reader.provider, pinned.reader.model
+        reader_effort = pinned.reader.effort
+        if pinned.sampling == "fresh":
+            # Resuming continues the sample the run started with; a new run draws its own.
+            from compactbench.runner.persistence import read_run_start
+
+            existing = read_run_start(output) if resume and output.exists() else None
+            seed_group = (
+                existing.seed_group
+                if existing is not None
+                else f"{pinned.seed_group}/{secrets.token_hex(8)}"
+            )
+        else:
+            seed_group = pinned.seed_group
         console.print(
-            f"[red]unknown difficulty {difficulty!r}. "
-            f"Valid: {[d.value for d in DifficultyLevel]}[/red]"
+            f"season {pinned.key}: suite={suite} difficulty={level.value} drift_cycles={drift_cycles} "
+            f"cases={cases} budget={budget_tokens} reader={reader_provider}/{reader_model} "
+            f"controls={controls}"
         )
-        raise typer.Exit(code=1) from exc
+
+    import json
+
+    parsed_config = json.loads(method_config)
+    if not isinstance(parsed_config, dict):
+        raise typer.BadParameter("--method-config must be a JSON object")
+
+    sandbox = None
+    if sandbox_image is not None:
+        from compactbench.sandbox import Sandbox
+
+        pairs: list[tuple[str, str]] = []
+        for item in sandbox_env:
+            key, sep, value = item.partition("=")
+            if not sep or not key:
+                raise typer.BadParameter(f"--sandbox-env expects KEY=VALUE, got {item!r}")
+            pairs.append((key, value))
+        sandbox = Sandbox.docker(
+            sandbox_image, network=sandbox_network, env=pairs, runtime=sandbox_runtime
+        )
+    if (declared_name is None) != (declared_version is None):
+        raise typer.BadParameter("--method-name and --method-version go together")
+    if declared_name is not None and sandbox is None:
+        raise typer.BadParameter("--method-name only applies with --sandbox-image")
+    declared = (declared_name, declared_version) if declared_name and declared_version else None
 
     args = RunArgs(
         method_spec=method,
-        suite_key=suite,
+        suite=suite,
         provider_key=provider,
         model=model,
-        difficulty=diff,
-        drift_cycles=drift_cycles,
-        case_count_per_template=case_count,
-        seed_group=seed_group,
-        benchmarks_dir=benchmarks_dir,
         output_path=output,
+        reader_provider_key=reader_provider,
+        reader_model=reader_model,
+        reader_effort=_effort(reader_effort),
+        difficulty=level,
+        drift_cycles=drift_cycles,
+        cases_per_family=cases,
+        seed_group=seed_group,
+        budget_tokens=budget_tokens,
+        controls=controls,
+        traces_path=traces,
         resume=resume,
         concurrency=concurrency,
+        season=season_key,
+        sandbox=sandbox,
+        sandbox_endpoint_kind=sandbox_endpoint_kind,
+        declared_method=declared,
+        method_config=cast("dict[str, Any]", parsed_config),
     )
 
     if estimate:
@@ -144,105 +279,79 @@ def run(
 
 
 def _print_estimate(args: Any) -> None:
-    """Load the suite, project cost + tokens, and print the report. No API calls."""
-    from compactbench.dsl import TemplateError, load_suite, validate_template
     from compactbench.runner.estimate import estimate_run, format_estimate
-
-    suite_dir = args.benchmarks_dir / args.suite_key
-    if not suite_dir.is_dir():
-        console.print(f"[red]suite directory not found: {suite_dir}[/red]")
-        raise typer.Exit(code=1)
+    from compactbench.scenarios import expand_suite, get_suite
 
     try:
-        templates = load_suite(suite_dir)
-        for t in templates:
-            validate_template(t)
-    except TemplateError as exc:
+        suite = get_suite(args.suite)
+    except KeyError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
-
-    if not templates:
-        console.print(f"[red]no templates in suite {args.suite_key!r}[/red]")
-        raise typer.Exit(code=1)
-
-    versions = {t.version for t in templates}
-    suite_version = next(iter(versions)) if len(versions) == 1 else "mixed"
-
-    report = estimate_run(
-        templates=templates,
-        suite_key=args.suite_key,
-        suite_version=suite_version,
+    cases = expand_suite(
+        suite,
         seed_group=args.seed_group,
-        case_count_per_template=args.case_count_per_template,
+        cases_per_family=args.cases_per_family,
         difficulty=args.difficulty,
         drift_cycles=args.drift_cycles,
+    )
+    report = estimate_run(
+        cases,
         provider_key=args.provider_key,
         model=args.model,
+        reader_provider_key=args.resolved_reader_provider,
+        reader_model=args.resolved_reader_model,
+        budget_tokens=args.budget_tokens,
+        controls=args.controls,
     )
-    console.print(format_estimate(report))
+    console.print(format_estimate(report), highlight=False)
 
 
 @app.command()
 def generate(
-    template: str = typer.Option(..., "--template", "-t", help="Template key."),
+    family: str = typer.Option(..., "--family", "-f", help="Family key (see `families list`)."),
     seed: int = typer.Option(0, "--seed"),
     difficulty: str = typer.Option("medium", "--difficulty"),
-    benchmarks_dir: Path = typer.Option(
-        default_benchmarks_dir(),
-        "--benchmarks-dir",
-        help="Directory containing public benchmark suites.",
+    drift_cycles: int | None = typer.Option(None, "--drift-cycles", min=0, max=8),
+    text: bool = typer.Option(
+        False, "--text", help="Print a readable transcript and probes instead of JSON."
     ),
-    output: Path | None = typer.Option(
-        None, "--output", "-o", help="Write JSON to this file (stdout if omitted)."
-    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write to this file."),
+    suite_pack: Path | None = typer.Option(None, "--suite-pack"),
 ) -> None:
-    """Generate a single benchmark case from a template and seed."""
-    from compactbench.dsl import (
-        DifficultyLevel,
-        TemplateError,
-        load_suite,
-        validate_template,
-    )
-    from compactbench.engine import generate_case
+    """Generate one case from a family and seed."""
+    from compactbench.rendering import render_turns
+    from compactbench.scenarios import UnknownFamilyError, generate_case
 
-    if not benchmarks_dir.is_dir():
-        console.print(f"[red]no benchmarks directory at {benchmarks_dir}[/red]")
-        raise typer.Exit(code=1)
-
-    found: dict[str, Any] = {}
-    for suite_dir in sorted(p for p in benchmarks_dir.iterdir() if p.is_dir()):
-        try:
-            for t in load_suite(suite_dir):
-                found[t.key] = t
-        except TemplateError as exc:
-            console.print(f"[yellow]skipping {suite_dir.name}: {exc}[/yellow]")
-
-    if template not in found:
-        console.print(f"[red]template {template!r} not found. Known: {sorted(found)}[/red]")
-        raise typer.Exit(code=1)
-
-    tmpl = found[template]
+    _load_pack(suite_pack)
     try:
-        validate_template(tmpl)
-    except TemplateError as exc:
-        console.print(f"[red]template {template!r} failed validation: {exc}[/red]")
+        case = generate_case(family, seed, _difficulty(difficulty), drift_cycles=drift_cycles)
+    except UnknownFamilyError as exc:
+        console.print(f"[red]{exc.args[0]}[/red]")
         raise typer.Exit(code=1) from exc
 
-    try:
-        diff = DifficultyLevel(difficulty.lower())
-    except ValueError as exc:
-        console.print(
-            f"[red]unknown difficulty {difficulty!r}. "
-            f"Valid: {[d.value for d in DifficultyLevel]}[/red]"
-        )
-        raise typer.Exit(code=1) from exc
-
-    case = generate_case(tmpl, seed, diff)
-    json_text = case.model_dump_json(indent=2)
-    if output is None:
-        console.print_json(json_text)
+    if text:
+        blocks: list[str] = []
+        for spec in case.cycles:
+            blocks.append(f"===== cycle {spec.cycle} ({len(spec.turns)} turns) =====")
+            blocks.append(render_turns(spec.turns))
+            blocks.append(f"----- probes after compaction {spec.cycle} -----")
+            for p in spec.probes:
+                options = "".join(f"\n    - {o}" for o in p.options)
+                blocks.append(
+                    f"[{p.category.value}/{p.format.value}] {p.question}{options}\n"
+                    f"    answer: {p.answer}  stale: {p.stale}"
+                )
+        rendered = "\n\n".join(blocks)
     else:
-        output.write_text(json_text + "\n", encoding="utf-8")
+        rendered = case.model_dump_json(indent=2)
+
+    if output is None:
+        if text:
+            console.print(rendered, highlight=False, markup=False)
+        else:
+            console.print_json(rendered)
+    else:
+        output.write_text(rendered + "\n", encoding="utf-8")
         console.print(f"wrote {output}")
 
 
@@ -250,11 +359,118 @@ def generate(
 def score(
     results: Path = typer.Option(..., "--results", "-r", exists=True, readable=True),
 ) -> None:
-    """Print a summary of a ``results.jsonl`` file produced by ``compactbench run``."""
-    from rich.table import Table
-
+    """Summarize a ``results.jsonl`` file produced by ``compactbench run``."""
     from compactbench.runner import to_run_result
-    from compactbench.scoring import item_type_breakdown
+
+    try:
+        run_result = to_run_result(results)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    m = run_result.metrics
+
+    header = Table(title="Run")
+    header.add_column("Field")
+    header.add_column("Value")
+    header.add_row("method", f"{run_result.method_name} ({run_result.method_version})")
+    header.add_row(
+        "method model", f"{run_result.compactor_provider} / {run_result.compactor_model}"
+    )
+    header.add_row("reader", f"{run_result.reader_provider} / {run_result.reader_model}")
+    header.add_row(
+        "suite", f"{run_result.suite}@{run_result.suite_version} ({run_result.difficulty})"
+    )
+    header.add_row("drift cycles", str(run_result.drift_cycles))
+    header.add_row("budget", str(run_result.budget_tokens or "none"))
+    header.add_row("season", run_result.season or "—")
+    header.add_row("scorer", run_result.scorer_version)
+    header.add_row("cases", str(len(run_result.cases)))
+    console.print(header)
+
+    families = Table(title="By family")
+    families.add_column("Family")
+    families.add_column("Score", justify="right")
+    families.add_column("Oracle", justify="right")
+    families.add_column("Null", justify="right")
+    families.add_column("Normalized", justify="right")
+    families.add_column("Probes", justify="right")
+    for family, fm in m.by_family.items():
+        families.add_row(
+            family,
+            f"{fm.score:.3f}",
+            _fmt_opt(fm.oracle_score),
+            _fmt_opt(fm.null_score),
+            _fmt_opt(fm.normalized_score),
+            str(fm.probes),
+        )
+    console.print(families)
+
+    categories = Table(title="By probe category")
+    categories.add_column("Category")
+    categories.add_column("Score", justify="right")
+    categories.add_column("Probes", justify="right")
+    for category, cm in sorted(m.by_category.items(), key=lambda kv: kv[1].score):
+        categories.add_row(category, f"{cm.score:.3f}", str(cm.probes))
+    console.print(categories)
+
+    summary = Table(title="Aggregate")
+    summary.add_column("Metric")
+    summary.add_column("Value", justify="right")
+    summary.add_row("score", f"{m.score:.3f}  (95% CI {m.score_ci_low:.3f}-{m.score_ci_high:.3f})")
+    summary.add_row("normalized score", _fmt_opt(m.normalized_score))
+    summary.add_row("score by cycle", "  ".join(f"{s:.2f}" for s in m.by_cycle))
+    summary.add_row("drift resistance", f"{m.drift_resistance:.3f}")
+    summary.add_row("decay (first - last)", f"{m.decay:+.3f}")
+    summary.add_row("stale-answer rate", f"{m.stale_rate:.1%}")
+    summary.add_row("trap rate", f"{m.trap_rate:.1%}")
+    summary.add_row("hallucination rate", f"{m.hallucination_rate:.1%}")
+    summary.add_row("mean artifact tokens", f"{m.mean_artifact_tokens:,.0f}")
+    summary.add_row("compression ratio", f"{m.compression_ratio:.1f}x")
+    summary.add_row("budget violations", str(m.budget_violations))
+    summary.add_row("reader error rate", f"{m.reader_error_rate:.1%}")
+    console.print(summary)
+
+    usage = run_result.token_usage
+    if usage is not None and usage.call_count:
+        tokens = Table(title="Token usage (method + reader + controls)")
+        tokens.add_column("Metric")
+        tokens.add_column("Value", justify="right")
+        tokens.add_row("api_calls", f"{usage.call_count:,}")
+        tokens.add_row("prompt_tokens", f"{usage.prompt_tokens:,}")
+        tokens.add_row("completion_tokens", f"{usage.completion_tokens:,}")
+        if usage.cached_prompt_tokens:
+            tokens.add_row("cached_prompt_tokens", f"{usage.cached_prompt_tokens:,}")
+        console.print(tokens)
+
+    warned = sum(1 for case in run_result.cases for c in case.cycles if c.warnings)
+    if warned:
+        console.print(
+            f"[yellow]{warned} cycle(s) carry method warnings — see `warnings` in "
+            f"{results}[/yellow]"
+        )
+    for note in run_result.notes:
+        console.print(f"[yellow]note: {note}[/yellow]")
+
+
+def _fmt_opt(value: float | None) -> str:
+    return "—" if value is None else f"{value:.3f}"
+
+
+@app.command()
+def qualify(
+    results: Path = typer.Option(..., "--results", "-r", exists=True, readable=True),
+    season: Path | None = typer.Option(
+        None, "--season", help="Also check the run against this season's pinned settings."
+    ),
+) -> None:
+    """Check whether a results file would qualify for the leaderboard, and why not.
+
+    Runs the same floors the submission pipeline applies, locally — so a
+    disqualification shows up before anyone opens a PR or spends more budget.
+    """
+    from compactbench.leaderboard import load_season
+    from compactbench.leaderboard import qualify as qualify_run
+    from compactbench.runner import to_run_result
 
     try:
         run_result = to_run_result(results)
@@ -262,292 +478,284 @@ def score(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
 
-    header = Table(title="Run")
-    header.add_column("Field")
-    header.add_column("Value")
-    header.add_row("run_id", run_result.run_id)
-    header.add_row("method", f"{run_result.method_name} ({run_result.method_version})")
-    header.add_row("suite", f"{run_result.suite_key} ({run_result.suite_version})")
-    header.add_row("target", f"{run_result.target_provider} / {run_result.target_model}")
-    header.add_row("scorer", run_result.scorer_version)
-    header.add_row("started", run_result.started_at.isoformat())
-    header.add_row("completed", run_result.completed_at.isoformat())
-    console.print(header)
-
-    per_case = Table(title=f"{len(run_result.cases)} case(s)")
-    per_case.add_column("Case ID")
-    per_case.add_column("Case score", justify="right")
-    per_case.add_column("Drift resistance", justify="right")
-    per_case.add_column("Cycles", justify="right")
-    for case in run_result.cases:
-        per_case.add_row(
-            case.case_id,
-            f"{case.case_score:.3f}",
-            f"{case.drift_resistance:.3f}",
-            str(len(case.cycles)),
-        )
-    console.print(per_case)
-
-    breakdown = item_type_breakdown(run_result)
-    if breakdown:
-        diag = Table(title="Failures by item type")
-        diag.add_column("Item type")
-        diag.add_column("Weight", justify="right")
-        diag.add_column("N", justify="right")
-        diag.add_column("Perfect", justify="right")
-        diag.add_column("Partial", justify="right")
-        diag.add_column("Failed", justify="right")
-        diag.add_column("Mean", justify="right")
-        for row in breakdown:
-            diag.add_row(
-                row.item_type,
-                f"{row.weight:.1f}",
-                str(row.total),
-                str(row.perfect),
-                str(row.partial),
-                str(row.failed),
-                f"{row.mean_score:.3f}",
-            )
-        console.print(diag)
-
-    summary = Table(title="Aggregate")
-    summary.add_column("Metric")
-    summary.add_column("Value", justify="right")
-    summary.add_row("overall_score", f"{run_result.overall_score:.3f}")
-    summary.add_row("drift_resistance", f"{run_result.drift_resistance:.3f}")
-    summary.add_row("constraint_retention", f"{run_result.constraint_retention:.3f}")
-    summary.add_row("contradiction_rate", f"{run_result.contradiction_rate:.3f}")
-    summary.add_row("compression_ratio", f"{run_result.compression_ratio:.2f}x")
-    console.print(summary)
-
-    # Warnings the method reported about its own output. Surfaced because a low
-    # score with a truncated summary or an unparsable JSON state behind it is a
-    # different problem from a low score on a well-formed artifact, and the
-    # submitter is the one who has to tell them apart.
-    warning_counts: dict[str, int] = {}
-    for case in run_result.cases:
-        for cyc in case.cycles:
-            for warning in cyc.warnings:
-                warning_counts[warning] = warning_counts.get(warning, 0) + 1
-    if warning_counts:
-        warn_table = Table(title="Method warnings")
-        warn_table.add_column("Count", justify="right")
-        warn_table.add_column("Warning")
-        for warning, count in sorted(warning_counts.items(), key=lambda kv: -kv[1]):
-            warn_table.add_row(str(count), warning)
-        console.print(warn_table)
-
-    usage = run_result.token_usage
-    if usage is not None and usage.call_count > 0:
-        tokens = Table(title="Token usage")
-        tokens.add_column("Metric")
-        tokens.add_column("Value", justify="right")
-        tokens.add_row("api_calls", f"{usage.call_count:,}")
-        tokens.add_row("prompt_tokens", f"{usage.prompt_tokens:,}")
-        tokens.add_row("completion_tokens", f"{usage.completion_tokens:,}")
-        tokens.add_row("total_tokens", f"{usage.total_tokens:,}")
-        if usage.cached_prompt_tokens > 0:
-            cache_hit_ratio = (
-                usage.cached_prompt_tokens / usage.prompt_tokens if usage.prompt_tokens else 0.0
-            )
-            tokens.add_row("cached_prompt_tokens", f"{usage.cached_prompt_tokens:,}")
-            tokens.add_row("prompt_cache_hit_rate", f"{cache_hit_ratio:.1%}")
-        if usage.call_count:
-            tokens.add_row(
-                "avg_tokens_per_call",
-                f"{usage.total_tokens / usage.call_count:.0f}",
-            )
-        console.print(tokens)
-
-    for note in run_result.notes:
-        console.print(f"[yellow]note: {note}[/yellow]")
+    outcome = qualify_run(run_result, season=load_season(season) if season else None)
+    m = run_result.metrics
+    console.print(
+        f"{run_result.method_name}: score {m.score:.3f} "
+        f"(95% CI {m.score_ci_low:.3f}-{m.score_ci_high:.3f}), "
+        f"drift resistance {m.drift_resistance:.3f}"
+    )
+    if outcome.qualified:
+        console.print("[green]QUALIFIED[/green] — this run meets every leaderboard floor.")
+        return
+    console.print("[red]NOT QUALIFIED[/red]")
+    for reason in outcome.reasons:
+        console.print(f"  • {reason}")
+    raise typer.Exit(code=1)
 
 
 @app.command()
 def submit(
-    results: Path = typer.Option(
-        ...,
-        "--results",
-        "-r",
-        exists=True,
-        readable=True,
-        help="Local results.jsonl produced by `compactbench run`.",
-    ),
-    handle: str = typer.Option(..., "--handle", help="Your GitHub handle."),
-    method_name: str = typer.Option(
-        ..., "--name", help="Method name in kebab-case, e.g. 'my-ledger-v1'."
+    results: Path = typer.Option(..., "--results", "-r", exists=True, readable=True),
+    method_name: str = typer.Option(..., "--name", help="Method name in kebab-case."),
+) -> None:
+    """Print the steps to submit a method for ranked scoring."""
+    console.print("[bold]Submit a method to the CompactBench leaderboard[/bold]\n")
+    console.print(f"  1. Check it qualifies: compactbench qualify --results {results}")
+    console.print(
+        f"  2. Ranked submissions for [cyan]{method_name}[/cyan] are paused while the v2 "
+        "evaluation pipeline is finished."
+    )
+    console.print("     Until then, develop against the public practice suite.")
+    console.print(
+        "\nDetails: https://github.com/compactbench/compactbench/blob/main/docs/submitting.md"
+    )
+
+
+@app.command("sandbox-serve", hidden=True)
+def sandbox_serve(
+    method: str = typer.Option(..., "--method"),
+    provider: str = typer.Option(..., "--provider"),
+    model: str = typer.Option(..., "--model"),
+    config: str = typer.Option("{}", "--config", help="Method config as JSON."),
+) -> None:
+    """Serve compaction requests over stdin/stdout (runs inside the ranked sandbox)."""
+    import json
+
+    from compactbench.sandbox import serve
+
+    parsed = json.loads(config)
+    if not isinstance(parsed, dict):
+        raise typer.BadParameter("--config must be a JSON object")
+    serve(method, provider, model, cast("dict[str, Any]", parsed))
+
+
+keys_app = typer.Typer(help="Seal provider keys for ranked evaluation.", no_args_is_help=True)
+app.add_typer(keys_app, name="keys")
+
+
+@keys_app.command("seal")
+def keys_seal(
+    season: Path = typer.Option(..., "--season", exists=True, readable=True),
+    submission: str = typer.Option(
+        ..., "--submission", help="<handle>/<method>, exactly as your submission directory."
     ),
 ) -> None:
-    """Print the steps to submit a method for leaderboard scoring.
+    """Seal your provider API key so only the ranked evaluation proxy can read it."""
+    import getpass
+    import sys
 
-    Full automation of PR creation is out of scope for the local CLI — GitHub
-    Actions evaluation happens against the hidden test set on a repo secret,
-    so submission is always a PR + maintainer review. This command prints a
-    checklist so you don't miss a step.
+    from compactbench.leaderboard import load_season
+    from compactbench.sealing import key_context, seal
+
+    pinned = load_season(season)
+    if not pinned.public_key:
+        console.print(f"[red]{season} has no public_key; ranked evaluation isn't open.[/red]")
+        raise typer.Exit(code=1)
+    secret = (
+        sys.stdin.readline().strip()
+        if not sys.stdin.isatty()
+        else getpass.getpass("Provider API key (input hidden): ").strip()
+    )
+    if not secret:
+        console.print("[red]no key given[/red]")
+        raise typer.Exit(code=1)
+    sealed = seal(
+        pinned.public_key, secret.encode("utf-8"), context=key_context(pinned.key, submission)
+    )
+    # Plain print: the value goes straight into config.yaml.
+    print(sealed)
+
+
+@keys_app.command("seal-file", hidden=True)
+def keys_seal_file(
+    source: Path = typer.Argument(..., exists=True, readable=True),
+    target: Path = typer.Argument(...),
+    public_key: str = typer.Option(..., "--public-key", help="Recipient public key."),
+    context: str = typer.Option(..., "--context", help="What the file is, e.g. traces:<run id>."),
+) -> None:
+    """Seal a file (ranked traces) and print the SHA-256 of its plaintext as a commitment."""
+    import hashlib
+
+    from compactbench.sealing import seal
+
+    data = source.read_bytes()
+    target.write_text(seal(public_key, data, context=context), encoding="ascii")
+    print(f"sha256:{hashlib.sha256(data).hexdigest()}")
+
+
+@keys_app.command("generate", hidden=True)
+def keys_generate(
+    private_out: Path = typer.Option(
+        ..., "--private-out", help="New file for the private key (created with mode 600)."
+    ),
+) -> None:
+    """Make a keypair (maintainers). Prints the public key; the private key goes to a file."""
+    import os
+
+    from compactbench.sealing import generate_keypair
+
+    private, public = generate_keypair()
+    try:
+        fd = os.open(private_out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        console.print(f"[red]{private_out} already exists; not overwriting it.[/red]")
+        raise typer.Exit(code=1) from None
+    with os.fdopen(fd, "w") as handle:
+        handle.write(private + "\n")
+    print(public)
+
+
+@app.command("proxy", hidden=True)
+def proxy_command(
+    listen: str = typer.Option("0.0.0.0:8080", "--listen", help="host:port"),
+    route: str = typer.Option(..., "--route", help="Provider route the key is for."),
+    allow_model: list[str] = typer.Option([], "--allow-model", help="Model the run may call."),
+    sealed_key: Path | None = typer.Option(
+        None, "--sealed-key", help="File holding the submitter's sealed key."
+    ),
+    context: str | None = typer.Option(None, "--context", help="Context the key was sealed under."),
+    max_requests: int = typer.Option(10_000, "--max-requests", min=1),
+    max_tokens: int = typer.Option(50_000_000, "--max-tokens", min=1),
+    log: Path | None = typer.Option(None, "--log", help="Call log (no bodies)."),
+    upstream: str | None = typer.Option(
+        None, "--upstream", help="Base URL of the submitter's endpoint (route 'custom')."
+    ),
+    no_key: bool = typer.Option(
+        False, "--no-key", help="Forward without a key (a custom endpoint that takes none)."
+    ),
+) -> None:
+    """Run the ranked evaluation's model proxy in the foreground (maintainers / CI).
+
+    The key comes from ``--sealed-key`` (opened with COMPACTBENCH_SEASON_PRIVATE_KEY)
+    or, for local testing, from COMPACTBENCH_PROXY_KEY.
     """
-    method_dir = Path("submissions") / handle / method_name
-    console.print("[bold]Submit a method to the CompactBench leaderboard[/bold]")
-    console.print("")
-    console.print(f"  1. Create [cyan]{method_dir}/[/cyan] in your fork.")
-    console.print(
-        f"  2. Copy the scaffold from [cyan]submissions/_template/[/cyan] "
-        f"into [cyan]{method_dir}/[/cyan] and edit every file."
+    import os
+    import signal
+    import threading
+
+    from compactbench.proxy import ROUTES, ModelProxy, ProxyConfig, custom_upstream
+    from compactbench.sealing import open_sealed
+
+    routes = dict(ROUTES)
+    if route == "custom":
+        if not upstream:
+            raise typer.BadParameter("route 'custom' needs --upstream")
+        routes["custom"] = custom_upstream(upstream)
+    elif route not in ROUTES:
+        raise typer.BadParameter(f"unknown route {route!r}; known: {sorted(ROUTES)} or custom")
+    if sealed_key is not None:
+        private = os.environ.pop("COMPACTBENCH_SEASON_PRIVATE_KEY", "")
+        if not private or context is None:
+            raise typer.BadParameter(
+                "--sealed-key needs --context and COMPACTBENCH_SEASON_PRIVATE_KEY"
+            )
+        secret = open_sealed(private, sealed_key.read_text(encoding="utf-8"), context=context)
+        key = secret.decode("utf-8")
+    elif no_key:
+        if route != "custom":
+            raise typer.BadParameter("--no-key is only for route 'custom'")
+        key = ""
+    else:
+        key = os.environ.pop("COMPACTBENCH_PROXY_KEY", "")
+        if not key:
+            raise typer.BadParameter("set COMPACTBENCH_PROXY_KEY, pass --sealed-key or --no-key")
+    host, _, port = listen.rpartition(":")
+    config = ProxyConfig(
+        keys={route: key},
+        models=frozenset(allow_model),
+        max_requests=max_requests,
+        max_tokens=max_tokens,
+        log_path=log,
+        routes=routes,
     )
-    console.print(
-        f"  3. Put your validated [cyan]{results}[/cyan] at "
-        f"[cyan]{method_dir}/results.jsonl[/cyan]."
-    )
-    console.print(
-        "  4. Commit, push, and open a PR on https://github.com/compactbench/compactbench"
-    )
-    console.print(
-        "  5. A maintainer will code-review and apply the [cyan]evaluate[/cyan] "
-        "label, which runs your method against the hidden set."
-    )
-    console.print("")
-    console.print("Full protocol: https://compactbench.github.io/compactbench/submitting/")
+    server = ModelProxy((host or "0.0.0.0", int(port)), config)
+
+    def _stop(signum: int, frame: object) -> None:
+        # shutdown() waits for serve_forever(), which runs on this thread.
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, _stop)
+    console.print(f"proxy listening on {listen} for {route}")
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+        stats = server.stats
+        console.print(
+            f"proxy stopped: {stats.requests} requests, {stats.input_tokens} in, "
+            f"{stats.output_tokens} out, {stats.refused} refused"
+        )
 
 
 providers_app = typer.Typer(help="Inspect available model providers.", no_args_is_help=True)
-suites_app = typer.Typer(help="Inspect available benchmark suites.", no_args_is_help=True)
+suites_app = typer.Typer(help="Inspect available suites.", no_args_is_help=True)
+families_app = typer.Typer(help="Inspect scenario families.", no_args_is_help=True)
 app.add_typer(providers_app, name="providers")
 app.add_typer(suites_app, name="suites")
+app.add_typer(families_app, name="families")
 
 
 @providers_app.command("list")
 def providers_list() -> None:
     """List registered model providers."""
-    from rich.table import Table
-
     from compactbench.providers import list_providers
 
-    providers = list_providers()
-    if not providers:
-        console.print("[yellow]no providers registered[/yellow]")
-        raise typer.Exit(code=1)
-
+    notes: dict[str, str] = {
+        "mock": "offline, canned responses — for tests",
+        "anthropic": "Claude. Set COMPACTBENCH_ANTHROPIC_API_KEY.",
+        "openai": "OpenAI or any OpenAI-compatible server. Set COMPACTBENCH_OPENAI_API_KEY "
+        "(and COMPACTBENCH_OPENAI_BASE_URL for compatible servers).",
+        "groq": "Groq Cloud. Set COMPACTBENCH_GROQ_API_KEY.",
+        "google-ai-studio": "Google AI Studio. Set COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY.",
+        "ollama": "Local Ollama. COMPACTBENCH_OLLAMA_BASE_URL (default localhost:11434).",
+    }
     table = Table(title="Model providers")
     table.add_column("Key")
     table.add_column("Notes")
-    notes: dict[str, str] = {
-        "mock": "deterministic, offline — for tests and local dev",
-        "groq": "Groq Cloud. Set COMPACTBENCH_GROQ_API_KEY.",
-        "google-ai-studio": ("Google AI Studio. Set COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY."),
-        "ollama": "Local Ollama. COMPACTBENCH_OLLAMA_BASE_URL (default localhost:11434).",
-    }
-    for key in providers:
+    for key in list_providers():
         table.add_row(key, notes.get(key, ""))
     console.print(table)
 
 
 @suites_app.command("list")
 def suites_list(
-    benchmarks_dir: Path = typer.Option(
-        default_benchmarks_dir(),
-        "--benchmarks-dir",
-        help="Directory containing public benchmark suites.",
-    ),
+    suite_pack: Path | None = typer.Option(None, "--suite-pack"),
 ) -> None:
-    """List available benchmark suites."""
-    from rich.table import Table
+    """List available suites."""
+    from compactbench.scenarios import PROFILES, SUITES
 
-    from compactbench.dsl import TemplateError, load_suite, validate_template
-
-    if not benchmarks_dir.is_dir():
-        console.print(f"[yellow]no benchmarks directory at {benchmarks_dir}[/yellow]")
-        raise typer.Exit(code=1)
-
-    table = Table(title="Benchmark suites")
+    _load_pack(suite_pack)
+    table = Table(title="Suites")
     table.add_column("Suite")
-    table.add_column("Templates", justify="right")
+    table.add_column("Version")
+    table.add_column("Difficulty")
+    table.add_column("Cases/family", justify="right")
+    table.add_column("Opening tokens", justify="right")
     table.add_column("Families")
-
-    found_any = False
-    for suite_path in sorted(p for p in benchmarks_dir.iterdir() if p.is_dir()):
-        try:
-            templates = load_suite(suite_path)
-            for t in templates:
-                validate_template(t)
-        except TemplateError as exc:
-            console.print(f"[red]{suite_path.name}: {exc}[/red]")
-            continue
-        families = sorted({t.family for t in templates})
-        table.add_row(suite_path.name, str(len(templates)), ", ".join(families) or "—")
-        found_any = True
-
-    if not found_any:
-        console.print(f"[yellow]no suites found under {benchmarks_dir}[/yellow]")
-        raise typer.Exit(code=1)
-
+    for suite in SUITES.values():
+        profile = PROFILES[suite.difficulty]
+        table.add_row(
+            suite.key,
+            suite.version,
+            suite.difficulty.value,
+            str(suite.cases_per_family),
+            f"~{profile.initial_tokens:,}",
+            ", ".join(suite.families),
+        )
     console.print(table)
 
 
-@app.command()
-def qualify(
-    results: Path = typer.Option(..., "--results", "-r", exists=True, readable=True),
-    tier: str = typer.Option(
-        "Elite-Mid",
-        "--tier",
-        help="Compression tier to check against: Elite-Light, Elite-Mid, or Elite-Aggressive.",
-    ),
-    drift_cycles: int = typer.Option(
-        2,
-        "--drift-cycles",
-        min=0,
-        help="Drift cycles the run was configured with. Must match the run being checked.",
-    ),
-) -> None:
-    """Check whether a results file would qualify for the leaderboard, and why not.
+@families_app.command("list")
+def families_list() -> None:
+    """List scenario families."""
+    from compactbench.scenarios import get_family, list_families
 
-    Runs the same floors the submission pipeline applies, locally. Without this a
-    submitter could only discover a disqualification by opening a PR and waiting
-    for a maintainer — after having already spent the API budget on the run.
-    """
-    from rich.table import Table
-
-    from compactbench.leaderboard import qualify as qualify_run
-    from compactbench.leaderboard.ranking import TIER_FLOORS, elite_score
-    from compactbench.runner import to_run_result
-
-    if tier not in TIER_FLOORS:
-        console.print(f"[red]unknown tier {tier!r}. Valid: {sorted(TIER_FLOORS)}[/red]")
-        raise typer.Exit(code=1)
-
-    try:
-        run_result = to_run_result(results)
-    except ValueError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
-
-    outcome = qualify_run(
-        run_result,
-        tier=tier,  # pyright: ignore[reportArgumentType]
-        expected_drift_cycles=drift_cycles,
-    )
-
-    table = Table(title=f"Qualification — {run_result.method_name} @ {tier}")
-    table.add_column("Metric")
-    table.add_column("Value", justify="right")
-    table.add_row("overall_score", f"{run_result.overall_score:.3f}")
-    table.add_row("drift_resistance", f"{run_result.drift_resistance:.3f}")
-    table.add_row("constraint_retention", f"{run_result.constraint_retention:.3f}")
-    table.add_row("contradiction_rate", f"{run_result.contradiction_rate:.3f}")
-    table.add_row("compression_ratio", f"{run_result.compression_ratio:.2f}x")
-    score_value = elite_score(
-        overall_score=run_result.overall_score,
-        drift_resistance=run_result.drift_resistance,
-        constraint_retention=run_result.constraint_retention,
-        compression_ratio=run_result.compression_ratio,
-        tier=tier,  # pyright: ignore[reportArgumentType]
-    )
-    table.add_row("elite_score", f"{score_value:.3f}")
+    table = Table(title="Families")
+    table.add_column("Key")
+    table.add_column("Version")
+    table.add_column("What it tests")
+    for key in list_families():
+        family = get_family(key)
+        table.add_row(key, family.version, family.description)
     console.print(table)
-
-    if outcome.qualified:
-        console.print("[green]QUALIFIED[/green] — this run meets every leaderboard floor.")
-        return
-
-    console.print("[red]NOT QUALIFIED[/red]")
-    for reason in outcome.reasons:
-        console.print(f"  • {reason}")
-    raise typer.Exit(code=1)
