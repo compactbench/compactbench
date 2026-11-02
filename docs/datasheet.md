@@ -68,6 +68,18 @@ compaction.
 summarization quality outside agentic, state-heavy sessions. Training on the public suites
 and then reporting public-suite scores as if they were ranked results.
 
+**Known limitations.** Practice predicts Elite closely for model-based methods: Season 1's
+prompted baselines scored within 4 points of their Elite score on Practice (−3.7, +1.0 and
+−1.5 points). Methods that match surface wording rather than meaning can differ more,
+because Elite is written in private wording: a rule-based extractive baseline scored 6.5
+points lower on Practice than on Elite. One method's score varies by about 1.6 points
+(standard deviation) between fresh Elite samples, which is why every row carries a 95%
+interval and rows whose intervals overlap share a rank. Grading uses one Claude reader;
+re-grading a Practice subsample (24 artifacts, about 480 questions) with a reader from
+another model family (gpt-oss-20b) ranked the baselines identically (Kendall's τ = 1.0) and
+scored 94% of questions the same, with no sign that the Claude reader favours
+Claude-written summaries.
+
 ## Distribution
 
 **How is it distributed?** As an Apache-2.0 Python package (`pip install compactbench`) that

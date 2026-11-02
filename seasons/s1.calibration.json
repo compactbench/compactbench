@@ -1,0 +1,41 @@
+{
+  "season": "s1",
+  "suite": "elite@2.0.1",
+  "reader": "claude-haiku-5-5 (effort high)",
+  "cases": 24,
+  "measured_at": "2026-11-02",
+  "families": {
+    "buried_constraint": {
+      "ceiling": 0.919,
+      "floor": 0.0
+    },
+    "conditional_scope": {
+      "ceiling": 0.983,
+      "floor": 0.0
+    },
+    "decision_override": {
+      "ceiling": 0.969,
+      "floor": 0.0
+    },
+    "entity_confusion": {
+      "ceiling": 0.994,
+      "floor": 0.0
+    },
+    "numeric_precision": {
+      "ceiling": 0.991,
+      "floor": 0.0
+    },
+    "provenance_authority": {
+      "ceiling": 0.935,
+      "floor": 0.0
+    },
+    "reference_resolution": {
+      "ceiling": 0.958,
+      "floor": 0.0
+    },
+    "task_continuity": {
+      "ceiling": 0.943,
+      "floor": 0.0
+    }
+  }
+}
