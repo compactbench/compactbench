@@ -130,6 +130,7 @@ async def read(
     *,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     effort: ReasoningEffort | None = None,
+    max_tokens: int = _MAX_TOKENS,
 ) -> ReaderOutcome:
     """Ask ``probes`` against ``context``; one retry per batch on an unparsable reply."""
     outcome = ReaderOutcome()
@@ -143,7 +144,7 @@ async def read(
             system=READER_SYSTEM,
             cached_prefix=prefix,
             json_schema=answer_schema(batch),
-            max_tokens=_MAX_TOKENS,
+            max_tokens=max_tokens,
             reasoning_effort=effort,
         )
         parsed: dict[str, Any] | None = None

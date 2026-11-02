@@ -97,6 +97,7 @@ async def rescore(
     model: str,
     tokens_per_minute: int,
     cache: Path | None = None,
+    max_tokens: int | None = None,
 ) -> None:
     """Ask every item with the second reader, one at a time, pacing to the token rate.
 
@@ -115,7 +116,10 @@ async def rescore(
             item.second_scores = done[item_id]
             continue
         started = time.monotonic()
-        outcome = await read(provider, model, item.context, item.probes)
+        if max_tokens is None:
+            outcome = await read(provider, model, item.context, item.probes)
+        else:
+            outcome = await read(provider, model, item.context, item.probes, max_tokens=max_tokens)
         item.second_scores = {
             p.key: score_probe(p, outcome.answers.get(p.key)).score for p in item.probes
         }
@@ -197,6 +201,13 @@ def main() -> int:
     parser.add_argument("--cycles", default="4", help="Comma-separated cycles to re-read.")
     parser.add_argument("--tokens-per-minute", type=int, default=7000)
     parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="Cap the second reader's output per call (some free tiers count it against "
+        "their per-minute limit).",
+    )
+    parser.add_argument(
         "--out", type=Path, default=Path(".local/calibration/reader-robustness.json")
     )
     parser.add_argument("--estimate", action="store_true")
@@ -219,7 +230,9 @@ def main() -> int:
     cache = args.out.with_suffix(
         f".{args.reader_provider}-{args.reader_model.replace('/', '_')}.cache.jsonl"
     )
-    asyncio.run(rescore(items, provider, args.reader_model, args.tokens_per_minute, cache))
+    asyncio.run(
+        rescore(items, provider, args.reader_model, args.tokens_per_minute, cache, args.max_tokens)
+    )
     result = report(items) | {"reader": f"{args.reader_provider}/{args.reader_model}"}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
