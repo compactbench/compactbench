@@ -151,8 +151,7 @@ def main() -> int:
         "",
         "## Templates",
         "",
-        "p = mean score over all methods; r = discrimination (corr. with overall score, "
-        "methods with ≥5 instances); oracle/null from calibration.",
+        "p: mean score; r: discrimination (corr. with overall, n ≥ 5); oracle/null: calibration.",
         "",
         "| template | n | p | r | oracle | null | flags |",
         "|---|---|---|---|---|---|---|",

@@ -139,7 +139,9 @@ def serve(method_spec: str, provider_key: str, model: str, config: dict[str, Any
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     devnull = os.open(os.devnull, os.O_RDONLY)
     os.dup2(devnull, sys.stdin.fileno())
-    asyncio.run(_serve(method_spec, provider_key, model, config, protocol_in, protocol_out))
+    os.close(devnull)
+    with protocol_in, protocol_out:
+        asyncio.run(_serve(method_spec, provider_key, model, config, protocol_in, protocol_out))
 
 
 async def _serve(

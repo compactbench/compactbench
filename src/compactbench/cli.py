@@ -596,13 +596,16 @@ def keys_generate(
     from compactbench.sealing import generate_keypair
 
     private, public = generate_keypair()
+
+    def owner_only(path: str, flags: int) -> int:
+        return os.open(path, flags, 0o600)
+
     try:
-        fd = os.open(private_out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with open(private_out, "x", encoding="utf-8", opener=owner_only) as handle:
+            handle.write(private + "\n")
     except FileExistsError:
         console.print(f"[red]{private_out} already exists; not overwriting it.[/red]")
         raise typer.Exit(code=1) from None
-    with os.fdopen(fd, "w") as handle:
-        handle.write(private + "\n")
     print(public)
 
 
