@@ -20,6 +20,7 @@ from compactbench.integrations.llamaindex import (
     transcript_to_chat_messages,
 )
 from compactbench.providers import MockProvider
+from tests.helpers import first_request
 
 pytestmark = pytest.mark.unit
 
@@ -148,7 +149,7 @@ async def test_compactor_invokes_sync_fn_and_returns_artifact() -> None:
         method_name="sync-example",
         method_version="9.9.9",
     )
-    artifact = await compactor.compact(_transcript())
+    artifact = await compactor.compact(first_request(_transcript()))
     assert artifact.summary_text == "summarised 4 messages"
     assert artifact.method_metadata["method"] == "sync-example"
     assert artifact.method_metadata["version"] == "9.9.9"
@@ -168,7 +169,7 @@ async def test_compactor_invokes_async_fn() -> None:
         model="m",
         compaction_fn=compact_async,
     )
-    artifact = await compactor.compact(_transcript())
+    artifact = await compactor.compact(first_request(_transcript()))
     assert artifact.summary_text == "async 4"
     assert artifact.structured_state.locked_decisions == ["keep it async"]
 
@@ -183,7 +184,7 @@ async def test_compactor_does_not_call_provider_for_compaction() -> None:
         model="m",
         compaction_fn=compact_sync,
     )
-    await compactor.compact(_transcript())
+    await compactor.compact(first_request(_transcript()))
     assert provider.calls == []
 
 
@@ -197,6 +198,6 @@ async def test_compactor_extra_metadata_is_merged() -> None:
         compaction_fn=_static,
         extra_metadata={"li_version": "0.11.99", "memory_type": "chat_summary_buffer"},
     )
-    artifact = await compactor.compact(_transcript())
+    artifact = await compactor.compact(first_request(_transcript()))
     assert artifact.method_metadata["li_version"] == "0.11.99"
     assert artifact.method_metadata["memory_type"] == "chat_summary_buffer"

@@ -47,6 +47,32 @@ def is_terminal_quota_error(exc: Exception) -> bool:
     return any(marker in text for marker in _TERMINAL_QUOTA_MARKERS)
 
 
+#: Rate limits reset on a per-minute window, so a 429 gets more patience than
+#: other transient errors.
+RATE_LIMIT_RETRIES = 8
+RATE_LIMIT_MAX_DELAY = 90.0
+
+
+def retry_after_seconds(exc: Exception) -> float | None:
+    """The server's ``retry-after`` hint on ``exc``, if it carries an HTTP response."""
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    try:
+        raw = headers.get("retry-after")
+    except Exception:
+        return None
+    try:
+        return float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    return getattr(exc, "status_code", None) == 429
+
+
 async def retry_with_backoff(
     operation: Callable[[], Awaitable[T]],
     *,
@@ -59,23 +85,29 @@ async def retry_with_backoff(
 
     Returns the operation's result on first success. On a retryable failure,
     waits ``min(base_delay * 2**attempt, max_delay)`` seconds and retries.
-    After ``max_retries`` failed attempts the last exception is re-raised.
-    Non-retryable exceptions are re-raised immediately.
+    Rate limits (HTTP 429) get up to :data:`RATE_LIMIT_RETRIES` attempts and wait
+    at least the server's ``retry-after``, up to :data:`RATE_LIMIT_MAX_DELAY`.
+    After the attempts run out the last exception is re-raised. Non-retryable
+    exceptions are re-raised immediately.
     """
     if max_retries < 1:
         raise ValueError(f"max_retries must be >= 1, got {max_retries}")
 
-    last_exc: Exception | None = None
-    for attempt in range(max_retries):
+    attempt = 0
+    while True:
         try:
             return await operation()
         except Exception as exc:
             if not is_retryable(exc):
                 raise
-            last_exc = exc
-            if attempt < max_retries - 1:
-                delay = min(base_delay * (2**attempt), max_delay)
-                await asyncio.sleep(delay)
-
-    assert last_exc is not None  # unreachable unless last_exc was set in the loop
-    raise last_exc
+            rate_limited = _is_rate_limit(exc)
+            budget = max(max_retries, RATE_LIMIT_RETRIES) if rate_limited else max_retries
+            if attempt >= budget - 1:
+                raise
+            ceiling = RATE_LIMIT_MAX_DELAY if rate_limited else max_delay
+            delay = min(base_delay * (2**attempt), ceiling)
+            hint = retry_after_seconds(exc)
+            if hint is not None:
+                delay = min(max(delay, hint), ceiling)
+            await asyncio.sleep(delay)
+            attempt += 1

@@ -7,9 +7,20 @@ CompactBench's `Compactor` ABC works standalone, but most production code alread
 
 Both adapters share the same return-shape contract (`str | list[messages] | dict`) and preserve turn provenance via `additional_kwargs` so filtered-message methods automatically populate `CompactionArtifact.selected_source_turn_ids`.
 
+**What your callable receives.** At the first compaction, the whole opening conversation.
+At every later compaction, a system message holding your previous artifact
+(`"Summary of the conversation so far: …"`, marked `compactbench_previous_artifact` in
+`additional_kwargs`) followed by only the turns since then — the same shape a framework
+app sees after its own summarisation step. Tool output arrives as user messages prefixed
+`TOOL[name]:`.
+
+**`provider` / `model`.** Your callable owns its own LLM, so these are only recorded as the
+method's model. The reader that answers the questions is set on the run
+(`--reader-provider` / `--reader-model`).
+
 ## LangChain
 
-`compactbench.integrations.langchain` wraps any LangChain-flavoured compaction callable as a CompactBench [`Compactor`](writing-a-compactor.md) so it can be scored against Elite practice or the hidden ranked set.
+`compactbench.integrations.langchain` wraps any LangChain-flavoured compaction callable as a CompactBench [`Compactor`](writing-a-compactor.md) so it can be scored against the Practice suite or the hidden Elite set.
 
 **Install:**
 
@@ -26,7 +37,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from compactbench.integrations.langchain import LangChainCompactor
-from compactbench.providers import GroqProvider
+from compactbench.providers import MockProvider
 
 summariser = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
@@ -47,11 +58,10 @@ async def summarise(messages: list[BaseMessage]) -> str:
 
 
 compactor = LangChainCompactor(
-    # The CompactBench provider + model are for the *target* model that
-    # answers evaluation items — not for your summariser. Your callable
-    # owns its own LangChain LLM.
-    provider=GroqProvider(),
-    model="llama-3.3-70b-versatile",
+    # Your callable owns its LLM; provider/model are only recorded as the
+    # method's model. The reader is configured on the run.
+    provider=MockProvider(),
+    model="gpt-4o-mini",
     compaction_fn=summarise,
     method_name="openai-mini-summary",
     method_version="0.1.0",
@@ -85,7 +95,7 @@ The dict keys are optional — missing keys fall back to sensible defaults. `sum
 
 ### Preserving turn provenance
 
-`transcript_to_messages` stamps each LangChain message with
+`request_to_messages` (via `transcript_to_messages`) stamps each LangChain message with
 `additional_kwargs["compactbench_turn_id"]`. If your callable returns a filtered
 `list[BaseMessage]`, the adapter reads those ids back and populates
 `CompactionArtifact.selected_source_turn_ids` automatically — useful for
@@ -105,8 +115,8 @@ def trim(messages: list[BaseMessage]) -> list[BaseMessage]:
 
 
 compactor = LangChainCompactor(
-    provider=GroqProvider(),
-    model="llama-3.3-70b-versatile",
+    provider=MockProvider(),
+    model="none",
     compaction_fn=trim,
     method_name="trim-last-500",
 )
@@ -158,7 +168,7 @@ from llama_index.core.memory import ChatSummaryMemoryBuffer
 from llama_index.llms.openai import OpenAI
 
 from compactbench.integrations.llamaindex import LlamaIndexCompactor
-from compactbench.providers import GroqProvider
+from compactbench.providers import MockProvider
 
 summariser_llm = OpenAI(model="gpt-4o-mini", temperature=0)
 
@@ -170,8 +180,8 @@ def summarise(messages: list[ChatMessage]) -> str:
 
 
 compactor = LlamaIndexCompactor(
-    provider=GroqProvider(),  # answers eval items
-    model="llama-3.3-70b-versatile",
+    provider=MockProvider(),  # unused: your callable owns its LLM
+    model="gpt-4o-mini",
     compaction_fn=summarise,
     method_name="llamaindex-chat-summary-buffer",
     method_version="0.1.0",
@@ -198,7 +208,7 @@ async def structured(messages: list[ChatMessage]) -> dict:
 
 ### Preserving turn provenance
 
-`transcript_to_chat_messages` stamps `additional_kwargs["compactbench_turn_id"]` on every outgoing message. If your callable returns a filtered `list[ChatMessage]`, the adapter reads those ids back and populates `CompactionArtifact.selected_source_turn_ids` automatically.
+`request_to_chat_messages` (via `transcript_to_chat_messages`) stamps `additional_kwargs["compactbench_turn_id"]` on every outgoing message. If your callable returns a filtered `list[ChatMessage]`, the adapter reads those ids back and populates `CompactionArtifact.selected_source_turn_ids` automatically.
 
 ```python
 def keep_last_n(messages: list[ChatMessage], n: int = 6) -> list[ChatMessage]:
@@ -206,8 +216,8 @@ def keep_last_n(messages: list[ChatMessage], n: int = 6) -> list[ChatMessage]:
 
 
 compactor = LlamaIndexCompactor(
-    provider=GroqProvider(),
-    model="llama-3.3-70b-versatile",
+    provider=MockProvider(),
+    model="none",
     compaction_fn=lambda ms: keep_last_n(ms, 6),
     method_name="keep-last-6",
 )

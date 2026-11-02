@@ -13,6 +13,7 @@ from compactbench.providers import (
     ProviderError,
     ProviderResponseError,
 )
+from compactbench.providers._retry import RATE_LIMIT_RETRIES
 
 pytestmark = pytest.mark.unit
 
@@ -92,7 +93,8 @@ async def test_complete_forwards_request_parameters() -> None:
     assert mock.await_args is not None
     kwargs = mock.await_args.kwargs
     assert kwargs["model"] == "m"
-    assert kwargs["max_tokens"] == 123
+    assert kwargs["max_completion_tokens"] == 123
+    assert "max_tokens" not in kwargs
     assert kwargs["temperature"] == 0.2
     assert kwargs["response_format"] == {"type": "json_object"}
     assert kwargs["messages"] == [
@@ -101,14 +103,101 @@ async def test_complete_forwards_request_parameters() -> None:
     ]
 
 
-async def test_omits_response_format_when_not_requested() -> None:
+async def test_omits_optional_parameters_when_not_requested() -> None:
+    """Reasoning models reject a non-default temperature, so None must not be sent."""
     provider = _build_provider()
     mock = _mock_create(provider)
     mock.return_value = _ok_response()
 
     await provider.complete(CompletionRequest(model="m", prompt="p"))
     assert mock.await_args is not None
-    assert "response_format" not in mock.await_args.kwargs
+    kwargs = mock.await_args.kwargs
+    assert "response_format" not in kwargs
+    assert "temperature" not in kwargs
+    assert "reasoning_effort" not in kwargs
+
+
+async def test_custom_base_url_keeps_max_tokens() -> None:
+    """OpenAI-compatible servers accept the original `max_tokens` name."""
+    provider = OpenAIProvider(api_key="k", base_url="http://localhost:8000/v1")
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+
+    await provider.complete(CompletionRequest(model="m", prompt="p", max_tokens=77))
+    assert mock.await_args is not None
+    assert mock.await_args.kwargs["max_tokens"] == 77
+    assert "max_completion_tokens" not in mock.await_args.kwargs
+
+
+async def test_json_schema_maps_to_strict_json_schema_response_format() -> None:
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response('{"a": 1}')
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}},
+        "required": ["a"],
+        "additionalProperties": False,
+    }
+
+    await provider.complete(
+        CompletionRequest(
+            model="m",
+            prompt="p",
+            json_schema=schema,
+            response_format={"type": "json_object"},
+        )
+    )
+    assert mock.await_args is not None
+    assert mock.await_args.kwargs["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "response", "schema": schema, "strict": True},
+    }
+
+
+async def test_reasoning_effort_is_forwarded() -> None:
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response()
+
+    await provider.complete(CompletionRequest(model="m", prompt="p", reasoning_effort="medium"))
+    assert mock.await_args is not None
+    assert mock.await_args.kwargs["reasoning_effort"] == "medium"
+
+
+async def test_refusal_raises() -> None:
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    response = _ok_response()
+    response.choices[0].message = MagicMock(content=None, refusal="I can't help with that.")
+    mock.return_value = response
+
+    with pytest.raises(ProviderResponseError, match="declined"):
+        await provider.complete(CompletionRequest(model="m", prompt="p"))
+
+
+async def test_length_stop_with_no_text_raises_clear_error() -> None:
+    """Reasoning tokens count toward max_completion_tokens and can use all of it."""
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    response = _ok_response("")
+    response.choices[0].finish_reason = "length"
+    mock.return_value = response
+
+    with pytest.raises(ProviderResponseError, match="before writing any text"):
+        await provider.complete(CompletionRequest(model="m", prompt="p", max_tokens=64))
+
+
+async def test_length_stop_with_partial_text_returns_the_text() -> None:
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    response = _ok_response("truncated answ")
+    response.choices[0].finish_reason = "length"
+    mock.return_value = response
+
+    resp = await provider.complete(CompletionRequest(model="m", prompt="p"))
+    assert resp.text == "truncated answ"
+    assert resp.raw["finish_reason"] == "length"
 
 
 async def test_retries_on_rate_limit_then_succeeds() -> None:
@@ -141,14 +230,15 @@ async def test_retries_on_internal_server_error() -> None:
     assert mock.await_count == 2
 
 
-async def test_gives_up_after_max_retries_on_rate_limit() -> None:
+async def test_gives_up_after_rate_limit_retries_run_out() -> None:
+    # Rate limits get their own, larger attempt budget than other errors.
     provider = _build_provider(max_retries=2)
     mock = _mock_create(provider)
-    mock.side_effect = [_rate_limit_error(), _rate_limit_error()]
+    mock.side_effect = [_rate_limit_error()] * RATE_LIMIT_RETRIES
 
     with pytest.raises(RateLimitError):
         await provider.complete(CompletionRequest(model="m", prompt="p"))
-    assert mock.await_count == 2
+    assert mock.await_count == RATE_LIMIT_RETRIES
 
 
 async def test_raises_on_empty_choices() -> None:

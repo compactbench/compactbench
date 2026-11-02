@@ -114,6 +114,39 @@ async def test_json_response_format_sets_format_json() -> None:
     assert mock.await_args.kwargs["format"] == "json"
 
 
+async def test_temperature_is_omitted_when_not_requested() -> None:
+    provider = _build_provider()
+    mock = _mock_chat(provider)
+    mock.return_value = _ok_response()
+
+    await provider.complete(CompletionRequest(model="m", prompt="p", max_tokens=64))
+    assert mock.await_args is not None
+    assert mock.await_args.kwargs["options"] == {"num_predict": 64}
+
+
+async def test_json_schema_is_passed_as_format() -> None:
+    """Ollama's `format` takes a JSON Schema dict for schema-constrained output."""
+    provider = _build_provider()
+    mock = _mock_chat(provider)
+    mock.return_value = _ok_response('{"a": 1}')
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}},
+        "required": ["a"],
+    }
+
+    await provider.complete(
+        CompletionRequest(
+            model="m",
+            prompt="p",
+            json_schema=schema,
+            response_format={"type": "json_object"},
+        )
+    )
+    assert mock.await_args is not None
+    assert mock.await_args.kwargs["format"] == schema
+
+
 async def test_retries_on_timeout() -> None:
     provider = _build_provider(max_retries=3)
     mock = _mock_chat(provider)

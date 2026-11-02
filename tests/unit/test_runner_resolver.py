@@ -46,19 +46,15 @@ def test_raises_on_non_py_file(tmp_path: Path) -> None:
 def test_loads_custom_class_from_file(tmp_path: Path) -> None:
     source = dedent(
         """
-        from typing import Any, ClassVar
+        from typing import ClassVar
         from compactbench.compactors import Compactor
-        from compactbench.contracts import CompactionArtifact, StructuredState, Transcript
+        from compactbench.contracts import CompactionArtifact, CompactionRequest
 
         class MyCompactor(Compactor):
             name: ClassVar[str] = "my-method"
             version: ClassVar[str] = "0.0.1"
 
-            async def compact(
-                self, transcript: Transcript,
-                config: dict[str, Any] | None = None,
-                previous_artifact: CompactionArtifact | None = None,
-            ) -> CompactionArtifact:
+            async def compact(self, request: CompactionRequest) -> CompactionArtifact:
                 return CompactionArtifact()
         """
     )
@@ -81,3 +77,23 @@ def test_raises_on_non_compactor_class(tmp_path: Path) -> None:
     py.write_text("class NotACompactor:\n    pass\n", encoding="utf-8")
     with pytest.raises(MethodResolutionError, match="subclass of Compactor"):
         resolve_compactor_class(f"{py}:NotACompactor")
+
+
+def test_old_signature_gets_a_migration_hint(tmp_path: Path) -> None:
+    source = dedent(
+        """
+        from compactbench.compactors import Compactor
+        from compactbench.contracts import CompactionArtifact
+
+        class Old(Compactor):
+            name = "old"
+            version = "0"
+
+            async def compact(self, transcript, config=None, previous_artifact=None):
+                return CompactionArtifact()
+        """
+    )
+    py = tmp_path / "old.py"
+    py.write_text(source, encoding="utf-8")
+    with pytest.raises(MethodResolutionError, match=r"0\.2 signature"):
+        resolve_compactor_class(f"{py}:Old")

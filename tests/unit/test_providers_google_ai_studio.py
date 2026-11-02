@@ -61,12 +61,12 @@ async def test_complete_returns_parsed_response() -> None:
     mock = _mock_generate(provider)
     mock.return_value = _ok_response("hello")
 
-    resp = await provider.complete(CompletionRequest(model="gemini-2.0-flash", prompt="p"))
+    resp = await provider.complete(CompletionRequest(model="gemini-3.8-flash", prompt="p"))
 
     assert resp.text == "hello"
     assert resp.prompt_tokens == 12
     assert resp.completion_tokens == 7
-    assert resp.model == "gemini-2.0-flash"
+    assert resp.model == "gemini-3.8-flash"
     assert resp.raw["provider"] == "google-ai-studio"
 
 
@@ -90,7 +90,41 @@ async def test_forwards_system_instruction_and_json_mime() -> None:
     config = mock.await_args.kwargs["config"]
     assert config.system_instruction == "be helpful"
     assert config.response_mime_type == "application/json"
+    assert config.response_json_schema is None
     assert config.max_output_tokens == 500
+    assert config.temperature == 0.0
+
+
+async def test_temperature_is_omitted_when_not_requested() -> None:
+    provider = _build_provider()
+    mock = _mock_generate(provider)
+    mock.return_value = _ok_response()
+
+    await provider.complete(CompletionRequest(model="m", prompt="p", reasoning_effort="low"))
+    assert mock.await_args is not None
+    config = mock.await_args.kwargs["config"]
+    assert config.temperature is None
+    assert config.response_mime_type is None
+    assert config.thinking_config is None
+
+
+async def test_json_schema_maps_to_response_json_schema() -> None:
+    provider = _build_provider()
+    mock = _mock_generate(provider)
+    mock.return_value = _ok_response('{"a": 1}')
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}},
+        "required": ["a"],
+        "additionalProperties": False,
+    }
+
+    await provider.complete(CompletionRequest(model="m", prompt="p", json_schema=schema))
+    assert mock.await_args is not None
+    config = mock.await_args.kwargs["config"]
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == schema
+    assert config.response_schema is None
 
 
 async def test_retries_on_429() -> None:

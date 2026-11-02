@@ -1,4 +1,4 @@
-"""Google AI Studio provider (Gemini 2.0 Flash, etc.).
+"""Google AI Studio provider (Gemini 3.8 Flash, Gemini 3.5 Flash-Lite, etc.).
 
 Requires ``compactbench[providers]`` (installs the ``google-genai`` SDK) and a
 ``COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY`` environment variable.
@@ -63,13 +63,18 @@ class GoogleAIStudioProvider(Provider):
                 return False
             return code == 429 or code >= 500
 
-        config_kwargs: dict[str, Any] = {
-            "temperature": request.temperature,
-            "max_output_tokens": request.max_tokens,
-        }
+        config_kwargs: dict[str, Any] = {"max_output_tokens": request.max_tokens}
+        if request.temperature is not None:
+            config_kwargs["temperature"] = request.temperature
         if request.system:
             config_kwargs["system_instruction"] = request.system
-        if request.response_format and request.response_format.get("type") == "json_object":
+        # `response_json_schema` takes standard JSON Schema (the older
+        # `response_schema` takes an OpenAPI subset) and needs the JSON mime
+        # type alongside it. `reasoning_effort` is not mapped for Gemini.
+        if request.json_schema is not None:
+            config_kwargs["response_mime_type"] = "application/json"
+            config_kwargs["response_json_schema"] = request.json_schema
+        elif request.response_format and request.response_format.get("type") == "json_object":
             config_kwargs["response_mime_type"] = "application/json"
         config = types.GenerateContentConfig(**config_kwargs)
 

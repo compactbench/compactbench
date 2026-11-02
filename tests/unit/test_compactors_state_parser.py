@@ -160,3 +160,20 @@ class TestRecoveryFromRealModelOutput:
         """The recovery path must not add noise to responses that were fine."""
         _, warnings = parse_state('{"immutable_facts": ["a"]}')
         assert warnings == []
+
+
+def test_warnings_about_huge_entity_map_values_stay_short() -> None:
+    # Warnings are capped at 500 characters on the artifact; echoing the value broke that.
+    text = json.dumps({"entity_map": {"functions": {"body": "x" * 2000}}})
+    _, warnings = parse_state(text)
+    assert warnings
+    assert all(len(w) <= 500 for w in warnings)
+
+
+def test_many_bad_items_produce_a_bounded_warning_list() -> None:
+    # A model that returns every entry as an object instead of a string.
+    text = json.dumps({"locked_decisions": [{"d": i} for i in range(80)]})
+    state, warnings = parse_state(text)
+    assert state.locked_decisions == []
+    assert len(warnings) <= 10
+    assert "more parser warnings" in warnings[-1]

@@ -3,138 +3,113 @@
 !!! tip "Zero-install Colab notebook"
     Want to try CompactBench in your browser without any setup? Open
     [`notebooks/try_compactbench.ipynb`](https://colab.research.google.com/github/compactbench/compactbench/blob/main/notebooks/try_compactbench.ipynb)
-    in Colab — it walks through installation, runs the four built-in baselines against a real
-    model on Groq's free tier, and ends with writing your own compactor. Under two minutes end-to-end.
+    in Colab — it installs the package, runs the built-in methods and controls on Groq's
+    free tier, and ends with writing your own compactor.
 
 ## Install
 
 ```bash
-pip install compactbench
+pip install 'compactbench[providers]'
 ```
 
-Or with [uv](https://github.com/astral-sh/uv):
-
-```bash
-uv pip install compactbench
-```
-
-Verify:
+Or with [uv](https://github.com/astral-sh/uv): `uv pip install 'compactbench[providers]'`.
+The `providers` extra installs every provider SDK; without it only the offline `mock`
+provider works.
 
 ```bash
 compactbench --version
+compactbench suites list
+compactbench families list
 ```
+
+## Two models: the method's and the reader's
+
+A run involves two models, which can be the same:
+
+- **the method's model** (`--provider` / `--model`) — what your compactor calls, if it calls anything;
+- **the reader** (`--reader-provider` / `--reader-model`, defaulting to the method's) — the
+  model that answers the questions from the compacted artifact.
+
+Hold the reader fixed when comparing methods. Ranked seasons pin it.
 
 ## Configure a provider
 
-CompactBench needs a model provider to evaluate compacted context. Any of the following work out of the box:
+| Provider | `--provider` key | Env var |
+|---|---|---|
+| Anthropic | `anthropic` | `COMPACTBENCH_ANTHROPIC_API_KEY` |
+| OpenAI | `openai` | `COMPACTBENCH_OPENAI_API_KEY` |
+| OpenAI-compatible (vLLM, llama.cpp, LM Studio, OpenRouter, …) | `openai` | `COMPACTBENCH_OPENAI_BASE_URL` (+ key if the server checks one) |
+| Groq | `groq` | `COMPACTBENCH_GROQ_API_KEY` |
+| Google AI Studio | `google-ai-studio` | `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY` |
+| Ollama (local) | `ollama` | `COMPACTBENCH_OLLAMA_BASE_URL` (default `http://localhost:11434`) |
+| Mock (tests) | `mock` | none — canned responses, scores are meaningless |
 
-| Provider | `--provider` key | Env var | Free tier |
-|---|---|---|---|
-| Groq | `groq` | `COMPACTBENCH_GROQ_API_KEY` | yes — ~100k tokens/day on Llama 3.3 70B free tier, [upgrade](https://console.groq.com/settings/billing) for higher limits |
-| Google AI Studio | `google-ai-studio` | `COMPACTBENCH_GOOGLE_AI_STUDIO_API_KEY` | yes — free on Gemini 2.0 Flash, RPM limits apply |
-| Anthropic | `anthropic` | `COMPACTBENCH_ANTHROPIC_API_KEY` | credit-based — $5 starter credit with a new account |
-| OpenAI | `openai` | `COMPACTBENCH_OPENAI_API_KEY` | credit-based — usage-priced, no true free tier |
-| OpenAI-compatible | `openai` | `COMPACTBENCH_OPENAI_BASE_URL` | depends on the server — see below |
-| Ollama (local) | `ollama` | `COMPACTBENCH_OLLAMA_BASE_URL` | local only — constrained by your machine |
-| Mock (tests) | `mock` | (no config needed) | n/a — returns canned "hello" responses; scores are non-interpretable but the full pipeline runs, useful for CI + pipeline smokes |
+Put keys in a `.env` file at the project root (only `COMPACTBENCH_*` names are read) or
+export them. A real environment variable wins over `.env`.
 
-!!! info "Self-hosted and third-party OpenAI-compatible servers"
-    vLLM, llama.cpp's server, LM Studio, Together, Fireworks and OpenRouter all speak the
-    same `/v1/chat/completions` wire format, so they need a URL rather than a provider of
-    their own. Point the `openai` provider at one with `COMPACTBENCH_OPENAI_BASE_URL`:
-
-    ```bash
-    export COMPACTBENCH_OPENAI_BASE_URL=http://localhost:8000/v1
-    compactbench run --method built-in:hybrid-ledger --suite starter \
-                     --provider openai --model my-served-model
-    ```
-
-    When a base URL is set the API key becomes optional, since self-hosted servers
-    generally do not check one. Hosted gateways still need `COMPACTBENCH_OPENAI_API_KEY`.
-
-    Runs against a custom base URL are recorded in `results.jsonl` as
-    `endpoint_kind: "custom"` on the `run_start` event, so a reader can tell the run did
-    not go to OpenAI. The URL itself is **not** stored — it is frequently an internal
-    host and results files get shared. `endpoint_kind` is also part of the leaderboard's
-    ranking segment, so a self-hosted model is never ranked against the vendor-hosted
-    model whose name it was submitted under.
-
-!!! tip "Running the full Elite practice suite"
-    20 templates × default 5 cases × 2 drift cycles × ~3 eval items per cycle = ~900 LLM calls, which exceeds Groq's free-tier daily token limit. For real evaluation runs use **Anthropic**, **OpenAI**, or a paid **Groq** account. The benchmark auto-detects daily-quota 429s and surfaces them immediately (it will not retry futilely).
-
-!!! info "Prompt caching on the evaluation layer"
-    Every cycle asks the target model N evaluation questions against the same compaction artifact. CompactBench automatically threads the artifact as a `cached_prefix` on each call so providers that support prompt caching only pay for those input tokens once per cycle:
-
-    - **Anthropic** — explicit `cache_control: ephemeral` on the artifact block (~90% input-cost drop on cache hits)
-    - **OpenAI** — automatic prompt caching kicks in on stable prefixes ≥1024 tokens at the start of a user message
-    - **Groq / Ollama / Gemini** — no network-side caching today; behaviour is identical to a single concatenated prompt
-    - **Mock** — cached_prefix is recorded on every call for test inspection
-
-    This saves roughly 40–60% of input tokens on the evaluation layer for Anthropic and OpenAI runs, with no user-facing change. The `compactbench run --estimate` projector reports total tokens *before* caching, so real spend is typically lower than the estimate on those two providers.
-
-Put keys in `.env` at the project root, or export them in your shell.
+!!! info "Custom endpoints are recorded"
+    Runs against a custom base URL are recorded as `endpoint_kind: "custom"` (the URL itself
+    is never stored). Leaderboards segment on it, so a self-hosted model is never ranked
+    against the hosted model whose name it was run under.
 
 ## Run your first benchmark
 
-Against a local Ollama model:
-
 ```bash
-compactbench run \
-  --method built-in:hybrid-ledger \
-  --suite starter \
-  --provider ollama \
-  --model llama3.2
+compactbench run --method built-in:hybrid-ledger --suite starter \
+                 --provider anthropic --model claude-haiku-5-5 --controls
 ```
 
-Against Groq:
+Locally with Ollama:
 
 ```bash
-compactbench run \
-  --method built-in:structured-state \
-  --suite starter \
-  --provider groq \
-  --model llama-3.3-70b-versatile
+compactbench run --method built-in:hybrid-ledger --suite starter \
+                 --provider ollama --model qwen2.5:7b-instruct --controls
 ```
 
-Against Anthropic Claude:
+Results go to `results.jsonl` (change with `--output`). Useful options:
+
+| Option | What it does |
+|---|---|
+| `--suite starter\|practice` | `starter` is a quick smoke test; `practice` matches the ranked Elite difficulty |
+| `--cases N` | cases per family (default: the suite's) |
+| `--drift-cycles N`, `--difficulty easy\|medium\|hard\|elite` | override the suite's profile |
+| `--budget N` | token budget for each artifact (default 2048; `0` disables) |
+| `--controls` | also score from the full conversation (ceiling) and from nothing (floor) |
+| `--traces FILE` | keep every artifact, question and raw reader reply |
+| `--estimate` | print projected calls, tokens and cost; makes no API calls |
+| `--resume` | skip cases already in `--output` |
+
+Always run `--estimate` before a large run.
+
+## Read a case
 
 ```bash
-compactbench run \
-  --method built-in:hybrid-ledger \
-  --suite starter \
-  --provider anthropic \
-  --model claude-3-5-haiku-latest
+compactbench generate --family entity_confusion --seed 42 --difficulty easy --text
 ```
 
-Against OpenAI:
+The same family, seed and difficulty always produce the same case, so this is the way to
+debug a method against one specific failure.
 
-```bash
-compactbench run \
-  --method built-in:hybrid-ledger \
-  --suite starter \
-  --provider openai \
-  --model gpt-4o-mini
-```
-
-Results are written to `results.jsonl` by default. Use `--output` to change the path.
-
-## Inspect a single generated case
-
-```bash
-compactbench generate --template buried_constraint_v1 --seed 42
-```
-
-Same template + seed always produces the same case, so this is useful for debugging your compactor against a specific failure.
-
-## Score results
+## Read the scores
 
 ```bash
 compactbench score --results results.jsonl
 ```
 
-Prints a per-case breakdown plus run-level overall score, drift resistance, constraint retention, contradiction rate, and compression ratio.
+Shows the family-balanced score with its 95% interval, the score at every cycle, drift
+resistance, stale-answer and hallucination rates, and breakdowns by family and by probe
+category. With `--controls`, each family also shows its oracle and null scores and the
+normalized score between them.
+
+```bash
+compactbench qualify --results results.jsonl
+```
+
+Runs the leaderboard's qualification floors locally and lists every reason a run would
+be rejected.
 
 ## Next steps
 
 - [Write your own compactor](writing-a-compactor.md)
-- [Submit to the leaderboard](submitting.md)
+- [Methodology](methodology.md)
+- [Submitting](submitting.md)

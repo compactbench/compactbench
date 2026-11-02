@@ -13,6 +13,7 @@ from compactbench.providers import (
     ProviderError,
     ProviderResponseError,
 )
+from compactbench.providers._retry import RATE_LIMIT_RETRIES
 
 pytestmark = pytest.mark.unit
 
@@ -99,14 +100,44 @@ async def test_complete_forwards_request_parameters() -> None:
     ]
 
 
-async def test_omits_response_format_when_not_requested() -> None:
+async def test_omits_optional_parameters_when_not_requested() -> None:
     provider = _build_provider()
     mock = _mock_create(provider)
     mock.return_value = _ok_response()
 
-    await provider.complete(CompletionRequest(model="m", prompt="p"))
+    await provider.complete(CompletionRequest(model="m", prompt="p", reasoning_effort="high"))
     assert mock.await_args is not None
-    assert "response_format" not in mock.await_args.kwargs
+    kwargs = mock.await_args.kwargs
+    assert "response_format" not in kwargs
+    assert "temperature" not in kwargs
+    assert "reasoning_effort" not in kwargs
+
+
+async def test_json_schema_maps_to_json_schema_response_format() -> None:
+    """json_schema wins over a json_object response_format when both are set."""
+    provider = _build_provider()
+    mock = _mock_create(provider)
+    mock.return_value = _ok_response('{"a": 1}')
+    schema = {
+        "type": "object",
+        "properties": {"a": {"type": "integer"}},
+        "required": ["a"],
+        "additionalProperties": False,
+    }
+
+    await provider.complete(
+        CompletionRequest(
+            model="m",
+            prompt="p",
+            json_schema=schema,
+            response_format={"type": "json_object"},
+        )
+    )
+    assert mock.await_args is not None
+    assert mock.await_args.kwargs["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "response", "schema": schema},
+    }
 
 
 async def test_retries_on_rate_limit_then_succeeds() -> None:
@@ -129,14 +160,15 @@ async def test_retries_on_timeout() -> None:
     assert mock.await_count == 2
 
 
-async def test_gives_up_after_max_retries_on_rate_limit() -> None:
+async def test_gives_up_after_rate_limit_retries_run_out() -> None:
+    # Rate limits get their own, larger attempt budget than other errors.
     provider = _build_provider(max_retries=2)
     mock = _mock_create(provider)
-    mock.side_effect = [_rate_limit_error(), _rate_limit_error()]
+    mock.side_effect = [_rate_limit_error()] * RATE_LIMIT_RETRIES
 
     with pytest.raises(RateLimitError):
         await provider.complete(CompletionRequest(model="m", prompt="p"))
-    assert mock.await_count == 2
+    assert mock.await_count == RATE_LIMIT_RETRIES
 
 
 async def test_raises_on_empty_choices() -> None:

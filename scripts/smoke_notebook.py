@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -24,7 +23,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 NOTEBOOK_PATH = REPO_ROOT / "notebooks" / "try_compactbench.ipynb"
-BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
 
 _PROVIDER_RE = re.compile(r"(--provider)(\s+|=)(\S+)")
 _MODEL_RE = re.compile(r"(--model)(\s+|=)(\S+)")
@@ -150,10 +148,6 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         cwd = Path(td)
-        # `compactbench generate` / `run` look for templates relative to cwd.
-        # Copy the public suites in so the notebook's commands resolve.
-        if BENCHMARKS_DIR.is_dir():
-            shutil.copytree(BENCHMARKS_DIR, cwd / "benchmarks")
         executed = 0
         for i, cell in enumerate(cells):
             if not isinstance(cell, dict) or cell.get("cell_type") != "code":

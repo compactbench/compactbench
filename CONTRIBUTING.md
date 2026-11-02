@@ -1,34 +1,34 @@
 # Contributing to CompactBench
 
-Thanks for your interest. This project lives and dies by community submissions of compaction methods and benchmark templates, so contributions are genuinely welcome.
+Thanks for your interest. This project lives and dies by community submissions of compaction methods and scenario families, so contributions are genuinely welcome.
 
 ## Ways to contribute
 
 | Contribution | Entry point |
 |---|---|
 | Report a bug | [Bug report issue](https://github.com/compactbench/compactbench/issues/new?template=bug_report.md) |
-| Propose a new benchmark template family | [Template proposal issue](https://github.com/compactbench/compactbench/issues/new?template=template_proposal.md) |
+| Propose a new scenario family | [Template proposal issue](https://github.com/compactbench/compactbench/issues/new?template=template_proposal.md) |
 | Submit a compaction method for leaderboard scoring | [Submission guide](docs/submitting.md) |
 | Improve docs or examples | PR to `docs/` directly |
 | Fix something in core | PR to `src/compactbench/` with tests |
 
-## What needs doing — pickup welcome
+## Good places to contribute
 
-The three workorders previously listed here (WO-008/009/010) all shipped in 2026-04 and their issues are closed. Below is what is actually open, taken from the [August 2026 handover review](docs/reviews/2026-08-handover-review.md), which lists everything with evidence and file references.
+- **Run baselines on models we don't cover.** Run the built-in methods and controls on
+  `practice` with a model of your choice (`--controls` on) and open a PR with the
+  `results.jsonl` files. `compactbench qualify --results <file>` checks a run locally.
+- **A new scenario family.** A family is a Python class in
+  `src/compactbench/scenarios/families/` that places beats in the conversation and
+  registers probes; the four existing families are the reference. A good family targets
+  one compaction failure, keeps every probe answerable from the full conversation, and
+  builds wrong options from the conversation itself. Open an issue with the failure mode
+  first.
+- **A new compactor.** Built-in methods live in `src/compactbench/compactors/`.
+- **Docs and worked examples.**
 
-**Good first contributions**
-
-- **Run a baseline on a model we don't cover.** The board's reference rows come from one small local model. Running any built-in method against a different model and opening a PR with the `results.jsonl` is genuinely useful and needs no design decisions. `compactbench qualify --results <file>` tells you locally whether it would rank.
-- **A new template family.** Real compaction failure modes with no coverage yet: numeric/quantitative state, tool-call and file state for coding agents, temporal ordering, retracted information, cumulative arithmetic. Mostly YAML authoring against [`benchmarks/schemas/template-v1.json`](benchmarks/schemas/template-v1.json).
-- **Docs and worked examples.** There is still no "what does a good score look like" guide beyond the [methodology](docs/methodology.md) page.
-
-**Substantial, and where the project most needs help**
-
-- **Realistic case scale.** Our "elite" transcripts are ~531 tokens; the regime this benchmark describes starts around 100k. This is the deepest open problem — see [related work](docs/related-work.md#where-compactbench-is-currently-weaker).
-- **Judge-based grading.** Several checks are substring matches that reject correct paraphrases.
-- **Free-points evaluation items.** Roughly a third of items are "did the model avoid saying X", which an empty answer passes. The `null` control now measures this on every run; fixing it needs a content pass across the templates.
-
-Open an issue describing what you want to take on before starting anything substantial, so we can agree on scope before you spend time. Small fixes need no ceremony — just open the PR.
+Open an issue describing what you want to take on before starting anything substantial,
+so we can agree on scope before you spend time. Small fixes need no ceremony — just open
+the PR.
 
 ## Development setup
 
@@ -73,7 +73,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/) loosely:
 
 ```
 feat(scoring): add drift resistance metric
-fix(dsl): reject templates with duplicate variable names
+fix(scenarios): keep decoy rules out of the active rule set
 docs: clarify hidden-set submission flow
 ```
 
@@ -84,22 +84,24 @@ Scopes generally match top-level packages in `src/compactbench/`.
 The process is intentionally PR-based so every leaderboard entry has a visible commit trail.
 
 1. Write your method in a Python file subclassing `Compactor`.
-2. Run it locally against the `elite_practice` public suite; iterate until you're happy.
-3. Open a PR placing your method source under `submissions/<your-handle>/<method-name>/`.
-4. A maintainer will label the PR for evaluation. The hidden-set runner executes your method against Elite Ranked cases and posts scores back to the PR.
-5. If your method qualifies (see [docs/methodology.md](docs/methodology.md)), the PR is merged and the leaderboard updates.
+2. Run it locally against the public `practice` suite with `--controls`, and check it with `compactbench qualify`.
+3. Open a PR placing your method under `submissions/<your-handle>/<method-name>/`.
 
-See [docs/submitting.md](docs/submitting.md) for the full protocol, including the exact artifact shape your method must return.
+Ranked evaluation is currently paused; see [docs/submitting.md](docs/submitting.md).
 
-## Proposing a benchmark template
+## Proposing a scenario family
 
-Template proposals should:
+Proposals should:
 
-- Target one of the adversarial failure modes described in [docs/elite-program.md](docs/elite-program.md), or propose a new mode with justification.
-- Include a sample seed and its generated output so reviewers can sanity-check determinism.
-- Validate against `benchmarks/schemas/template-v1.json`.
+- Target one compaction failure mode that the existing families don't cover, with a short
+  example of a real agent hitting it.
+- Keep every probe answerable from the full conversation and not guessable from nothing —
+  include an oracle and null run (`--controls`) on a few seeds.
+- Build wrong options from the conversation itself, and include a sample case
+  (`compactbench generate --family <key> --seed 1 --text`).
 
-Hidden ranked templates are never contributed through public PRs. If you have a proposal for a ranked template, open an issue describing the idea at a high level — a maintainer will coordinate a private review.
+The families used for ranked Elite runs are maintained privately and are never contributed
+through public PRs.
 
 ## Code of Conduct
 

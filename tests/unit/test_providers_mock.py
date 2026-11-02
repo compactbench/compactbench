@@ -57,6 +57,21 @@ async def test_reset_clears_calls_and_rewinds_sequence() -> None:
     assert resp.text == "one"
 
 
+async def test_accepts_and_records_structured_output_fields() -> None:
+    mock = MockProvider(default="{}")
+    request = CompletionRequest(
+        model="m",
+        prompt="p",
+        json_schema={"type": "object"},
+        reasoning_effort="low",
+    )
+    resp = await mock.complete(request)
+    assert resp.text == "{}"
+    assert mock.calls[0].json_schema == {"type": "object"}
+    assert mock.calls[0].reasoning_effort == "low"
+    assert mock.calls[0].temperature is None
+
+
 async def test_response_token_counts_are_positive() -> None:
     mock = MockProvider(default="hello world")
     resp = await mock.complete(CompletionRequest(model="m", prompt="some prompt text"))

@@ -18,6 +18,7 @@ from compactbench.compactors import (
 )
 from compactbench.contracts import ARTIFACT_SCHEMA_VERSION, Transcript, Turn, TurnRole
 from compactbench.providers import MockProvider
+from tests.helpers import first_request
 
 pytestmark = pytest.mark.unit
 
@@ -97,7 +98,7 @@ def test_get_built_in_raises_on_unknown() -> None:
 async def test_compactor_returns_valid_artifact(compactor_cls: type[Compactor]) -> None:
     provider = _mock_for(compactor_cls)
     compactor = compactor_cls(provider, model="mock-m")
-    artifact = await compactor.compact(_minimal_transcript())
+    artifact = await compactor.compact(first_request(_minimal_transcript()))
     assert artifact.schema_version == ARTIFACT_SCHEMA_VERSION
     assert isinstance(artifact.summary_text, str)
     # Every structured section is present (empty OK, missing NOT OK — pydantic would have raised)
@@ -115,7 +116,7 @@ async def test_compactor_emits_no_unresolved_placeholders(
 ) -> None:
     provider = _mock_for(compactor_cls)
     compactor = compactor_cls(provider, model="mock-m")
-    artifact = await compactor.compact(_minimal_transcript())
+    artifact = await compactor.compact(first_request(_minimal_transcript()))
     serialized = artifact.model_dump_json()
     assert not _PLACEHOLDER.search(serialized)
 
@@ -127,7 +128,7 @@ async def test_compactor_records_selected_turn_ids(
     provider = _mock_for(compactor_cls)
     compactor = compactor_cls(provider, model="mock-m")
     transcript = _minimal_transcript()
-    artifact = await compactor.compact(transcript)
+    artifact = await compactor.compact(first_request(transcript))
     assert artifact.selected_source_turn_ids == [t.id for t in transcript.turns]
 
 
@@ -135,7 +136,7 @@ async def test_compactor_records_selected_turn_ids(
 async def test_compactor_records_method_metadata(compactor_cls: type[Compactor]) -> None:
     provider = _mock_for(compactor_cls)
     compactor = compactor_cls(provider, model="mock-m")
-    artifact = await compactor.compact(_minimal_transcript())
+    artifact = await compactor.compact(first_request(_minimal_transcript()))
     meta = artifact.method_metadata
     assert meta["method"] == compactor_cls.name
     assert meta["version"] == compactor_cls.version

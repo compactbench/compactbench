@@ -1,0 +1,27 @@
+# Season 1 of the ranked Elite leaderboard.
+#
+# Pins everything except the method and the model it calls, so every ranked
+# run is comparable. The Elite cases come from a private suite pack that the
+# evaluation infrastructure loads with --suite-pack; `sampling: fresh` gives
+# every evaluation its own sample of cases.
+#
+# Budget: 1,024 tokens (the Tight tier). Compacting a ~32k-token session into 1,024
+# tokens is about 32x, roughly what production auto-compaction does; a terse notes
+# artifact holding everything the probes ask still fits, so a near-perfect score
+# stays reachable.
+key: s1
+suite: elite
+suite_version: "2.0.1"
+difficulty: elite
+drift_cycles: 4
+cases_per_family: 48
+budget_tokens: 1024
+reader:
+  provider: anthropic
+  model: claude-haiku-5-5
+  effort: high
+# Controls are measured once per season on a calibration sample and published on
+# the Seasons page, rather than on every run: they are most of a run's reader cost.
+controls: false
+sampling: fresh
+seed_group: s1

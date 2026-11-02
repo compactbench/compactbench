@@ -1,4 +1,4 @@
-"""Results JSONL writer/reader tests."""
+"""Results file: event log round-trip, recomputed aggregates, partial files."""
 
 from __future__ import annotations
 
@@ -7,246 +7,99 @@ from pathlib import Path
 
 import pytest
 
-from compactbench.contracts import (
-    CaseResult,
-    CycleResult,
-    ItemScore,
-    Scorecard,
-)
-from compactbench.runner.persistence import (
-    SCORER_VERSION,
+from compactbench.contracts import CaseResult, CycleResult, ProbeResult
+from compactbench.runner import (
+    INCOMPLETE_RUN_NOTE,
     CaseCompleteEvent,
     ResultsWriter,
     RunEndEvent,
     RunStartEvent,
-    aggregate_run_metrics,
-    completed_case_ids,
     iter_events,
-    read_run_start,
     to_run_result,
 )
+from compactbench.scoring import compute_metrics
 
 pytestmark = pytest.mark.unit
 
 
-def _scorecard(
-    *,
-    cycle_number: int = 0,
-    cycle_score: float = 0.9,
-    contradiction_rate: float = 0.0,
-    compression_ratio: float = 5.0,
-) -> Scorecard:
-    return Scorecard(
-        cycle_number=cycle_number,
-        cycle_score=cycle_score,
-        penalized_cycle_score=cycle_score * (1.0 - contradiction_rate),
-        contradiction_rate=contradiction_rate,
-        compression_ratio=compression_ratio,
-        item_scores=[
-            ItemScore(
-                item_key="q1",
-                item_type="locked_decision_retention",
-                score=cycle_score,
-                weight=3.0,
-                check_type="contains_normalized",
-            ),
-        ],
-    )
-
-
-def _case_result(case_id: str, *, n_cycles: int = 2) -> CaseResult:
-    cycles = [
-        CycleResult(cycle_number=i, scorecard=_scorecard(cycle_number=i)) for i in range(n_cycles)
-    ]
-    return CaseResult(
-        case_id=case_id,
-        template_key="buried_constraint_starter_v1",
-        seed=42 + int(case_id[-1]) if case_id[-1].isdigit() else 42,
-        cycles=cycles,
-        case_score=sum(c.scorecard.penalized_cycle_score for c in cycles) / len(cycles),
-        drift_resistance=1.0,
-    )
-
-
-def _run_start_event() -> RunStartEvent:
+def _start() -> RunStartEvent:
     return RunStartEvent(
-        run_id="run-1",
-        method_name="naive-summary",
-        method_version="1.0.0",
-        suite_key="starter",
-        suite_version="1.0.0",
-        scorer_version=SCORER_VERSION,
-        target_provider="mock",
-        target_model="mock-deterministic",
-        difficulty="medium",
+        run_id="r",
+        method_name="m",
+        method_version="1",
+        suite="starter",
+        suite_version="2.0.0",
+        difficulty="easy",
         drift_cycles=1,
+        cases_per_family=1,
         seed_group="default",
-        case_count_per_template=1,
-        started_at=datetime(2026, 4, 17, 10, 0, 0, tzinfo=UTC),
+        compactor_provider="mock",
+        compactor_model="m",
+        reader_provider="mock",
+        reader_model="m",
+        budget_tokens=512,
+        scorer_version="3.0.0",
+        started_at=datetime(2026, 11, 1, tzinfo=UTC),
     )
 
 
-def test_write_and_read_event_roundtrip(tmp_path: Path) -> None:
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-        writer.write(CaseCompleteEvent(case_result=_case_result("case-0")))
-        writer.write(CaseCompleteEvent(case_result=_case_result("case-1")))
-        writer.write(
-            RunEndEvent(
-                completed_at=datetime(2026, 4, 17, 10, 5, 0, tzinfo=UTC),
-                overall_score=0.8,
-                drift_resistance=0.95,
-                constraint_retention=0.9,
-                contradiction_rate=0.05,
-                compression_ratio=7.5,
-            )
-        )
-
-    events = list(iter_events(path))
-    assert len(events) == 4
-    assert isinstance(events[0], RunStartEvent)
-    assert isinstance(events[1], CaseCompleteEvent)
-    assert isinstance(events[3], RunEndEvent)
+def _case(score: float) -> CaseResult:
+    probe = ProbeResult(
+        key="k", category="fact_recall", format="value", origin_cycle=0, score=score, answered=True
+    )
+    cycle = CycleResult(
+        cycle=0,
+        score=score,
+        probe_results=[probe],
+        source_tokens=100,
+        input_tokens=100,
+        artifact_tokens=10,
+    )
+    return CaseResult(case_id=f"c{score}", family="f", seed=1, cycles=[cycle], score=score)
 
 
-def test_completed_case_ids_reads_streamed_cases(tmp_path: Path) -> None:
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-        writer.write(CaseCompleteEvent(case_result=_case_result("case-a")))
-        writer.write(CaseCompleteEvent(case_result=_case_result("case-b")))
-    assert completed_case_ids(path) == {"case-a", "case-b"}
+def test_round_trip_recomputes_aggregates(tmp_path: Path) -> None:
+    out = tmp_path / "r.jsonl"
+    cases = [_case(1.0), _case(0.0)]
+    with ResultsWriter(out) as writer:
+        writer.write(_start())
+        for case in cases:
+            writer.write(CaseCompleteEvent(case_result=case))
+        tampered = compute_metrics([_case(1.0)])
+        writer.write(RunEndEvent(completed_at=datetime.now(UTC), metrics=tampered))
+    result = to_run_result(out)
+    assert result.metrics.score == pytest.approx(0.5), "aggregates come from the cases"
+    assert result.notes == []
 
 
-def test_completed_case_ids_empty_when_file_missing(tmp_path: Path) -> None:
-    assert completed_case_ids(tmp_path / "nope.jsonl") == set()
+def test_missing_run_end_marks_incomplete(tmp_path: Path) -> None:
+    out = tmp_path / "r.jsonl"
+    with ResultsWriter(out) as writer:
+        writer.write(_start())
+        writer.write(CaseCompleteEvent(case_result=_case(1.0)))
+    assert INCOMPLETE_RUN_NOTE in to_run_result(out).notes
 
 
-def test_read_run_start(tmp_path: Path) -> None:
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-    start = read_run_start(path)
-    assert start is not None
-    assert start.run_id == "run-1"
+def test_truncated_final_line_is_tolerated(tmp_path: Path) -> None:
+    out = tmp_path / "r.jsonl"
+    with ResultsWriter(out) as writer:
+        writer.write(_start())
+    with out.open("a", encoding="utf-8") as fp:
+        fp.write('{"event": "case_comp')
+    assert len(list(iter_events(out))) == 1
 
 
-def test_read_run_start_returns_none_when_no_start(tmp_path: Path) -> None:
-    path = tmp_path / "empty.jsonl"
-    path.write_text("", encoding="utf-8")
-    assert read_run_start(path) is None
-
-
-def test_to_run_result_uses_run_end_when_present(tmp_path: Path) -> None:
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-        writer.write(CaseCompleteEvent(case_result=_case_result("c1")))
-        writer.write(
-            RunEndEvent(
-                completed_at=datetime(2026, 4, 17, 10, 5, 0, tzinfo=UTC),
-                overall_score=0.8,
-                drift_resistance=0.9,
-                constraint_retention=0.75,
-                contradiction_rate=0.05,
-                compression_ratio=5.0,
-            )
-        )
-    run_result = to_run_result(path)
-    assert run_result.overall_score == 0.8
-    assert run_result.drift_resistance == 0.9
-    assert run_result.notes == []
-
-
-def test_to_run_result_falls_back_to_cases_when_run_end_missing(tmp_path: Path) -> None:
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-        writer.write(CaseCompleteEvent(case_result=_case_result("c1")))
-    run_result = to_run_result(path)
-    assert run_result.notes  # has the "incomplete" note
-    assert any("incomplete" in n for n in run_result.notes)
-    assert len(run_result.cases) == 1
-
-
-def test_to_run_result_raises_without_run_start(tmp_path: Path) -> None:
-    path = tmp_path / "empty.jsonl"
-    path.write_text("", encoding="utf-8")
-    with pytest.raises(ValueError, match="no run_start"):
-        to_run_result(path)
-
-
-def test_aggregate_with_empty_list() -> None:
-    """A run with no cases retained nothing — every aggregate is zero.
-
-    Regression: drift_resistance defaulted to 1.0 here, so an empty or crashed
-    run reported perfect drift resistance. That is 30% of elite_score awarded
-    for having produced no data at all.
-    """
-    metrics = aggregate_run_metrics([])
-    assert metrics["overall_score"] == 0.0
-    assert metrics["drift_resistance"] == 0.0
-
-
-def test_aggregate_computes_means() -> None:
-    cr1 = _case_result("c1")
-    cr2 = _case_result("c2")
-    metrics = aggregate_run_metrics([cr1, cr2])
-    assert 0.0 <= metrics["overall_score"] <= 1.0
-    assert 0.0 <= metrics["drift_resistance"] <= 1.0
-    assert metrics["constraint_retention"] > 0.0  # both have locked_decision_retention items
-
-
-def test_writer_creates_parent_directories(tmp_path: Path) -> None:
-    nested = tmp_path / "deep" / "nested" / "results.jsonl"
-    with ResultsWriter(nested) as writer:
-        writer.write(_run_start_event())
-    assert nested.exists()
-
-
-def test_writer_append_mode_preserves_existing(tmp_path: Path) -> None:
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-        writer.write(CaseCompleteEvent(case_result=_case_result("c1")))
-    with ResultsWriter(path, mode="append") as writer:
-        writer.write(CaseCompleteEvent(case_result=_case_result("c2")))
-    assert completed_case_ids(path) == {"c1", "c2"}
-
-
-def test_iter_events_tolerates_truncated_trailing_line(tmp_path: Path) -> None:
-    """A crash between ``write()`` and ``flush()`` can leave a partial final
-    line. ``--resume`` needs to ignore that line rather than crash on
-    JSONDecodeError."""
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-        writer.write(CaseCompleteEvent(case_result=_case_result("c1")))
-    # Append a truncated JSON record (no trailing newline, mid-object).
-    with path.open("a", encoding="utf-8") as fp:
-        fp.write('{"event":"case_complete","case_result":{"case_id":"c2","templ')
-
-    events = list(iter_events(path))
-    # Two complete events recovered; truncated final line silently dropped.
-    assert len(events) == 2
-    # completed_case_ids sees only the successfully persisted one.
-    assert completed_case_ids(path) == {"c1"}
-
-
-def test_iter_events_still_raises_on_mid_file_corruption(tmp_path: Path) -> None:
-    """A damaged line that DOES have a trailing newline indicates real
-    corruption, not an interrupted append. Must not be swallowed."""
-    path = tmp_path / "results.jsonl"
-    with ResultsWriter(path) as writer:
-        writer.write(_run_start_event())
-        writer.write(CaseCompleteEvent(case_result=_case_result("c1")))
-
-    # Insert a garbage line in the middle with a trailing newline.
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines(keepends=True)
-    corrupted = [*lines[:1], "not-json-and-not-truncated\n", *lines[1:]]
-    path.write_text("".join(corrupted), encoding="utf-8")
-
+def test_corruption_mid_file_raises(tmp_path: Path) -> None:
+    out = tmp_path / "r.jsonl"
+    out.write_text('{"nope": 1}\n' + _start().model_dump_json() + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="invalid event"):
-        list(iter_events(path))
+        to_run_result(out)
+
+
+def test_v1_results_file_gets_a_clear_error(tmp_path: Path) -> None:
+    out = tmp_path / "r.jsonl"
+    out.write_text(
+        '{"event": "run_start", "run_id": "x", "target_model": "old"}\n', encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match=r"0\.2 and earlier"):
+        to_run_result(out)

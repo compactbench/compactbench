@@ -140,3 +140,42 @@ class TestIsTerminalQuotaError:
         """Providers capitalise inconsistently; our matcher should not care."""
         assert is_terminal_quota_error(Exception("TOKENS PER DAY exceeded"))
         assert is_terminal_quota_error(Exception("Quota Exceeded"))
+
+
+class _RateLimitedError(Exception):
+    status_code = 429
+
+    def __init__(self, retry_after: str | None = None) -> None:
+        super().__init__("rate limited")
+
+        class _Resp:
+            headers: dict[str, str] = {} if retry_after is None else {"retry-after": retry_after}
+
+        self.response = _Resp()
+
+
+async def test_rate_limits_get_more_attempts_and_honor_retry_after(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from compactbench.providers import _retry
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(_retry.asyncio, "sleep", fake_sleep)
+    calls = 0
+
+    async def op() -> str:
+        nonlocal calls
+        calls += 1
+        if calls < 6:
+            raise _RateLimitedError(retry_after="20")
+        return "ok"
+
+    result = await _retry.retry_with_backoff(op, is_retryable=lambda e: True, max_retries=3)
+    assert result == "ok"
+    assert calls == 6
+    assert all(s >= 20 for s in sleeps)
+    assert max(sleeps) <= _retry.RATE_LIMIT_MAX_DELAY

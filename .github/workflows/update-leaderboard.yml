@@ -1,15 +1,18 @@
 name: Update leaderboard
 
-# Rebuilds docs/data/leaderboard.json when a submission (with its merged
-# results.jsonl) lands on main. The commit we push triggers the docs workflow
-# which redeploys GitHub Pages.
+# Rebuilds docs/data/leaderboard.json when something it depends on changes on main:
+# baseline results, a submission, a season file or the ranking code.
 
 on:
   push:
     branches: [main]
     paths:
+      - "baselines/**"
       - "submissions/**/results.jsonl"
+      - "seasons/**"
       - "src/compactbench/leaderboard/**"
+      - "src/compactbench/scoring/**"
+  workflow_dispatch:
 
 permissions:
   contents: write  # to commit the rebuilt leaderboard.json
@@ -49,5 +52,5 @@ jobs:
             exit 0
           fi
           git add docs/data/leaderboard.json
-          git commit -m "chore(leaderboard): rebuild from merged submissions [skip ci]"
+          git commit -m "chore(leaderboard): rebuild [skip ci]"
           git push

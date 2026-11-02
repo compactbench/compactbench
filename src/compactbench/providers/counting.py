@@ -83,6 +83,14 @@ class CountingProvider(Provider):
             self._call_count += 1
         return response
 
+    async def record(self, usage: TokenUsage) -> None:
+        """Count calls made outside :meth:`complete` (e.g. a provider-native compaction call)."""
+        async with self._lock:
+            self._prompt_tokens += usage.prompt_tokens
+            self._completion_tokens += usage.completion_tokens
+            self._cached_prompt_tokens += usage.cached_prompt_tokens
+            self._call_count += usage.call_count
+
     async def snapshot(self) -> TokenUsage:
         """Return a :class:`TokenUsage` of everything seen so far (non-destructive)."""
         async with self._lock:

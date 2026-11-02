@@ -96,6 +96,13 @@ def test_all_providers_are_registered() -> None:
         "ollama",
         "anthropic",
         "openai",
+        "openrouter",
+        "deepseek",
+        "mistral",
+        "together",
+        "fireworks",
+        "xai",
+        "gemini",
     }
 
 

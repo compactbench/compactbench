@@ -1,97 +1,63 @@
 # Elite program
 
-The Elite program is CompactBench's hardest benchmark track. It is not a single fixed test pack — it is a versioned program maintained with explicit governance.
+Elite is CompactBench's ranked track: the hardest set we maintain, and the only one that
+produces leaderboard ranks.
 
-## Goal
-
-> The hardest **publicly operated, defensible, anti-overfitting** benchmark program for AI conversation compaction methods we can build and continuously maintain.
-
-A one-time static benchmark cannot honestly sustain a "hardest" claim. Elite is maintained as a program so the claim can hold.
-
-## Structure
+## Tracks
 
 | Track | Visibility | Purpose |
 |---|---|---|
-| **Elite Practice** | public templates, public seeds | transparent practice, debugging, education |
-| **Elite Ranked** | hidden templates, rotating seeds | official leaderboard qualification |
-| **Elite Shadow** | never exposed | internal anti-gaming validation of top methods |
+| **Starter** | public | smoke-test a method end to end (~1.5k-token conversations) |
+| **Practice** | public | develop and debug at Elite difficulty (~32k-token openings, 4 drift cycles) |
+| **Elite** | hidden | ranked runs |
 
-Users develop against Practice, submit against Ranked, and top methods are periodically re-checked on Shadow.
+Practice and Elite share the same families, difficulty profile, probe formats and scoring.
+Elite differs in what can't be learned from the public package: its cases are set in
+private worlds — their own people, projects, rules, decisions, facts and filler — and
+every sentence the families write uses private wording.
 
-## Failure modes targeted
+## Fresh samples, not a fixed test set
 
-Elite cases stress the compaction failure modes that weak methods lose:
+Elite is a generator, not a list of cases. Every ranked run draws its own sample, so
+there is no answer key to memorize, and a run's cases — even if a submitter sees them in
+their own provider logs — tell them nothing reusable about the next run. Scores are
+comparable across samples because the generator is calibrated: one method scored on
+several fresh samples lands within a few points, and every reported score carries a
+confidence interval.
 
-- Buried critical constraints
-- Late decision overrides
-- Negative-rule preservation ("never do X")
-- Similar-entity confusion
-- Exception precedence (general rule + specific exception)
-- Resolved vs unresolved task continuity
-- Cross-cycle drift degradation
-- Counterfactual contamination (rejected branches staying dead)
-- Semantic camouflage
-- Compression pressure (methods that barely compress should not dominate)
+## What makes it hard
 
-## Launch families (v1)
+- Rules stated once, indirectly, inside pasted notes or tool output, tens of thousands of
+  tokens before they matter — among look-alike rules for other projects, hypotheticals
+  and rejected proposals.
+- Decisions overridden, reverted and carved into scoped exceptions, across compactions.
+- Look-alike people trading ownership back and forth.
+- Choices made by reference that only resolve if the alternatives survived.
+- Exact figures that get estimated, finalized and corrected, next to near-identical
+  figures for sibling projects.
+- Rules that cover only some components or only until a date, with scopes that keep
+  changing.
+- A ticket board whose statuses, owners and blockers move between compactions.
+- Fetched documents and injected instructions that contradict what the team decided.
+- Questions about things that were raised but never settled, where any concrete answer
+  is a hallucination.
+- Wrong answers built from the conversation itself, so a lossy summary picks them.
+- A fixed token budget for every artifact.
 
-Three families ship with the first release:
+## Fairness
 
-| Family | Stress mode |
-|---|---|
-| `buried_constraint_v1` | constraint survives deep in a noisy transcript |
-| `decision_override_v1` | later decision overrides an earlier one |
-| `entity_confusion_v1` | multiple entities with overlapping names and roles |
+Every item must be answerable from the full conversation and not guessable from
+nothing. Each Elite release is checked against both before it is used: items a reader
+gets wrong with the full conversation, or right with no context, are removed, and the
+families are balanced so no single family is easy. Runs with `--controls` measure the
+same ceiling and floor on their own cases.
 
-Each family ships with 5 public practice variations and 20 hidden ranked variations. Additional families are added post-launch.
+## Seasons
 
-**Current version**: Elite v1.0 (released 2026-04-17). Full changelog, seed-group policy, and retirement log in [governance/elite-versions.md](governance/elite-versions.md).
+A season pins every setting that affects a score: suite and version, difficulty, drift
+cycles, cases per family, token budget, and the reader model and its reasoning effort.
+Season 1 is defined in [`seasons/s1.yaml`](https://github.com/compactbench/compactbench/blob/main/seasons/s1.yaml). Submitters choose only
+their method and the model it calls. Leaderboards are segmented by season, and a
+season's rows stay pinned to its versions permanently.
 
-## Compression tiers
-
-Elite segments the leaderboard by compression tier so aggressive methods never compete directly with near-pass-through ones:
-
-- **Elite-Light** — ≥ 2× compression
-- **Elite-Mid** — ≥ 4× compression
-- **Elite-Aggressive** — ≥ 8× compression
-
-## Multi-cycle requirement
-
-Elite Ranked runs include drift:
-
-- cycle 0: initial evaluation after first compaction
-- cycle 1: continue → compact → evaluate
-- cycle 2: continue → compact → evaluate
-
-Three-to-five-cycle validations are used in Shadow on top methods.
-
-## Anti-gaming controls
-
-- Hidden ranked cases never leak through public APIs or published artifacts.
-- Seed groups rotate on leaderboard version changes.
-- Shadow evaluations spot-check the top of the leaderboard.
-- Methods must maintain ≥ 0.40 on every family — a specialist that collapses on one family cannot win overall.
-- Suspicion heuristics flag unusual patterns (low public variance + hidden collapse, extreme family concentration, brittle shadow results) for maintainer review.
-
-## Governance
-
-- Elite versions are reviewed quarterly.
-- Compromised template families are retired.
-- New families are added after observed gaming or new failure modes.
-- Historical leaderboards stay pinned to their original Elite version.
-- A public changelog records every version transition.
-
-## Product-copy guidance
-
-Safe to claim:
-
-- "ranked on the hardest benchmark program we maintain"
-- "evaluated on hidden Elite cases"
-- "tested under multi-cycle drift"
-- "scored on adversarial state-fidelity benchmarks"
-
-Not safe without continuous external validation:
-
-- "hardest test in all of AI"
-- "best benchmark in the world"
-- "impossible to game"
+See [governance](governance/elite-versions.md) for versioning and retirement.

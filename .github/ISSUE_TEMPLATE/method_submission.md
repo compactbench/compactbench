@@ -15,8 +15,8 @@ labels: ["method-submission", "needs-triage"]
 
 <!-- One or two sentences describing your approach. -->
 
-## Target leaderboard tier
+## Target token budget
 
-- [ ] Elite-Light (≥2× compression)
-- [ ] Elite-Mid (≥4× compression)
-- [ ] Elite-Aggressive (≥8× compression)
+- [ ] Tight (1024 tokens)
+- [ ] Standard (2048 tokens)
+- [ ] Roomy (4096 tokens)

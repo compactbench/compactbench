@@ -1,200 +1,178 @@
 # Methodology
 
-This page is the canonical reference for what CompactBench measures and how.
+This page is the canonical reference for what CompactBench measures and how. It describes
+scorer **3.0.0** (benchmark v2). Scores from earlier scorers are not comparable.
 
-## End-to-end flow
+## The loop
 
 ```mermaid
 flowchart LR
-    T[Template + seed] --> G[Generate case]
-    G --> C[Transcript + ground truth + eval items]
-    C --> K[Your compactor]
-    K --> A[CompactionArtifact]
-    A --> R[Replace transcript]
-    R --> M[Target model answers eval items]
-    M --> S[Score responses against ground truth]
-    S --> D{More drift cycles?}
-    D -- yes --> K
-    D -- no --> Agg[Aggregate to case + run scores]
+    G[Family + seed + difficulty] --> C[Case: cycles of turns + probes]
+    C --> K0[Compact cycle 0: whole opening conversation]
+    K0 --> R0[Reader answers cycle-0 probes from the artifact only]
+    K0 --> K1[Compact cycle n: previous artifact + new turns only]
+    K1 --> R1[Reader answers cycle-n probes]
+    K1 --> K1
+    R0 --> S[Score answers mechanically]
+    R1 --> S
+    S --> A[Family-balanced score, drift, stale and hallucination rates]
 ```
 
-The model only ever sees the compacted artifact, never the original transcript — so any constraint your compactor drops, the model will happily violate.
+A case is a long conversation split into **cycles**. Cycle 0 is the opening conversation;
+every later cycle is only what happened *after* the previous compaction.
 
-## What a benchmark case contains
+1. **Cycle 0.** The method receives the whole opening conversation and returns an artifact.
+2. **Cycle n.** The method receives its previous artifact plus the turns since then — never
+   the earlier turns. This is how compaction works in a real agent, and it is what makes
+   drift measurable: whatever the method dropped is gone for good.
+3. After every compaction, a **reader** model answers that cycle's probes using only the
+   rendered artifact. The reader — model and reasoning effort — is fixed per run (and per
+   season for ranked runs), so the method is what varies.
 
-Every case has:
+Turn `tags` are generation metadata (some mark the turn that carries the answer). They are
+stripped before the method sees anything.
 
-- A **transcript**: an ordered list of user/assistant turns, with some turns tagged as critical constraints or decisions.
-- A **ground truth**: the facts, locked decisions, forbidden behaviors, unresolved items, and entity roles the compactor must preserve.
-- **Evaluation items**: questions or tasks the model must answer *after* the transcript has been replaced with the compacted artifact.
+## What a case contains
 
-Transcripts and ground truth are generated deterministically from a versioned template and a seed.
+Cases are generated deterministically from a **family**, a **seed** and a **difficulty**.
+Each family is a kind of compaction failure:
 
-## What a run measures
-
-For each case the runner:
-
-1. Invokes your method on the transcript → produces a `CompactionArtifact`.
-2. Replaces the transcript with the artifact and asks the target model to answer the case's evaluation items.
-3. Repeats steps 1–2 for each drift cycle (default: 2 cycles).
-4. Scores each item, aggregates into a case score, and aggregates cases into a run score.
-
-## Item weights
-
-| Item type | Weight |
+| Family | What breaks compactors |
 |---|---|
-| `locked_decision_retention` | 3 |
-| `forbidden_behavior_retention` | 3 |
-| `immutable_fact_recall` | 2 |
-| `unresolved_task_continuity` | 2 |
-| `entity_integrity` | 1 |
-| `planning_soundness` | 1 |
+| `buried_constraint` | Rules stated once, often indirectly or inside pasted notes and tool output, among look-alike rules for other projects, hypotheticals and rejected proposals. Later cycles add, lift and change rules. |
+| `decision_override` | Decisions changed, reverted (A → B → A) and given scoped exceptions; rejected proposals; who made the latest call. |
+| `entity_confusion` | Look-alike people (same first name, near-identical surnames), ownership handed back and forth between them, roles and outside companies. |
+| `reference_resolution` | Choices made by pointing ("the second quote", "the cheaper of the two EU-hosted options"), then changed by pointing again — which only resolves if the shortlist survived. |
+| `numeric_precision` | Exact figures — contract values, dates, versions, identifiers — first as estimates, then finalized and corrected, next to near-identical figures for sibling projects. |
+| `conditional_scope` | Rules that cover only some components or only until a date; the scope widens, narrows and ends across cycles, next to look-alike policies on sibling projects. |
+| `task_continuity` | A ticket board whose statuses, owners and blockers keep moving, with work that is "basically done" but only in review. |
+| `provenance_authority` | Team decisions contradicted by fetched documents and instructions aimed at the assistant — some later confirmed by the team, most not. |
 
-Per-cycle score is the weighted mean of item scores.
+Ranked Elite and the public `practice` suite use **mixed sessions**: every family in one
+conversation, sharing the same people, components and token budget. A mixed case carries
+several times the state of a single-family case, so an artifact has to record state
+tersely to keep it all, and has to keep kinds of state apart (the same person decides
+things, owns components and holds tickets). Each probe is tagged with its family, so
+scores still break down per family. The `drills` suite keeps one family per case.
 
-## Contradiction penalty
+Scores vary far more from case to case than from question to question, so ranked runs use
+many cases with a fixed, family-balanced subset of each case's probes: 48 mixed cases of
+20 probes each (the same probes at every compaction, so drift is still measured on the
+same questions). At the same reader cost, that is far more stable than a few cases with
+every probe: one method scored on fresh samples moves by about 1.5–2 points (one standard
+deviation), which the reported 95% intervals cover.
 
-Any response that violates a `locked_decision` or a `forbidden_behavior` contributes to the contradiction rate:
+Conversations are padded with on-topic filler — source files, test runs, logs, API
+responses, git history, metrics — about the same project and people, so a method can't
+separate signal from noise by topic. Filler never states a rule, a decision or an
+ownership, so every probe stays answerable from the full conversation. Every update says
+what it changes in plain terms (a ticket "moves to In review", a policy "has ended"), so
+an answer never hinges on interpretation.
 
-```
-contradiction_rate = violating_responses / total_responses
-penalized_cycle_score = cycle_score * (1 - contradiction_rate)
-```
+Each case is set in a **world**: a vocabulary of people, projects, components, rules,
+decisions, facts and filler, plus the wording of every sentence the families write. The
+public suites use one public world. The ranked Elite suite uses private worlds with the
+same families, the same difficulty and the same structure, so the public Practice suite
+is a faithful rehearsal but can't be memorized into a ranked score.
 
-## Drift resistance
-
-```
-drift_resistance = clamp(mean(cycle_score_n for n >= 1) / cycle_score_0, 0, 1)
-```
-
-The fraction of the first cycle's score that later cycles retain. A method that holds steady scores 1.0; one that halves scores 0.5. Improvement clamps at 1.0 — a method that scores better after re-compaction has lost nothing, and letting it exceed 1.0 would let noise buy ranking weight.
-
-!!! warning "Changed in scorer 2.0.0"
-    This was previously `clamp(1 + mean(cycle_score_n - cycle_score_0))` — an *additive* distance from the first cycle. That measured whether scores **changed**, not whether they were any **good**: a method scoring 0.0 on every cycle was perfectly stable and scored a full **1.0**, collecting 30% of `elite_score` for the worst possible result. Scores from scorer 1.0.0 are not comparable to 2.0.0, and the leaderboard segments on `scorer_version` so the two never mix.
-
-Drift resistance is **undefined**, not perfect, when it cannot be measured — fewer than two cycles, or a zero baseline. It reports `0.0` in those cases so it can never be a source of free score, and qualification refuses to rank a run configured with zero drift cycles.
-
-### The model's own drift floor
-
-A method's raw drift number should not be read against 1.0. The `oracle` control is handed the **full, uncompacted transcript**, so it loses nothing to compaction — and it still does not score 1.0. Measured on `elite_practice` at elite difficulty against a small local model, it comes in at **0.882**.
-
-The reason is that each drift cycle extends the transcript with continuation turns, so later cycles present a longer input and the model degrades on it. That decay belongs to the model, not to the compaction method.
-
-To isolate what compaction actually cost, normalise against the oracle measured on the same (suite, model, profile):
-
-```
-compaction_attributable_drift = clamp(method_drift / oracle_drift, 0, 1)
-```
-
-- `1.0` — the method drifted no more than full context did.
-- `0.5` — the method lost twice as much as the model alone would have.
-
-`compactbench.scoring.compaction_attributable_drift` computes this; it returns `None` rather than inventing a denominator when no oracle measurement is available.
-
-## The free-points floor
-
-Not every point in a score reflects retained state. The `null` control — an artifact containing **nothing at all** — scores **0.235 overall** on `elite_practice` at elite difficulty. Anything it scores is available with no information, and is measuring the evaluation items rather than the method.
-
-Measured per item type on that run:
-
-| Item type | Weight | N | Perfect on an empty artifact | Mean |
+| Difficulty | Opening | Each later cycle | Drift cycles | Answer options |
 |---|---|---|---|---|
-| `planning_soundness` | 1.0 | 30 | **30** | **1.000** |
-| `forbidden_behavior_retention` | 3.0 | 45 | **18** | **0.400** |
-| `locked_decision_retention` | 3.0 | 27 | 0 | 0.000 |
-| `immutable_fact_recall` | 2.0 | 9 | 0 | 0.000 |
-| `entity_integrity` | 1.0 | 45 | 0 | 0.000 |
+| easy | ~1.5k tokens | ~0.6k | 2 | 4 |
+| medium | ~6k | ~2k | 3 | 5 |
+| hard | ~16k | ~5k | 4 | 6 |
+| elite | ~32k | ~8k | 4 | 7 |
 
-Three of the five item types behave correctly — they are unanswerable without retained state. Two do not:
+## Probes
 
-- **`planning_soundness` currently measures nothing.** Every item passes on an empty artifact. It contributes weight to every score while carrying no signal.
-- **`forbidden_behavior_retention` is 40% free**, and it carries the heaviest weight. These are "did the model avoid saying X" checks, which an evasive or empty answer satisfies by construction — the model can pass by knowing nothing rather than by remembering the constraint.
+Every probe has a mechanically checkable answer:
 
-**Known limitation, being fixed.** The planned repair is to rewrite both item types so they require the model to *name* the constraint it is respecting rather than merely not violating it — turning "don't say X" (passable by silence) into "what were you told not to do here" (passable only with the state). Until that lands, read every `overall_score` against the 0.235 floor rather than against 0. This is why the `null` row is published on the leaderboard rather than hidden.
+| Format | The reader gives | Scored |
+|---|---|---|
+| single | one option letter | 1 if correct; picking several scores 0 |
+| multi | every letter that applies | `max(0, (right − wrong) / right answers)` |
+| value | one exact value | normalized by kind (money, date, number, version, identifier, text), then compared exactly |
+| list | every value in a set | same formula as multi |
 
-### What `elite_score` still gives away, and why it cannot be exploited
+Wrong options are built from the case itself — superseded decisions, rules for other
+projects, look-alike people, the runner-up vendor — so a lossy summary picks them. Some
+wrong options are **traps**: answers that only a decoy supports, such as another
+project's rule, a rejected proposal, or a value injected by a fetched document.
+Single-choice probes always offer *"Not stated in the conversation"*, and some probes have
+it as the right answer: the conversation raised the question but never settled it.
+Select-all probes always have at least as many wrong options as right ones, so selecting
+everything can't pay, and always have at least one right answer.
 
-The published `null` row shows `elite_score` **0.469** against the full-context oracle's **0.629** — an artifact containing nothing scores 75% of what perfect information scores on the composite. That number is on the board deliberately; here is where it comes from:
+Each probe has a category (constraint recall, constraint application, decision state,
+entity attribution, reference resolution, fact recall, abstention) for the breakdowns.
 
-```
-0.40 x overall  0.235          = 0.094
-0.30 x drift    0.750          = 0.225   <- consistently scoring badly is still "stable"
-0.20 x constraint 0.250        = 0.050
-0.10 x compression bonus 1.00  = 0.100   <- 510x maxes the bonus
-                                 -----
-                                 0.469
-```
+## Metrics
 
-Roughly two-thirds of that is structural rather than earned. `drift_resistance` is deliberately **scale-free** — it measures retention, so a method that scores 0.235 on every cycle has genuinely retained everything it had. That is correct for the metric in isolation, but it means the 30% weight `elite_score` gives it rewards *stability* independently of *quality*.
+| Metric | Definition |
+|---|---|
+| **score** | Mean probe score per family, then the mean across families — every family counts equally. Reported with a 95% bootstrap interval that resamples whole cases (a mixed case brings all its families along). Abstention probes count only when missed: answering "not stated" correctly earns nothing, since an empty artifact would too, while inventing an answer counts as a wrong one. |
+| **normalized score** | With `--controls`: per family `(score − null) / (oracle − null)`, the share of the achievable range the method kept. |
+| **drift resistance** | Per case, the score at the last cycle over the score at the first, on the probes asked at both (excluding "never settled" probes); averaged over cases. 0 when unmeasurable. |
+| **decay** | The same probes' first-cycle score minus their last-cycle score. |
+| **stale-answer rate** | Of probes that offered a superseded answer, the share where the reader picked it. |
+| **trap rate** | Of probes that offered a trap, the share where the reader picked it. |
+| **hallucination rate** | Of "never settled" probes, the share where the reader gave a concrete answer. |
+| **artifact tokens / compression** | Rendered artifact size, and conversation-so-far tokens divided by it. |
 
-**This is not a route onto the leaderboard.** Qualification blocks the strategy at three independent points, verified by submitting the real null run under an ordinary method name:
+All token counts use `cl100k_base` on the rendered artifact — exactly what the reader sees.
 
-- compression above 50x is rejected as a degenerate artifact;
-- the per-family mean floor of 0.40 fails on three of the four families;
-- and control arms are never ranked regardless.
+## Controls
 
-So it is a weighting question rather than an open hole: `elite_score`'s composite is more generous to a do-nothing method than it should be, even though nothing can actually rank that way. Revisiting the weights is a scorer-version change and wants real submission data to calibrate against, so it is documented here rather than adjusted on a guess. The candidate fix is to score `overall` and `drift` **relative to the oracle and null bounds** measured on the same suite and model, rather than against 0 and 1.
+`--controls` answers every probe twice more, on the same cases: from the **full
+conversation so far** (oracle — what losing nothing scores) and from **nothing** (null —
+what guessing scores). A method's score only means something between those two. Suites
+are calibrated so the oracle scores at least 0.90 and the null at most 0.10 in every
+family; a family that misses either bound is fixed before it ships. The same
+references exist as built-in methods (`oracle`, `null`, `truncate-last-n`) for standalone
+runs; they are published as reference rows and never ranked.
 
-## Compression ratio
+Ranked seasons measure the controls once, on a calibration sample, and publish the
+ceiling and floor per family on the Seasons page, rather than on every run: the full
+conversation is long, so the controls are most of a run's reader cost. Locally, add
+`--controls` to any run to get them on your own cases.
 
-```
-compression_ratio = tokens(transcript) / (tokens(summary_text) + tokens(structured_state))
-```
+## Token budget
 
-Tokenizer is `cl100k_base` (tiktoken), applied consistently across all methods and models so ratios are directly comparable.
+Every run has a token budget for the rendered artifact (default 2048; tiers are Tight 1024,
+Standard 2048, Roomy 4096). The method is told the budget. Anything beyond it is cut off
+before the reader sees it, and ranked runs reject any cycle over budget. Compression is
+therefore a constraint, not a bonus: methods compete on what they keep within the same budget.
 
-## Leaderboard ranking
+Ranked Season 1 uses the Tight tier. Compacting a ~32k-token session into 1,024 tokens is
+about 32x — roughly what production auto-compaction does — and a terse notes artifact
+holding everything the probes ask about still fits, so a near-perfect score stays
+reachable. The budget is a season setting: the leaderboard never compares rows across
+budgets.
 
-```
-elite_score =
-    0.40 * run_overall_score
-  + 0.30 * drift_resistance
-  + 0.20 * constraint_retention
-  + 0.10 * compression_bonus
-```
+## Ranking
 
-Tie-breakers in order: higher drift_resistance → higher constraint_retention → lower contradiction_rate → earlier `published_at`.
+Within one suite, scorer, reader and budget, rows are ordered by **score**; ties break on
+drift resistance, then lower stale-answer rate, then earlier publication. A row's rank is
+one plus the number of rows whose whole 95% interval lies above its own, so methods whose
+intervals overlap share a rank. A run must:
 
-## Qualification floors
+- complete every case and cycle (a results file without its final event is never ranked);
+- have at least one drift cycle and a token budget, with no cycle over budget;
+- have usable reader answers for at least 95% of probes;
+- use the reader on its provider's own endpoint;
+- match its season's pinned settings (suite, difficulty, cycles, cases, budget, reader and
+  reader effort).
 
-All of the following must pass for a run to qualify for the leaderboard:
+Controls and maintainer baselines are shown as reference rows and never ranked.
 
-- `compression_ratio ≥ tier_floor` (2× / 4× / 8× by tier)
-- `contradiction_rate ≤ 0.10`
-- All configured case slots completed
-- All configured drift cycles completed
-- No single benchmark family below 0.40 pass rate
-- No callback, scoring, or runner failures in ranked slots
+## Reproducibility
 
-## Worked example: a `buried_constraint` case
-
-Here's how one case flows through the scorer end-to-end.
-
-**The generated transcript** contains a critical rule buried in noise:
-
-> **user**: Quick note before we continue — *never recommend any supplier that ships from outside the EU*, regardless of price.
-> **assistant**: Understood. Noted.
-> *(…six distractor turns about meeting times, lunch orders, a changed Zoom link…)*
-> **user**: Okay, picking up where we left off — I need a supplier shortlist for the Q3 packaging order.
-
-**Ground truth** says: `forbidden_behavior` = recommending a non-EU supplier. `locked_decision` = supplier list must be EU-only.
-
-**Your compactor** returns a `CompactionArtifact`. If the structured state includes `forbidden_behaviors: ["non-EU suppliers"]`, great. If it only has a prose summary that elided the constraint, you're about to fail.
-
-**Eval item**: the model is asked *"Draft the supplier shortlist — include their country of origin."* If it returns "SupplierCo (Vietnam)", that response scores 0 on the `forbidden_behavior_retention` item (weight 3) AND contributes to the `contradiction_rate`.
-
-**Penalty stack**:
-
-- Item score: 0 (of a possible 3)
-- The case contradiction_rate goes up; final cycle score is `cycle_score × (1 − contradiction_rate)`
-- If enough cases in the `buried_constraint` family fail this way, the 0.40 family-floor qualification check trips and the whole run is rejected from the leaderboard
-
-**Drift cycle 2**: the transcript continues, your compactor is called *again* with only the previous artifact as context. If you dropped the constraint on cycle 1, cycle 2's model has no way to recover it. That's what `drift_resistance` captures.
-
-The `decision_override` and `entity_confusion` families follow the same pattern with different failure modes — see [elite-program.md](elite-program.md) for the full template catalog.
-
-## Determinism and reproducibility
-
-- Every case is generated from `(template_version, seed_group, case_slot)`. Reproducing the generation only requires those three values.
-- Every result is stamped with benchmark suite version, scorer version, model key + version, and method version.
-- Leaderboard versions are segmented by benchmark version **and** target model. Methods are never compared across different benchmark or model versions.
+- Case generation is a pure function of family, seed, difficulty and drift cycles.
+- Model output is not deterministic — current models don't take sampling parameters — so
+  results report confidence intervals, and `--traces` keeps every raw reader reply so any
+  score can be re-checked exactly.
+- Results files record the suite and scorer versions, method and version, both models,
+  where each model's calls went (`endpoint_kind`), the budget and the seed group. They hold
+  scores only — no conversation text or questions — so they are safe to share. Published
+  results from the hidden set are also redacted: each question's key (which names the
+  private world's people and rules) becomes a salted hash, and the method's own warning
+  text is dropped; scores are unchanged.

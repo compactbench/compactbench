@@ -25,9 +25,15 @@ import inspect
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast
 
 from compactbench.compactors.base import Compactor
-from compactbench.contracts import CompactionArtifact, StructuredState, Transcript
+from compactbench.contracts import (
+    CompactionArtifact,
+    CompactionRequest,
+    StructuredState,
+    Transcript,
+)
 from compactbench.contracts.case import TurnRole
 from compactbench.providers.base import Provider
+from compactbench.rendering import render_artifact
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -104,7 +110,34 @@ def transcript_to_messages(transcript: Transcript) -> list[BaseMessage]:
                 out.append(human_cls(content=turn.content, additional_kwargs=extras))
             case TurnRole.ASSISTANT:
                 out.append(ai_cls(content=turn.content, additional_kwargs=extras))
+            case TurnRole.TOOL:
+                # Tool output becomes a human message: a bare ToolMessage without
+                # the AIMessage tool call that produced it breaks many chains.
+                label = f"TOOL[{turn.name}]" if turn.name else "TOOL"
+                out.append(human_cls(content=f"{label}: {turn.content}", additional_kwargs=extras))
     return cast("list[BaseMessage]", out)
+
+
+def request_to_messages(request: CompactionRequest) -> list[BaseMessage]:
+    """Convert a :class:`CompactionRequest` to LangChain messages.
+
+    From the second cycle on, the previous artifact comes first as a
+    ``SystemMessage`` (marked ``compactbench_previous_artifact`` in
+    ``additional_kwargs``), followed by the turns since that compaction —
+    the same shape a LangChain app sees after its own summarisation step.
+    """
+    system_cls, _, _ = _import_message_classes()
+    messages: list[Any] = []
+    if request.previous_artifact is not None:
+        messages.append(
+            system_cls(
+                content="Summary of the conversation so far:\n"
+                + (render_artifact(request.previous_artifact) or "(empty)"),
+                additional_kwargs={"compactbench_previous_artifact": True},
+            )
+        )
+    messages.extend(transcript_to_messages(Transcript(turns=list(request.turns))))
+    return cast("list[BaseMessage]", messages)
 
 
 def _message_content_as_text(message: Any) -> str:
@@ -251,18 +284,18 @@ class LangChainCompactor(Compactor):
             return str(response.content)
 
         compactor = LangChainCompactor(
-            provider=target_provider,  # e.g. GroqProvider() — answers eval items
-            model="llama-3.3-70b-versatile",
+            provider=MockProvider(),  # unused: your function owns its LLM
+            model="gpt-4o-mini",  # recorded as the method's model
             compaction_fn=summarise,
             method_name="my-langchain-summary",
             method_version="0.1.0",
         )
 
-    The CompactBench ``provider`` and ``model`` are used by the runner when it
-    queries the target model for evaluation-item responses, *not* by your
-    compaction function — your function owns its own LangChain LLM. This
-    mirrors how a production LangChain app typically has a summariser LLM
-    separate from the main chat model.
+    Your function owns its own LangChain LLM; ``provider`` / ``model`` are only
+    recorded as the method's model. The reader that answers the probes is
+    configured separately on the run. From the second cycle on, the messages
+    start with the previous artifact as a ``SystemMessage`` — see
+    :func:`request_to_messages`.
     """
 
     name: ClassVar[str] = "langchain"
@@ -286,20 +319,15 @@ class LangChainCompactor(Compactor):
         self._method_version = method_version or self.version
         self._extra_metadata = extra_metadata
 
-    async def compact(
-        self,
-        transcript: Transcript,
-        config: dict[str, Any] | None = None,
-        previous_artifact: CompactionArtifact | None = None,
-    ) -> CompactionArtifact:
-        messages = transcript_to_messages(transcript)
+    async def compact(self, request: CompactionRequest) -> CompactionArtifact:
+        messages = request_to_messages(request)
         raw: Any = self._compaction_fn(messages)
         if inspect.isawaitable(raw):
             raw = await raw
         result: CompactionResult = cast(CompactionResult, raw)
         return result_to_artifact(
             result,
-            transcript,
+            Transcript(turns=list(request.turns)),
             method=self._method_name,
             version=self._method_version,
             model=self.model,
@@ -312,6 +340,7 @@ __all__ = [
     "CompactionFn",
     "CompactionResult",
     "LangChainCompactor",
+    "request_to_messages",
     "result_to_artifact",
     "transcript_to_messages",
 ]

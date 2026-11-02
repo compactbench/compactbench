@@ -1,0 +1,7 @@
+# Reference baselines: built-in methods run by the maintainers under the season's
+# pinned settings. Shown on the leaderboard, never ranked.
+published_by: compactbench
+season: s1
+compactor_provider: anthropic
+compactor_model: claude-haiku-5-5
+created: 2026-11-02

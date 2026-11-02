@@ -1,34 +1,21 @@
 # Submissions
 
-This folder holds community-submitted compaction methods. Each submission is a PR placed at:
+Published ranked submissions. Ranked evaluation is paused while the v2 evaluation
+pipeline is finished; when it reopens, each qualifying run is written here and the
+leaderboard updates.
 
 ```
-submissions/<your-handle>/<method-name>/
+submissions/<github-handle>/<method-name>/
+├─ method.py          your method, exactly as submitted (the public audit trail)
+├─ requirements.txt   its pinned extra dependencies, if any
+├─ submission.json    method, version, provider, model, display name — no keys
+├─ results.jsonl      scores only; no conversation text or questions
+└─ commitment.json    SHA-256 commitments to the private traces
 ```
 
-A maintainer-operated runner evaluates new submissions against hidden Elite Ranked cases and posts scores back to the PR. Qualifying runs land on the public leaderboard at [https://compactbench.github.io/compactbench/leaderboard](https://compactbench.github.io/compactbench/leaderboard/).
+`_template/` is a starting point for writing a method; see
+[Writing a compactor](../docs/writing-a-compactor.md). Test it locally against the
+public `practice` suite with any model.
 
-## Before you submit
-
-Read [docs/submitting.md](../docs/submitting.md). Short version:
-
-1. Implement a class that subclasses `compactbench.compactors.Compactor`.
-2. Test it locally against `compactbench run --suite elite_practice`.
-3. Copy `submissions/_template/` as your scaffold and edit in place.
-4. Open a PR.
-
-## What gets published on merge
-
-- Method name + your handle (or declared org name)
-- Overall, drift, constraint retention, contradiction, compression, per-family scores
-- Benchmark version, scorer version, target model, method version
-
-The hidden test content is never published, and your raw method source stays in the public repo under your submission folder — that's the audit trail.
-
-## Honesty norms
-
-- Don't submit a method that has seen any hidden case content.
-- Don't fine-tune on the public practice set in a way that's indistinguishable from memorization.
-- If you used the leaderboard runner's responses to iterate, disclose it in your PR.
-
-Results that rely on hidden-case exposure are removed and the submitter is banned from the board.
+Hidden case content is never published. Resubmitting a method replaces its files
+here; git history keeps every earlier version.

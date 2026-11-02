@@ -1,97 +1,117 @@
 # Writing a compactor
 
-A compactor takes a transcript and returns a `CompactionArtifact`. That's the whole contract.
-
-## The `Compactor` class
+A compactor is one class with one async method. It receives a `CompactionRequest` and
+returns a `CompactionArtifact`.
 
 ```python
-from typing import Any
+from typing import ClassVar
 
 from compactbench.compactors import Compactor
-from compactbench.contracts import (
-    CompactionArtifact,
-    StructuredState,
-    Transcript,
-)
+from compactbench.contracts import CompactionArtifact, CompactionRequest
+from compactbench.providers import CompletionRequest
+from compactbench.rendering import render_request
 
 
 class MyCompactor(Compactor):
-    name = "my-method"
-    version = "0.1.0"
+    name: ClassVar[str] = "my-method"
+    version: ClassVar[str] = "0.1.0"
 
-    async def compact(
-        self,
-        transcript: Transcript,
-        config: dict[str, Any] | None = None,
-        previous_artifact: CompactionArtifact | None = None,
-    ) -> CompactionArtifact:
-        return CompactionArtifact(
-            summaryText="A short overview of the conversation.",
-            structured_state=StructuredState(
-                immutable_facts=["project: X"],
-                locked_decisions=["use approach A"],
-                forbidden_behaviors=["do not B"],
-                unresolved_items=["decide on C"],
-                entity_map={"Alice": "primary_stakeholder"},
-            ),
-            selectedSourceTurnIds=[t.id for t in transcript.turns],
-            warnings=[],
-            methodMetadata={"temperature": 0.0},
+    async def compact(self, request: CompactionRequest) -> CompactionArtifact:
+        response = await self.provider.complete(
+            CompletionRequest(
+                model=self.model,
+                prompt="Update the running summary:\n\n" + render_request(request),
+                max_tokens=8_000,  # room for thinking on reasoning models
+                reasoning_effort="low",
+            )
         )
+        return CompactionArtifact(summaryText=response.text.strip())
 ```
 
-## The artifact schema
-
-Every field in `CompactionArtifact` is required — empty arrays and empty objects are fine; missing keys are not.
-
-| Field | Purpose |
-|---|---|
-| `summaryText` | Free-form summary (≤ 8000 chars). Optional; leave empty for no-prose methods. |
-| `structured_state.immutable_facts` | Facts that must never change (entities, versions, file paths). |
-| `structured_state.locked_decisions` | Decisions the user has committed to. |
-| `structured_state.deferred_items` | Items explicitly postponed. |
-| `structured_state.forbidden_behaviors` | Things the assistant must never do. |
-| `structured_state.entity_map` | Canonical mapping of entity names to roles. |
-| `structured_state.unresolved_items` | Open tasks or questions. |
-| `selectedSourceTurnIds` | Turn ids the method drew from. |
-| `warnings` | Non-fatal issues the method encountered. |
-| `methodMetadata` | Anything method-specific the scorer should ignore. |
-
-The Pydantic validator will reject any extra fields.
-
-## Testing locally
-
-Use the mock provider for reproducible local iteration:
+Run it:
 
 ```bash
-compactbench run \
-  --method path/to/my_compactor.py:MyCompactor \
-  --suite starter \
-  --provider mock \
-  --drift-cycles 2
+compactbench run --method path/to/my_compactor.py:MyCompactor \
+                 --suite practice --provider anthropic --model claude-haiku-5-5 --controls
 ```
 
-Then inspect `results.jsonl`.
+## What the request holds
 
-## Handling drift cycles
+| Field | Cycle 0 | Later cycles |
+|---|---|---|
+| `cycle` | `0` | `1, 2, …` |
+| `turns` | the whole opening conversation | **only** the turns since your last compaction |
+| `previous_artifact` | `None` | exactly what you returned last cycle |
+| `token_budget` | the run's budget (or `None`) | same |
 
-If you want to accumulate state across cycles (the strongest baseline — `hybrid-ledger` — does this), use the `previous_artifact` argument:
+The earlier turns are never sent again. Anything your artifact dropped is gone — that is
+the point of the drift cycles.
+
+Turns have a `role` (`user`, `assistant`, `system`, `tool`), `content`, and for tool output
+a `name` (`read_file`, `run_tests`, …). `compactbench.rendering.render_request` renders a
+request as one prompt body; `render_artifact` shows exactly what the reader will see.
+
+## The artifact
 
 ```python
-async def compact(
-    self,
-    transcript: Transcript,
-    config: dict[str, Any] | None = None,
-    previous_artifact: CompactionArtifact | None = None,
-) -> CompactionArtifact:
-    carried_locked = (
-        list(previous_artifact.structured_state.locked_decisions) if previous_artifact else []
-    )
-    # ... merge with newly observed decisions ...
+CompactionArtifact(
+    summaryText="...",  # free text
+    structured_state=StructuredState(  # optional sections
+        immutable_facts=[...],
+        locked_decisions=[...],
+        forbidden_behaviors=[...],
+        deferred_items=[...],
+        unresolved_items=[...],
+        entity_map={"Dana Whitfield": "owns the export job"},
+    ),
+    methodMetadata={...},  # carried to your next cycle, never shown to the reader
+)
 ```
 
-Stateless methods should simply ignore `previous_artifact`.
+The reader sees `render_artifact(artifact)`: the summary, then each non-empty section. The
+token budget is measured on that rendering, so moving text into `structured_state` doesn't
+avoid it. An over-budget artifact is cut before the reader sees it, and disqualifies a
+ranked run, so models that overshoot a word limit need a safety net:
+`compactbench.compactors.fit_to_budget(artifact, request.token_budget)` returns the
+artifact trimmed to fit (oldest structured entries first, then the end of the summary),
+as the built-in methods do. `methodMetadata` is a good place for state you want back next
+cycle (the `truncate-last-n` control keeps its turns there).
 
-## Ready to submit?
+## The model your method uses
 
-See [submitting to the leaderboard](submitting.md).
+`self.provider` and `self.model` are the method's own model — whatever `--provider` /
+`--model` the run was given. The reader that answers the probes is configured separately
+(`--reader-provider` / `--reader-model`, or pinned by a season), so your method can use any
+model you like, or none.
+
+Method-specific settings arrive as `self.config`: the JSON object you give with
+`--method-config` locally, or in the "Method config" field when you submit.
+
+## Check before you submit
+
+```bash
+compactbench run --method my_compactor.py:MyCompactor --suite practice \
+                 --provider anthropic --model claude-haiku-5-5 \
+                 --reader-provider anthropic --reader-model claude-haiku-5-5 \
+                 --controls --traces traces.jsonl --output results.jsonl
+compactbench score --results results.jsonl
+compactbench qualify --results results.jsonl
+```
+
+`traces.jsonl` shows, per cycle, your artifact, the questions, and the reader's raw
+replies — the fastest way to see what your method loses. Use `--estimate` first to see
+the token cost.
+
+## Migrating from 0.2
+
+0.2 compactors implemented `compact(self, transcript, config=None, previous_artifact=None)`
+and received the **whole** transcript every cycle. In 0.3:
+
+- the signature is `compact(self, request: CompactionRequest)`;
+- after cycle 0 you receive only the new turns plus your previous artifact;
+- `config` moved to `self.config`;
+- there is a token budget (`request.token_budget`).
+
+A class with the old signature fails to load with a message pointing here. The usual port
+is: build your prompt from `render_request(request)` instead of the transcript, and stay
+under `request.token_budget`.

@@ -9,6 +9,7 @@ import pytest
 from compactbench.compactors import HybridLedgerCompactor
 from compactbench.contracts import Transcript, Turn, TurnRole
 from compactbench.providers import MockProvider
+from tests.helpers import first_request, next_request
 
 pytestmark = pytest.mark.unit
 
@@ -46,7 +47,7 @@ async def test_first_cycle_has_no_previous_to_merge() -> None:
         ]
     )
     compactor = HybridLedgerCompactor(provider, model="m")
-    artifact = await compactor.compact(_transcript())
+    artifact = await compactor.compact(first_request(_transcript()))
     assert artifact.summary_text == "Situational header."
     assert artifact.structured_state.locked_decisions == ["use postgres"]
     assert artifact.structured_state.forbidden_behaviors == ["skip review"]
@@ -65,8 +66,8 @@ async def test_second_cycle_appends_new_items() -> None:
         ]
     )
     compactor = HybridLedgerCompactor(provider, model="m")
-    first = await compactor.compact(_transcript())
-    second = await compactor.compact(_transcript(), previous_artifact=first)
+    first = await compactor.compact(first_request(_transcript()))
+    second = await compactor.compact(next_request(_transcript(), first))
     # Append-only sections accumulate.
     assert second.structured_state.locked_decisions == ["use postgres", "deploy behind a flag"]
     assert second.structured_state.forbidden_behaviors == ["skip review", "mutate on Friday"]
@@ -83,8 +84,8 @@ async def test_duplicates_are_deduplicated() -> None:
         ]
     )
     compactor = HybridLedgerCompactor(provider, model="m")
-    first = await compactor.compact(_transcript())
-    second = await compactor.compact(_transcript(), previous_artifact=first)
+    first = await compactor.compact(first_request(_transcript()))
+    second = await compactor.compact(next_request(_transcript(), first))
     assert second.structured_state.locked_decisions == ["reuse auth flow"]
 
 
@@ -98,8 +99,8 @@ async def test_entity_map_merges_with_new_winning() -> None:
         ]
     )
     compactor = HybridLedgerCompactor(provider, model="m")
-    first = await compactor.compact(_transcript())
-    second = await compactor.compact(_transcript(), previous_artifact=first)
+    first = await compactor.compact(first_request(_transcript()))
+    second = await compactor.compact(next_request(_transcript(), first))
     assert second.structured_state.entity_map == {
         "Priya": "lead",
         "Rafael": "eng",
@@ -110,7 +111,7 @@ async def test_entity_map_merges_with_new_winning() -> None:
 async def test_issues_two_calls_per_compact() -> None:
     provider = MockProvider(responses=[_delta_json(), "header1", _delta_json(), "header2"])
     compactor = HybridLedgerCompactor(provider, model="m")
-    await compactor.compact(_transcript())
+    await compactor.compact(first_request(_transcript()))
     assert len(provider.calls) == 2
-    await compactor.compact(_transcript())
+    await compactor.compact(first_request(_transcript()))
     assert len(provider.calls) == 4
