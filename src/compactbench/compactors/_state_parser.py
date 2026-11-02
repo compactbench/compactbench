@@ -17,6 +17,11 @@ import json
 from typing import Any, cast
 
 from compactbench.contracts import StructuredState
+from compactbench.jsonutil import (
+    extract_first_json_object,
+    strip_code_fences,
+    strip_reasoning_blocks,
+)
 
 _LIST_SECTIONS = (
     "immutable_facts",
@@ -33,7 +38,7 @@ _MAX_STRING_LENGTH = 500
 def parse_state(text: str) -> tuple[StructuredState, list[str]]:
     """Parse a JSON-object response into a :class:`StructuredState` and warnings."""
     warnings: list[str] = []
-    cleaned = _strip_code_fences(_strip_reasoning_blocks(text))
+    cleaned = strip_code_fences(strip_reasoning_blocks(text))
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError:
@@ -44,7 +49,7 @@ def parse_state(text: str) -> tuple[StructuredState, list[str]]:
         # than the compaction method, and doing it worst on exactly the small
         # and local models this benchmark wants to be runnable on. Recover the
         # first balanced JSON object instead.
-        extracted = _extract_first_json_object(cleaned)
+        extracted = extract_first_json_object(cleaned)
         if extracted is None:
             warnings.append("response contained no parsable JSON object")
             return StructuredState(), warnings
@@ -64,76 +69,19 @@ def parse_state(text: str) -> tuple[StructuredState, list[str]]:
         name: _clean_list(obj.get(name), name, warnings) for name in _LIST_SECTIONS
     }
     sections["entity_map"] = _clean_entity_map(obj.get("entity_map"), warnings)
-    return StructuredState.model_validate(sections), warnings
+    return StructuredState.model_validate(sections), _capped(warnings)
 
 
-def _strip_reasoning_blocks(text: str) -> str:
-    """Drop ``<think>``-style reasoning preambles some models emit before the answer.
-
-    These arrive ahead of the JSON and are not part of it. Removing them here
-    keeps the fence/decoder path below simple.
-    """
-    out = text
-    for tag in ("think", "thinking", "reasoning"):
-        open_tag, close_tag = f"<{tag}>", f"</{tag}>"
-        while open_tag in out and close_tag in out:
-            start = out.index(open_tag)
-            end = out.index(close_tag, start) + len(close_tag)
-            out = out[:start] + out[end:]
-    return out
+MAX_PARSER_WARNINGS = 10
 
 
-def _extract_first_json_object(text: str) -> str | None:
-    """Return the first balanced ``{...}`` span in ``text``, or None.
-
-    Brace-counting is string- and escape-aware, so a ``}`` inside a value (very
-    common — forbidden behaviours quote code) does not terminate the object
-    early. Deliberately simple: it recovers the overwhelmingly common
-    "prose around one object" shape without pulling in a JSON5 dependency.
-    """
-    start = text.find("{")
-    if start == -1:
-        return None
-
-    depth = 0
-    in_string = False
-    escaped = False
-    for index in range(start, len(text)):
-        char = text[index]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : index + 1]
-    return None
-
-
-def _strip_code_fences(text: str) -> str:
-    """Remove ``\\`\\`\\`json`` fences or leading/trailing backticks if present."""
-    stripped = text.strip()
-    if not stripped.startswith("```"):
-        return stripped
-    # Find the first newline after the opening fence.
-    after_fence = stripped[3:]
-    if after_fence.lower().startswith("json"):
-        after_fence = after_fence[4:]
-    if "\n" in after_fence:
-        after_fence = after_fence.split("\n", 1)[1]
-    # Strip trailing closing fence if present.
-    if after_fence.rstrip().endswith("```"):
-        after_fence = after_fence.rstrip()[:-3]
-    return after_fence.strip()
+def _capped(warnings: list[str]) -> list[str]:
+    """At most :data:`MAX_PARSER_WARNINGS`, so a model that returns every item in the
+    wrong shape can't push the artifact past its warning limit."""
+    if len(warnings) <= MAX_PARSER_WARNINGS:
+        return warnings
+    extra = len(warnings) - (MAX_PARSER_WARNINGS - 1)
+    return [*warnings[: MAX_PARSER_WARNINGS - 1], f"…and {extra} more parser warnings"]
 
 
 def _clean_list(value: Any, name: str, warnings: list[str]) -> list[str]:
@@ -171,7 +119,12 @@ def _clean_entity_map(value: Any, warnings: list[str]) -> dict[str, str]:
     result: dict[str, str] = {}
     for k, v in mapping.items():
         if not isinstance(k, str) or not isinstance(v, str):
-            warnings.append(f"entity_map entry {k!r}={v!r} is not string-to-string; skipping")
+            # Name the entry, not its value: values can be arbitrarily large and
+            # warnings are capped at 500 characters.
+            warnings.append(
+                f"entity_map entry {str(k)[:60]!r} is not string-to-string "
+                f"(got {type(v).__name__}); skipping"
+            )
             continue
         k = k.strip()
         v = v.strip()

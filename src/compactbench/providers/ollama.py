@@ -80,15 +80,19 @@ class OllamaProvider(Provider):
             messages.append({"role": "system", "content": request.system})
         messages.append({"role": "user", "content": user_content})
 
+        options: dict[str, Any] = {"num_predict": request.max_tokens}
+        if request.temperature is not None:
+            options["temperature"] = request.temperature
         chat_kwargs: dict[str, Any] = {
             "model": request.model,
             "messages": messages,
-            "options": {
-                "temperature": request.temperature,
-                "num_predict": request.max_tokens,
-            },
+            "options": options,
         }
-        if request.response_format and request.response_format.get("type") == "json_object":
+        # `format` takes either "json" (JSON mode) or a JSON Schema dict
+        # (schema-constrained output). `reasoning_effort` is not mapped.
+        if request.json_schema is not None:
+            chat_kwargs["format"] = request.json_schema
+        elif request.response_format and request.response_format.get("type") == "json_object":
             chat_kwargs["format"] = "json"
 
         async def _call() -> Any:

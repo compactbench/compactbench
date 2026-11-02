@@ -1,28 +1,29 @@
 """Top-level run orchestrator.
 
-Loads a suite, generates one case per (template, seed slot), executes each
-case through all drift cycles, scores everything, and writes a streamed
-``results.jsonl`` event log.
+Expands a suite into cases, runs every case through all of its cycles, scores
+everything, and writes a streamed ``results.jsonl`` event log (plus an
+optional private traces file).
 """
 
 from __future__ import annotations
 
 import asyncio
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from statistics import fmean
+from typing import Any
 
-from compactbench.compactors import Compactor
-from compactbench.contracts import CaseResult, CycleResult, GeneratedCase, TokenUsage
-from compactbench.dsl import (
-    DifficultyLevel,
-    TemplateDefinition,
-    load_suite,
-    validate_template,
+from compactbench.compactors import Compactor, OracleCompactor
+from compactbench.contracts import (
+    CaseResult,
+    CompactionArtifact,
+    CycleResult,
+    GeneratedCase,
+    add_usage,
 )
-from compactbench.engine import derive_case_seed, generate_case
-from compactbench.providers import CountingProvider, Provider, get_provider_cls
+from compactbench.providers import CountingProvider, Provider, ReasoningEffort, get_provider_cls
 from compactbench.runner._resolver import resolve_compactor_class
 from compactbench.runner.cycle import execute_cycle
 from compactbench.runner.errors import ResumeError, RunnerError
@@ -32,180 +33,240 @@ from compactbench.runner.persistence import (
     ResultsWriter,
     RunEndEvent,
     RunStartEvent,
-    aggregate_run_metrics,
     completed_case_ids,
+    iter_events,
     read_run_start,
     sum_case_token_usage,
 )
-from compactbench.scoring import drift_resistance
+from compactbench.runner.reader import DEFAULT_CHUNK_SIZE
+from compactbench.runner.traces import TraceWriter
+from compactbench.sandbox import Sandbox, SandboxedCompactor, SandboxError, usage_counter
+from compactbench.scenarios import Difficulty, expand_suite, get_suite
+from compactbench.scoring.answers import counted
+from compactbench.scoring.metrics import compute_metrics
+
+DEFAULT_BUDGET_TOKENS = 2048
 
 
 @dataclass(frozen=True)
 class RunArgs:
     method_spec: str
-    suite_key: str
+    suite: str
     provider_key: str
     model: str
-    difficulty: DifficultyLevel
-    drift_cycles: int
-    case_count_per_template: int
-    seed_group: str
-    benchmarks_dir: Path
     output_path: Path
-    resume: bool
-    # Maximum number of cases evaluated concurrently. Set to 1 to reproduce the
-    # original serial behaviour; higher values parallelise the I/O-bound
-    # provider calls, yielding a roughly linear wall-clock speedup until the
-    # provider's rate limit or the local event loop becomes the bottleneck.
+    reader_provider_key: str | None = None
+    """Defaults to the compactor's provider."""
+    reader_model: str | None = None
+    """Defaults to the compactor's model."""
+    reader_effort: ReasoningEffort | None = None
+    """Reasoning effort for the reader, where the provider supports it."""
+    difficulty: Difficulty | None = None
+    drift_cycles: int | None = None
+    cases_per_family: int | None = None
+    seed_group: str = "default"
+    budget_tokens: int | None = DEFAULT_BUDGET_TOKENS
+    controls: bool = False
+    traces_path: Path | None = None
+    resume: bool = False
+    # Maximum number of cases evaluated concurrently. 1 reproduces strictly
+    # serial behaviour; higher values parallelise the I/O-bound provider calls.
     concurrency: int = 4
+    season: str | None = None
+    method_config: dict[str, Any] = field(default_factory=dict[str, Any])
+    chunk_size: int = DEFAULT_CHUNK_SIZE
+    sandbox: Sandbox | None = None
+    """Run the method in this sandbox instead of importing it (ranked evaluation)."""
+    sandbox_endpoint_kind: str = "default"
+    """Where the sandboxed method's model calls went: the proxy forwards to providers'
+    own endpoints (``"default"``) or to the submitter's own (``"custom"``)."""
+    declared_method: tuple[str, str] | None = None
+    """Sandbox mode: the name and version the submission declared. The run is recorded
+    under them rather than whatever the method's class reports about itself."""
+
+    @property
+    def resolved_reader_provider(self) -> str:
+        return self.reader_provider_key or self.provider_key
+
+    @property
+    def resolved_reader_model(self) -> str:
+        return self.reader_model or self.model
 
 
-async def run_experiment(args: RunArgs) -> Path:
-    """Execute a full run per ``args`` and return the path to the written results file."""
-    suite_dir = args.benchmarks_dir / args.suite_key
-    if not suite_dir.is_dir():
-        raise RunnerError(f"suite directory not found: {suite_dir}")
+async def run_experiment(
+    args: RunArgs,
+    *,
+    provider: Provider | None = None,
+    reader_provider: Provider | None = None,
+) -> Path:
+    """Execute a full run per ``args`` and return the path to the results file.
 
-    templates = load_suite(suite_dir)
-    if not templates:
-        raise RunnerError(f"no templates in suite {args.suite_key!r}")
-    for template in templates:
-        validate_template(template)
+    ``provider`` / ``reader_provider`` override the instances built from the
+    provider keys (used by tests and by harnesses that route calls through a proxy).
+    """
+    try:
+        suite = get_suite(args.suite)
+    except KeyError as exc:
+        raise RunnerError(str(exc)) from exc
+    cases = expand_suite(
+        suite,
+        seed_group=args.seed_group,
+        cases_per_family=args.cases_per_family,
+        difficulty=args.difficulty,
+        drift_cycles=args.drift_cycles,
+    )
+    if not cases:
+        raise RunnerError(f"suite {args.suite!r} produced no cases")
 
-    compactor_cls = resolve_compactor_class(args.method_spec)
-    provider = _instantiate_provider(args.provider_key)
+    compactor_cls: type[Compactor] | None = None
+    compactor_base: Provider | None = None
+    if args.sandbox is not None:
+        # Submitted code is never imported here: ask the sandbox who it is, and
+        # let it make its own model calls through the proxy.
+        probe = SandboxedCompactor(
+            args.sandbox,
+            method_spec=args.method_spec,
+            provider_key=args.provider_key,
+            model=args.model,
+            config=args.method_config,
+        )
+        try:
+            hello = await probe.start()
+        except SandboxError as exc:
+            raise RunnerError(f"sandbox failed to start: {exc}") from exc
+        finally:
+            await probe.aclose()
+        method_name, method_version = args.declared_method or (hello.name, hello.version)
+        compactor_endpoint_kind = args.sandbox_endpoint_kind
+    else:
+        compactor_cls = resolve_compactor_class(args.method_spec)
+        compactor_base = provider or _instantiate_provider(args.provider_key)
+        method_name, method_version = compactor_cls.name, compactor_cls.version
+        compactor_endpoint_kind = compactor_base.endpoint_kind
+    if reader_provider is not None:
+        reader_base = reader_provider
+    elif compactor_base is not None and args.resolved_reader_provider == args.provider_key:
+        reader_base = compactor_base
+    else:
+        reader_base = _instantiate_provider(args.resolved_reader_provider)
+
+    start = RunStartEvent(
+        run_id=str(uuid.uuid4()),
+        method_name=method_name,
+        method_version=method_version,
+        suite=suite.key,
+        suite_version=suite.version,
+        season=args.season,
+        difficulty=cases[0].difficulty,
+        drift_cycles=cases[0].drift_cycles,
+        cases_per_family=args.cases_per_family or suite.cases_per_family,
+        seed_group=args.seed_group,
+        compactor_provider=args.provider_key,
+        compactor_model=args.model,
+        compactor_endpoint_kind=compactor_endpoint_kind,
+        reader_provider=args.resolved_reader_provider,
+        reader_model=args.resolved_reader_model,
+        reader_endpoint_kind=reader_base.endpoint_kind,
+        reader_effort=args.reader_effort,
+        budget_tokens=args.budget_tokens,
+        controls=args.controls,
+        scorer_version=SCORER_VERSION,
+        started_at=datetime.now(UTC),
+    )
 
     already_done: set[str] = set()
-    run_id: str
-    started_at: datetime
-    mode: str = "write"
-
+    append = False
     if args.resume and args.output_path.exists():
         existing = read_run_start(args.output_path)
         if existing is None:
             raise ResumeError(f"--resume passed but {args.output_path} has no run_start event")
-        _assert_resume_compatible(existing, args, compactor_cls, provider.endpoint_kind)
+        _assert_resume_compatible(existing, start)
+        start = existing
         already_done = completed_case_ids(args.output_path)
-        run_id = existing.run_id
-        started_at = existing.started_at
-        mode = "append"
-    else:
-        run_id = str(uuid.uuid4())
-        started_at = datetime.now(UTC)
+        append = True
 
-    suite_version = _suite_version(templates)
-    writer = ResultsWriter(args.output_path, mode=mode)  # type: ignore[arg-type]
+    # The oracle control exists to show what losing nothing scores, so the
+    # budget would defeat its purpose. It is never ranked.
+    budget = None if method_name == OracleCompactor.name else args.budget_tokens
+    writer = ResultsWriter(args.output_path, mode="append" if append else "write")
+    traces = TraceWriter(args.traces_path, append=append) if args.traces_path else None
     try:
-        if mode == "write":
-            writer.write(
-                RunStartEvent(
-                    run_id=run_id,
-                    method_name=compactor_cls.name,
-                    method_version=compactor_cls.version,
-                    suite_key=args.suite_key,
-                    suite_version=suite_version,
-                    scorer_version=SCORER_VERSION,
-                    target_provider=args.provider_key,
-                    target_model=args.model,
-                    endpoint_kind=provider.endpoint_kind,
-                    difficulty=args.difficulty.value,
-                    drift_cycles=args.drift_cycles,
-                    seed_group=args.seed_group,
-                    case_count_per_template=args.case_count_per_template,
-                    started_at=started_at,
-                )
-            )
+        if not append:
+            writer.write(start)
 
-        # Build the list of (case, seed) pairs the run still needs to execute.
-        # Case generation is deterministic and side-effect-free, so we can
-        # expand everything up-front and then schedule the I/O-bound work
-        # concurrently under a semaphore.
-        pending: list[tuple[GeneratedCase, int]] = []
-        for template in templates:
-            # Namespace the seed with (suite, template) so slot N of two different
-            # templates doesn't deterministically share variable choices — that
-            # would correlate "Alice" / "Bob" style bindings across families and
-            # weaken adversarial diversity.
-            seed_namespace = f"{args.suite_key}@{suite_version}/{template.key}@{template.version}"
-            for slot in range(args.case_count_per_template):
-                case_seed = derive_case_seed(seed_namespace, args.seed_group, slot)
-                case = generate_case(template, case_seed, args.difficulty)
-                if case.case_id in already_done:
-                    continue
-                pending.append((case, case_seed))
+        pending = [c for c in cases if c.case_id not in already_done]
+        semaphore = asyncio.Semaphore(max(1, args.concurrency))
 
-        concurrency = max(1, args.concurrency)
-        semaphore = asyncio.Semaphore(concurrency)
-
-        async def _run_one(case: GeneratedCase, case_seed: int) -> CaseResult:
-            """Execute a single case under the global concurrency semaphore.
-
-            A fresh compactor instance per case keeps any per-instance state
-            (e.g. ledger accumulators) scoped to the case, matching the
-            previous serial behaviour exactly.
-
-            A fresh :class:`CountingProvider` per case is required for correct
-            token attribution under concurrency: if we shared one wrapper
-            across cases, concurrent calls from case B would contaminate
-            case A's per-cycle snapshots. Each wrapper forwards to the same
-            underlying provider, so the actual HTTP client and its connection
-            pool are still shared.
-            """
+        async def _run_one(case: GeneratedCase) -> CaseResult:
             async with semaphore:
-                counting_provider = CountingProvider(provider)
-                compactor = compactor_cls(counting_provider, args.model)
-                return await _execute_case(
-                    case=case,
-                    compactor=compactor,
-                    provider=counting_provider,
-                    model=args.model,
-                    drift_cycles=args.drift_cycles,
-                    case_seed=case_seed,
-                )
+                # Fresh wrappers and compactor per case: token attribution stays
+                # per case under concurrency, and per-instance method state never
+                # leaks between cases. The underlying clients are shared.
+                compactor: Compactor
+                if args.sandbox is not None:
+                    compactor_counter = usage_counter()
+                    compactor = SandboxedCompactor(
+                        args.sandbox,
+                        method_spec=args.method_spec,
+                        provider_key=args.provider_key,
+                        model=args.model,
+                        config=args.method_config,
+                        usage=compactor_counter,
+                    )
+                else:
+                    assert compactor_cls is not None
+                    assert compactor_base is not None
+                    compactor_counter = CountingProvider(compactor_base)
+                    compactor = compactor_cls(compactor_counter, args.model, args.method_config)
+                try:
+                    return await _execute_case(
+                        case=case,
+                        run_id=start.run_id,
+                        compactor=compactor,
+                        compactor_provider=compactor_counter,
+                        reader=CountingProvider(reader_base),
+                        control_reader=CountingProvider(reader_base),
+                        reader_model=args.resolved_reader_model,
+                        budget_tokens=budget,
+                        controls=args.controls,
+                        chunk_size=args.chunk_size,
+                        reader_effort=args.reader_effort,
+                        traces=traces,
+                    )
+                finally:
+                    await compactor.aclose()
 
-        tasks = [asyncio.create_task(_run_one(c, s)) for c, s in pending]
-        completed_cases: list[CaseResult] = []
+        tasks = [asyncio.create_task(_run_one(c)) for c in pending]
+        completed: list[CaseResult] = []
         try:
             for coro in asyncio.as_completed(tasks):
                 case_result = await coro
-                # Writer is called from a single awaiting coroutine so
-                # individual writes remain atomic even though cases complete
-                # out of their original enumeration order.
                 writer.write(CaseCompleteEvent(case_result=case_result))
-                completed_cases.append(case_result)
+                completed.append(case_result)
         except Exception:
             for t in tasks:
                 t.cancel()
             raise
 
-        # For run-end aggregates, combine newly-executed cases with any that
-        # were already persisted from a resumed run.
-        from compactbench.runner.persistence import iter_events
-
-        all_cases: list[CaseResult] = list(completed_cases)
+        all_cases = list(completed)
         if already_done:
-            for event in iter_events(args.output_path):
-                if (
-                    isinstance(event, CaseCompleteEvent)
-                    and event.case_result.case_id in already_done
-                ):
-                    all_cases.append(event.case_result)
-
-        agg = aggregate_run_metrics(all_cases)
-        run_token_usage = sum_case_token_usage(all_cases)
+            all_cases.extend(
+                event.case_result
+                for event in iter_events(args.output_path)
+                if isinstance(event, CaseCompleteEvent)
+                and event.case_result.case_id in already_done
+            )
         writer.write(
             RunEndEvent(
                 completed_at=datetime.now(UTC),
-                overall_score=agg["overall_score"],
-                drift_resistance=agg["drift_resistance"],
-                constraint_retention=agg["constraint_retention"],
-                contradiction_rate=agg["contradiction_rate"],
-                compression_ratio=agg["compression_ratio"],
-                token_usage=run_token_usage,
+                metrics=compute_metrics(all_cases),
+                token_usage=sum_case_token_usage(all_cases),
             )
         )
     finally:
         writer.close()
+        if traces is not None:
+            traces.close()
 
     return args.output_path
 
@@ -213,70 +274,62 @@ async def run_experiment(args: RunArgs) -> Path:
 async def _execute_case(
     *,
     case: GeneratedCase,
+    run_id: str,
     compactor: Compactor,
-    provider: Provider,
-    model: str,
-    drift_cycles: int,
-    case_seed: int,
+    compactor_provider: CountingProvider,
+    reader: CountingProvider,
+    control_reader: CountingProvider,
+    reader_model: str,
+    budget_tokens: int | None,
+    controls: bool,
+    chunk_size: int,
+    reader_effort: ReasoningEffort | None,
+    traces: TraceWriter | None,
 ) -> CaseResult:
-    from compactbench.contracts import CompactionArtifact, Transcript
-
-    transcript: Transcript = case.transcript
-    previous_artifact: CompactionArtifact | None = None
+    previous: CompactionArtifact | None = None
     cycles: list[CycleResult] = []
-    cycle_scores: list[float] = []
-    case_usage: TokenUsage | None = None
-
-    for cycle_num in range(drift_cycles + 1):
-        result = await execute_cycle(
+    usage = None
+    for index in range(len(case.cycles)):
+        execution = await execute_cycle(
             case=case,
-            transcript=transcript,
-            cycle_number=cycle_num,
-            previous_artifact=previous_artifact,
+            cycle=index,
+            previous_artifact=previous,
             compactor=compactor,
-            provider=provider,
-            model=model,
-            case_seed=case_seed,
+            compactor_provider=compactor_provider,
+            reader=reader,
+            reader_model=reader_model,
+            budget_tokens=budget_tokens,
+            controls=controls,
+            control_reader=control_reader,
+            chunk_size=chunk_size,
+            reader_effort=reader_effort,
         )
-        drift_delta = (
-            result.scorecard.penalized_cycle_score - cycle_scores[0]
-            if cycle_num > 0 and cycle_scores
-            else None
-        )
-        cycles.append(
-            CycleResult(
-                cycle_number=cycle_num,
-                scorecard=result.scorecard,
-                drift_delta=drift_delta,
-                latency_ms=result.latency_ms,
-                token_usage=result.token_usage,
-                # Copied off the artifact, which is not itself persisted. These
-                # are the method's own diagnostics — a truncated summary, an
-                # unparsable JSON state — and without them a low score is
-                # unexplainable from the results file alone.
-                warnings=list(result.artifact.warnings),
-            )
-        )
-        cycle_scores.append(result.scorecard.penalized_cycle_score)
-        transcript = result.extended_transcript
-        previous_artifact = result.artifact
-        # Accumulate into the case total only when the cycle actually reported
-        # telemetry; leaving ``case_usage`` as ``None`` when every cycle is
-        # ``None`` preserves the "not recorded" signal up one level.
-        if result.token_usage is not None:
-            case_usage = (
-                result.token_usage if case_usage is None else case_usage + result.token_usage
+        result = execution.result
+        cycles.append(result)
+        previous = execution.artifact
+        for part in (result.compactor_usage, result.reader_usage, result.control_usage):
+            usage = add_usage(usage, part)
+        if traces is not None:
+            traces.write_cycle(
+                run_id=run_id,
+                case_id=case.case_id,
+                result=result,
+                turn_ids=execution.turn_ids,
+                artifact=execution.artifact,
+                visible_context=execution.visible_context,
+                probes=case.cycles[index].probes,
+                answers=execution.answers,
+                reader_responses=execution.reader_responses,
             )
 
-    case_score = sum(cycle_scores) / len(cycle_scores) if cycle_scores else 0.0
+    scores = counted(r for cycle in cycles for r in cycle.probe_results)
     return CaseResult(
         case_id=case.case_id,
-        template_key=case.template_key,
+        family=case.family,
         seed=case.seed,
         cycles=cycles,
-        case_score=case_score,
-        drift_resistance=drift_resistance(cycle_scores),
-        token_usage=case_usage,
+        score=fmean(scores) if scores else 0.0,
+        token_usage=usage,
     )
 
 
@@ -286,47 +339,36 @@ def _instantiate_provider(provider_key: str) -> Provider:
     return cls()
 
 
-def _suite_version(templates: list[TemplateDefinition]) -> str:
-    versions = {t.version for t in templates}
-    if len(versions) == 1:
-        return next(iter(versions))
-    return "mixed"
+_RESUME_FIELDS = (
+    "method_name",
+    "method_version",
+    "suite",
+    "suite_version",
+    "season",
+    "difficulty",
+    "drift_cycles",
+    "cases_per_family",
+    "seed_group",
+    "compactor_provider",
+    "compactor_model",
+    "compactor_endpoint_kind",
+    "reader_provider",
+    "reader_model",
+    "reader_endpoint_kind",
+    "reader_effort",
+    "budget_tokens",
+    "controls",
+    "scorer_version",
+)
 
 
-def _assert_resume_compatible(
-    existing: RunStartEvent,
-    args: RunArgs,
-    compactor_cls: type[Compactor],
-    endpoint_kind: str | None = None,
-) -> None:
-    mismatches: list[str] = []
-    # Provider + model alone do not pin down where the calls go: `--provider
-    # openai --model gpt-4o` reaches OpenAI or a local vLLM server depending
-    # only on an environment variable. Without this check a run could be half
-    # executed against the real model and resumed against a local one under the
-    # same alias, producing a single results file with two different targets in
-    # it and no way to tell from the data.
-    if endpoint_kind is not None and existing.endpoint_kind != endpoint_kind:
-        mismatches.append(f"endpoint_kind: {existing.endpoint_kind!r} vs {endpoint_kind!r}")
-    if existing.method_name != compactor_cls.name:
-        mismatches.append(f"method_name: {existing.method_name!r} vs {compactor_cls.name!r}")
-    if existing.suite_key != args.suite_key:
-        mismatches.append(f"suite_key: {existing.suite_key!r} vs {args.suite_key!r}")
-    if existing.target_provider != args.provider_key:
-        mismatches.append(f"provider: {existing.target_provider!r} vs {args.provider_key!r}")
-    if existing.target_model != args.model:
-        mismatches.append(f"model: {existing.target_model!r} vs {args.model!r}")
-    if existing.difficulty != args.difficulty.value:
-        mismatches.append(f"difficulty: {existing.difficulty!r} vs {args.difficulty.value!r}")
-    if existing.drift_cycles != args.drift_cycles:
-        mismatches.append(f"drift_cycles: {existing.drift_cycles} vs {args.drift_cycles}")
-    if existing.seed_group != args.seed_group:
-        mismatches.append(f"seed_group: {existing.seed_group!r} vs {args.seed_group!r}")
-    if existing.case_count_per_template != args.case_count_per_template:
-        mismatches.append(
-            f"case_count_per_template: "
-            f"{existing.case_count_per_template} vs {args.case_count_per_template}"
-        )
+def _assert_resume_compatible(existing: RunStartEvent, requested: RunStartEvent) -> None:
+    """Refuse to resume a run under different parameters — including where calls go."""
+    mismatches = [
+        f"{name}: {getattr(existing, name)!r} vs {getattr(requested, name)!r}"
+        for name in _RESUME_FIELDS
+        if getattr(existing, name) != getattr(requested, name)
+    ]
     if mismatches:
         raise ResumeError(
             "existing run is incompatible with requested arguments: " + "; ".join(mismatches)

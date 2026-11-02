@@ -1,4 +1,4 @@
-"""OpenAI provider (GPT-4o, GPT-4o-mini, o1, etc.).
+"""OpenAI provider (gpt-6, gpt-5 family, o-series, gpt-4.1, etc.).
 
 Requires ``compactbench[providers]`` (installs the ``openai`` SDK) and a
 ``COMPACTBENCH_OPENAI_API_KEY`` environment variable.
@@ -102,6 +102,10 @@ class OpenAIProvider(Provider):
         """``"custom"`` when pointed at an OpenAI-compatible server rather than OpenAI."""
         return "custom" if self._base_url is not None else "default"
 
+    def _effort_kwargs(self, effort: str) -> dict[str, Any]:
+        """How this API takes a reasoning effort; hosts without one return ``{}``."""
+        return {"reasoning_effort": effort}
+
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
 
@@ -125,13 +129,31 @@ class OpenAIProvider(Provider):
             messages.append({"role": "system", "content": request.system})
         messages.append({"role": "user", "content": user_content})
 
-        kwargs: dict[str, Any] = {
-            "model": request.model,
-            "messages": messages,
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
-        }
-        if request.response_format:
+        kwargs: dict[str, Any] = {"model": request.model, "messages": messages}
+        # OpenAI deprecated `max_tokens` in favour of `max_completion_tokens`
+        # (which also bounds reasoning tokens); its reasoning models reject the
+        # old name. OpenAI-compatible servers keep `max_tokens`, the name such
+        # servers have long accepted.
+        if self._base_url is None:
+            kwargs["max_completion_tokens"] = request.max_tokens
+        else:
+            kwargs["max_tokens"] = request.max_tokens
+        # Reasoning models reject a non-default temperature, so only send one
+        # the caller asked for.
+        if request.temperature is not None:
+            kwargs["temperature"] = request.temperature
+        if request.reasoning_effort is not None:
+            kwargs.update(self._effort_kwargs(request.reasoning_effort))
+        if request.json_schema is not None:
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "response",
+                    "schema": request.json_schema,
+                    "strict": True,
+                },
+            }
+        elif request.response_format:
             kwargs["response_format"] = request.response_format
 
         async def _call() -> Any:
@@ -149,8 +171,20 @@ class OpenAIProvider(Provider):
             raise ProviderResponseError("OpenAI returned no choices in response")
         choice: Any = choices[0]
         message: Any = getattr(choice, "message", None)
+        refusal: Any = getattr(message, "refusal", None)
+        if isinstance(refusal, str) and refusal:
+            raise ProviderResponseError(f"OpenAI declined the request: {refusal}")
         text_raw: Any = getattr(message, "content", None) or ""
         text = text_raw if isinstance(text_raw, str) else ""
+        finish_reason: Any = getattr(choice, "finish_reason", None)
+        if not text and finish_reason == "length":
+            # Reasoning tokens count toward max_completion_tokens, so a small
+            # cap can be spent before any visible output is written.
+            raise ProviderResponseError(
+                f"OpenAI hit the token limit ({request.max_tokens}) before writing any text; "
+                "reasoning likely used the whole budget. Raise max_tokens or lower "
+                "reasoning_effort."
+            )
         usage: Any = getattr(response, "usage", None)
         # OpenAI reports automatic-cache hits nested under
         # ``usage.prompt_tokens_details.cached_tokens``. Surface it in ``raw``
@@ -168,7 +202,7 @@ class OpenAIProvider(Provider):
             model=getattr(response, "model", request.model),
             raw={
                 "provider": "openai",
-                "finish_reason": getattr(choice, "finish_reason", None),
+                "finish_reason": finish_reason,
                 "id": getattr(response, "id", None),
                 "cached_tokens": cached_tokens,
                 # Provenance without disclosure: a leaderboard reviewer needs to know

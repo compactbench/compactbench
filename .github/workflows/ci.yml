@@ -116,7 +116,7 @@ jobs:
           "$work/venv/bin/compactbench" --version
           out="$("$work/venv/bin/compactbench" suites list)"
           echo "$out"
-          for suite in starter elite_practice; do
+          for suite in starter practice; do
             echo "$out" | grep -q "$suite" \
               || { echo "::error::built wheel cannot see the '$suite' suite — benchmark content is missing from the distribution"; exit 1; }
           done

@@ -1,27 +1,28 @@
 ---
-name: Template proposal
-about: Propose a new public benchmark template family
-title: "[template] "
-labels: ["template-proposal", "needs-triage"]
+name: Scenario family proposal
+about: Propose a new public scenario family
+title: "[family] "
+labels: ["family-proposal", "needs-triage"]
 ---
 
 ## Family name
 
-<!-- e.g. `stale_summary_poison_v1` -->
+<!-- e.g. `numeric_precision` -->
 
 ## Failure mode it targets
 
-<!-- Which adversarial mode from docs/elite-program.md does this stress?
-     If it introduces a new mode, justify why it's distinct from existing families. -->
+<!-- What compaction gets wrong here, ideally with an example of a real agent hitting it.
+     If it overlaps an existing family, say why it's distinct. -->
 
 ## Sketch of a representative case
 
-<!-- Describe one instance: user goal, buried trap, what the method must preserve, how the scorer would verify. -->
+<!-- What happens in the conversation (and in later cycles), what a compactor must keep,
+     and the probes: format (single / multi / value / list), the right answer, and where
+     the wrong options come from. -->
 
-## Why current families don't cover it
+## Answerable and not guessable
 
-<!-- Keep the catalog diverse — duplicates dilute ranking signal. -->
+<!-- Why every probe can be answered from the full conversation, and why it can't be
+     answered from nothing. -->
 
 ## Open questions
-
-<!-- Ambiguities, edge cases, anything you'd like input on before writing the template YAML. -->

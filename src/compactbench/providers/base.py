@@ -8,12 +8,34 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
+
+ReasoningEffort = Literal["low", "medium", "high"]
 
 
 @dataclass(frozen=True)
 class CompletionRequest:
     """A normalized request passed to a provider's ``complete`` method.
+
+    ``temperature`` is ``None`` by default, meaning "don't send it": the
+    provider's own default applies. Current reasoning models reject a
+    non-default value (Claude, OpenAI's gpt-5 and o-series), so it is opt-in.
+    Providers forward it only when it is not ``None``; the Anthropic provider
+    never forwards it, because API version ``2026-10-21`` rejects sampling
+    parameters on every Claude model.
+
+    ``json_schema`` is a JSON Schema the response text must satisfy. Providers
+    with schema-constrained decoding use it natively; the rest fall back to
+    their JSON mode (if any). Either way the caller still validates the text.
+    To be accepted everywhere, write it in the subset the strict providers
+    (Anthropic, OpenAI) share: every object sets ``additionalProperties:
+    false`` and lists all its properties in ``required``, with no numeric or
+    string-length constraints. ``response_format={"type": "json_object"}``
+    keeps working as plain JSON mode where the provider has one;
+    ``json_schema`` takes precedence when both are set.
+
+    ``reasoning_effort`` maps to Anthropic ``output_config.effort`` and
+    OpenAI ``reasoning_effort``; other providers ignore it.
 
     ``cached_prefix`` is an optimisation hint. When set, the effective user
     input is ``cached_prefix + prompt`` and the provider is free to cache the
@@ -36,9 +58,11 @@ class CompletionRequest:
     prompt: str
     system: str | None = None
     max_tokens: int = 2048
-    temperature: float = 0.0
+    temperature: float | None = None
     response_format: dict[str, Any] | None = None
     cached_prefix: str | None = None
+    json_schema: dict[str, Any] | None = None
+    reasoning_effort: ReasoningEffort | None = None
 
 
 @dataclass(frozen=True)

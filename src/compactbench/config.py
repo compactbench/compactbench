@@ -82,32 +82,3 @@ def load_dotenv(path: Path | None = None) -> dict[str, str]:
         os.environ[name] = value
         applied[name] = value
     return applied
-
-
-def default_benchmarks_dir() -> Path:
-    """Locate the public benchmarks directory for CLI defaults.
-
-    Resolution order:
-
-    1. ``./benchmarks/public`` relative to the current working directory, so
-       developers running CLI commands from the repo root see their local edits
-       immediately.
-    2. ``<installed-package>/_data/benchmarks/public`` if the wheel bundled the
-       public suites (the normal path for anyone who ``pip install``-ed
-       compactbench without cloning the repo).
-    3. ``./benchmarks/public`` as a last resort so the CLI's existing
-       "no benchmarks directory" error points at a sensible path.
-
-    The CLI's own ``--benchmarks-dir`` flag takes precedence over all of these;
-    this function only supplies the default when the flag isn't passed.
-    """
-    cwd_path = Path("benchmarks/public")
-    if cwd_path.is_dir():
-        return cwd_path
-
-    package_root = Path(__file__).resolve().parent
-    bundled = package_root / "_data" / "benchmarks" / "public"
-    if bundled.is_dir():
-        return bundled
-
-    return cwd_path

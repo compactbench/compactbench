@@ -1,57 +1,52 @@
-"""Run orchestration: suite → cases → drift cycles → scored results.
+"""Run orchestration: suite → cases → compaction cycles → scored results.
 
-Implements WO-007. The public surface is :func:`run_experiment` plus
-persistence helpers; the CLI wires these together.
+The public surface is :func:`run_experiment` plus persistence helpers; the CLI
+wires these together.
 """
 
 from compactbench.runner._resolver import resolve_compactor_class
-from compactbench.runner.continuation import extend_with_continuation
-from compactbench.runner.cycle import CycleExecutionResult, execute_cycle
+from compactbench.runner.cycle import CycleExecution, execute_cycle
 from compactbench.runner.errors import MethodResolutionError, ResumeError, RunnerError
-from compactbench.runner.evaluation import (
-    build_evaluation_cached_prefix,
-    build_evaluation_item_suffix,
-    build_evaluation_prompt,
-    evaluate_items,
-    render_artifact_for_prompt,
-)
 from compactbench.runner.persistence import (
+    INCOMPLETE_RUN_NOTE,
+    RESULTS_SCHEMA,
     SCORER_VERSION,
     CaseCompleteEvent,
     ResultsWriter,
     RunEndEvent,
     RunStartEvent,
-    aggregate_run_metrics,
     completed_case_ids,
     iter_events,
     read_run_start,
     sum_case_token_usage,
     to_run_result,
 )
-from compactbench.runner.run import RunArgs, run_experiment
+from compactbench.runner.reader import READER_SYSTEM, ReaderOutcome, read
+from compactbench.runner.run import DEFAULT_BUDGET_TOKENS, RunArgs, run_experiment
+from compactbench.runner.traces import TraceWriter
 
 __all__ = [
+    "DEFAULT_BUDGET_TOKENS",
+    "INCOMPLETE_RUN_NOTE",
+    "READER_SYSTEM",
+    "RESULTS_SCHEMA",
     "SCORER_VERSION",
     "CaseCompleteEvent",
-    "CycleExecutionResult",
+    "CycleExecution",
     "MethodResolutionError",
+    "ReaderOutcome",
     "ResultsWriter",
     "ResumeError",
     "RunArgs",
     "RunEndEvent",
     "RunStartEvent",
     "RunnerError",
-    "aggregate_run_metrics",
-    "build_evaluation_cached_prefix",
-    "build_evaluation_item_suffix",
-    "build_evaluation_prompt",
+    "TraceWriter",
     "completed_case_ids",
-    "evaluate_items",
     "execute_cycle",
-    "extend_with_continuation",
     "iter_events",
+    "read",
     "read_run_start",
-    "render_artifact_for_prompt",
     "resolve_compactor_class",
     "run_experiment",
     "sum_case_token_usage",

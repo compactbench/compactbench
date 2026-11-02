@@ -66,6 +66,7 @@ nav:
   - Submitting to leaderboard: submitting.md
   - Leaderboard: leaderboard.md
   - Methodology: methodology.md
+  - Datasheet: datasheet.md
   - Related work: related-work.md
   - Elite program: elite-program.md
   - FAQ: faq.md
@@ -73,11 +74,8 @@ nav:
     - Elite versions: governance/elite-versions.md
   - Architecture:
     - Decisions: architecture/decisions.md
-    - Workorders: architecture/workorders.md
 
-# Kept in the repo as working docs but excluded from the published site:
+# Kept in the repo but excluded from the published site:
 #   - architecture/_legacy-saas/ — superseded designs kept for historical context
-#   - launch/ — unpublished marketing drafts (HN, r/LocalLLaMA, AI Twitter)
 exclude_docs: |
   architecture/_legacy-saas/
-  launch/

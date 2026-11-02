@@ -23,9 +23,15 @@ import inspect
 from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias, cast
 
 from compactbench.compactors.base import Compactor
-from compactbench.contracts import CompactionArtifact, StructuredState, Transcript
+from compactbench.contracts import (
+    CompactionArtifact,
+    CompactionRequest,
+    StructuredState,
+    Transcript,
+)
 from compactbench.contracts.case import TurnRole
 from compactbench.providers.base import Provider
+from compactbench.rendering import render_artifact
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -74,6 +80,9 @@ _ROLE_NAMES = {
     TurnRole.SYSTEM: "system",
     TurnRole.USER: "user",
     TurnRole.ASSISTANT: "assistant",
+    # Tool output becomes a user message: a bare TOOL-role message without the
+    # tool call that produced it breaks many LlamaIndex memory buffers.
+    TurnRole.TOOL: "user",
 }
 
 
@@ -98,8 +107,33 @@ def transcript_to_chat_messages(transcript: Transcript) -> list[ChatMessage]:
             "compactbench_turn_tags": list(turn.tags),
         }
         role = getattr(role_cls, _ROLE_NAMES[turn.role].upper())
-        out.append(chat_message_cls(role=role, content=turn.content, additional_kwargs=extras))
+        content = turn.content
+        if turn.role == TurnRole.TOOL:
+            content = f"{f'TOOL[{turn.name}]' if turn.name else 'TOOL'}: {content}"
+        out.append(chat_message_cls(role=role, content=content, additional_kwargs=extras))
     return cast("list[ChatMessage]", out)
+
+
+def request_to_chat_messages(request: CompactionRequest) -> list[ChatMessage]:
+    """Convert a :class:`CompactionRequest` to LlamaIndex ``ChatMessage`` objects.
+
+    From the second cycle on, the previous artifact comes first as a system
+    message (marked ``compactbench_previous_artifact`` in ``additional_kwargs``),
+    followed by the turns since that compaction.
+    """
+    chat_message_cls, role_cls = _import_chat_types()
+    messages: list[Any] = []
+    if request.previous_artifact is not None:
+        messages.append(
+            chat_message_cls(
+                role=role_cls.SYSTEM,
+                content="Summary of the conversation so far:\n"
+                + (render_artifact(request.previous_artifact) or "(empty)"),
+                additional_kwargs={"compactbench_previous_artifact": True},
+            )
+        )
+    messages.extend(transcript_to_chat_messages(Transcript(turns=list(request.turns))))
+    return cast("list[ChatMessage]", messages)
 
 
 def _message_content_as_text(message: Any) -> str:
@@ -260,16 +294,18 @@ class LlamaIndexCompactor(Compactor):
             return "\\n".join(str(m.content) for m in memory.get())
 
         compactor = LlamaIndexCompactor(
-            provider=target_provider,  # e.g. GroqProvider() — answers eval items
-            model="llama-3.3-70b-versatile",
+            provider=MockProvider(),  # unused: your function owns its LLM
+            model="gpt-4o-mini",  # recorded as the method's model
             compaction_fn=summarise,
             method_name="llamaindex-chat-summary-buffer",
             method_version="0.1.0",
         )
 
-    The CompactBench ``provider`` and ``model`` are used by the runner when it
-    queries the target model for evaluation-item responses, *not* by your
-    compaction function — your function owns its own LlamaIndex LLM.
+    Your function owns its own LlamaIndex LLM; ``provider`` / ``model`` are only
+    recorded as the method's model. The reader that answers the probes is
+    configured separately on the run. From the second cycle on, the messages
+    start with the previous artifact as a system message — see
+    :func:`request_to_chat_messages`.
     """
 
     name: ClassVar[str] = "llamaindex"
@@ -293,20 +329,15 @@ class LlamaIndexCompactor(Compactor):
         self._method_version = method_version or self.version
         self._extra_metadata = extra_metadata
 
-    async def compact(
-        self,
-        transcript: Transcript,
-        config: dict[str, Any] | None = None,
-        previous_artifact: CompactionArtifact | None = None,
-    ) -> CompactionArtifact:
-        messages = transcript_to_chat_messages(transcript)
+    async def compact(self, request: CompactionRequest) -> CompactionArtifact:
+        messages = request_to_chat_messages(request)
         raw: Any = self._compaction_fn(messages)
         if inspect.isawaitable(raw):
             raw = await raw
         result: CompactionResult = cast(CompactionResult, raw)
         return result_to_artifact(
             result,
-            transcript,
+            Transcript(turns=list(request.turns)),
             method=self._method_name,
             version=self._method_version,
             model=self.model,
@@ -319,6 +350,7 @@ __all__ = [
     "CompactionFn",
     "CompactionResult",
     "LlamaIndexCompactor",
+    "request_to_chat_messages",
     "result_to_artifact",
     "transcript_to_chat_messages",
 ]

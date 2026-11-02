@@ -47,8 +47,9 @@ individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainers at conduct@compactbench.dev. All complaints will
-be reviewed and investigated promptly and fairly.
+reported to the maintainers privately through GitHub's private reporting form
+(https://github.com/compactbench/compactbench/security/advisories/new — say it's a conduct report).
+All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of
 the reporter of any incident.
