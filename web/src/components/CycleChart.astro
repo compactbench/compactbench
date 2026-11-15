@@ -1,0 +1,90 @@
+---
+// Score after each compaction, with axes. Values are 0..1.
+interface Props {
+  values: number[];
+  label: string;
+}
+
+const { values, label } = Astro.props;
+const w = 560;
+const h = 220;
+const pad = { l: 40, r: 16, t: 14, b: 30 };
+const iw = w - pad.l - pad.r;
+const ih = h - pad.t - pad.b;
+const x = (i: number) => pad.l + (values.length > 1 ? (i * iw) / (values.length - 1) : iw / 2);
+const y = (v: number) => pad.t + ih - v * ih;
+const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+const area = `${line} L${x(values.length - 1).toFixed(1)},${y(0)} L${x(0).toFixed(1)},${y(0)} Z`;
+---
+
+<figure class="chart">
+  <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label}>
+    <defs>
+      <linearGradient id="cc-line" x1="0" x2="1">
+        <stop offset="0" stop-color="#22D3EE" />
+        <stop offset="1" stop-color="#8B5CF6" />
+      </linearGradient>
+      <linearGradient id="cc-fill" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0" stop-color="#3B82F6" stop-opacity="0.25" />
+        <stop offset="1" stop-color="#3B82F6" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+    {
+      [0, 0.25, 0.5, 0.75, 1].map((t) => (
+        <g>
+          <line x1={pad.l} x2={w - pad.r} y1={y(t)} y2={y(t)} class="grid" />
+          <text x={pad.l - 8} y={y(t) + 4} class="tick" text-anchor="end">
+            {t * 100}
+          </text>
+        </g>
+      ))
+    }
+    <path d={area} fill="url(#cc-fill)"></path>
+    <path d={line} fill="none" stroke="url(#cc-line)" stroke-width="3" stroke-linecap="round"></path>
+    {
+      values.map((v, i) => (
+        <g>
+          <circle cx={x(i)} cy={y(v)} r="4.5" class="dot" />
+          <text x={x(i)} y={h - 10} class="tick" text-anchor="middle">
+            {i + 1}
+          </text>
+          <text x={x(i)} y={y(v) - 10} class="value" text-anchor="middle">
+            {(v * 100).toFixed(0)}
+          </text>
+        </g>
+      ))
+    }
+  </svg>
+  <figcaption class="muted">Score after each compaction (1 = first).</figcaption>
+</figure>
+
+<style>
+  .chart {
+    margin: 0;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .grid {
+    stroke: var(--border);
+  }
+  .tick {
+    fill: var(--muted);
+    font: 11px var(--mono);
+  }
+  .value {
+    fill: var(--text);
+    font: 600 11px var(--mono);
+  }
+  .dot {
+    fill: var(--bg);
+    stroke: var(--cyan);
+    stroke-width: 2;
+  }
+  figcaption {
+    font-size: 0.8rem;
+    margin-top: 6px;
+  }
+</style>

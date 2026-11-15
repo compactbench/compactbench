@@ -1,0 +1,184 @@
+---
+import CycleChart from "../../components/CycleChart.astro";
+import Base from "../../layouts/Base.astro";
+import { familyTitle, isCustomEndpoint, modelName, pct, rows, slugOf, type Row } from "../../lib/data";
+
+export function getStaticPaths() {
+  return rows.map((row) => ({ params: { slug: slugOf(row) }, props: { row } }));
+}
+
+const { row } = Astro.props as { row: Row };
+const kind = { submission: "Ranked submission", baseline: "Baseline", control: "Control" }[row.row_kind];
+const families = Object.entries(row.by_family).sort((a, b) => b[1] - a[1]);
+const facts: [string, string][] = [
+  ["Kind", kind],
+  ["Version", row.method_version],
+  [
+    "Model",
+    isCustomEndpoint(row)
+      ? `${modelName(row)} (custom endpoint, model id ${row.compactor_model})`
+      : `${row.compactor_provider} / ${row.compactor_model}`,
+  ],
+  ["Submitted by", row.handle ? `@${row.handle}${row.org ? ` (${row.org})` : ""}` : (row.org ?? "—")],
+  ["Season", row.season ?? "—"],
+  ["Suite", row.suite],
+  ["Budget", row.budget_tokens ? `${row.budget_tokens} tokens` : "none"],
+  ["Reader", `${row.reader_model} (effort ${row.reader_effort ?? "default"})`],
+  ["Scorer", row.scorer_version],
+  ["Cases", String(row.cases)],
+  ["Published", new Date(row.published_at).toISOString().slice(0, 10)],
+];
+const description = `${row.method_name} scored ${pct(row.score)}% on CompactBench (${row.suite}), keeping state across repeated compactions with ${modelName(row)}.`;
+---
+
+<Base
+  title={`${row.method_name} ${row.method_version}`}
+  description={description}
+  path={`/methods/${slugOf(row)}`}
+  image={`/og/methods/${slugOf(row)}.png`}
+>
+  <section class="container section">
+    <p class="eyebrow"><a href="/leaderboard">Leaderboard</a> / {kind}</p>
+    <h1>{row.method_name}</h1>
+    <p class="lede">{modelName(row)} · season {row.season ?? "—"} · {row.cases} cases</p>
+    {
+      row.budget_tokens && row.mean_artifact_tokens > row.budget_tokens && (
+        <p class="card note">
+          This method wrote {Math.round(row.mean_artifact_tokens).toLocaleString("en-US")} tokens on average, over the{" "}
+          {row.budget_tokens.toLocaleString("en-US")}-token budget. Each artifact was cut to the budget before the reader saw
+          it, as for any method; a ranked submission with over-budget artifacts doesn't qualify.
+        </p>
+      )
+    }
+
+    <div class="stats">
+      <div class="card stat">
+        <span class="muted">Score</span>
+        <strong class="mono big">{pct(row.score)}</strong>
+        <span class="muted mono">95% CI {pct(row.score_ci_low)}–{pct(row.score_ci_high)}</span>
+      </div>
+      <div class="card stat">
+        <span class="muted">Normalized</span>
+        <strong class="mono big">{pct(row.normalized_score)}</strong>
+        <span class="muted">share of the achievable range</span>
+      </div>
+      <div class="card stat">
+        <span class="muted">Drift resistance</span>
+        <strong class="mono big">{pct(row.drift_resistance, 0)}</strong>
+        <span class="muted">last compaction vs first</span>
+      </div>
+      <div class="card stat">
+        <span class="muted">Stale · trap · invented</span>
+        <strong class="mono big">{pct(row.stale_rate, 0)} · {pct(row.trap_rate, 0)} · {pct(row.hallucination_rate, 0)}</strong>
+        <span class="muted">% of chances taken</span>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="card">
+        <h2>Across compactions</h2>
+        <CycleChart values={row.by_cycle} label={`${row.method_name}: score after each compaction`} />
+      </div>
+      <div class="card">
+        <h2>By family</h2>
+        <ul class="bars">
+          {
+            families.map(([key, value]) => (
+              <li>
+                <span class="fam">{familyTitle(key)}</span>
+                <span class="bar" aria-hidden="true">
+                  <span style={`width:${(value * 100).toFixed(1)}%`} />
+                </span>
+                <span class="mono">{pct(value, 0)}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Run details</h2>
+      <dl class="facts">
+        {
+          facts.map(([k, v]) => (
+            <div>
+              <dt class="muted">{k}</dt>
+              <dd class="mono">{v}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .stats {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    margin: 1.5rem 0;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .big {
+    font-size: 1.8rem;
+    line-height: 1.1;
+  }
+  .cols {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: 1.1rem;
+  }
+  .bars {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .bars li {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 2fr 40px;
+    gap: 10px;
+    align-items: center;
+    font-size: 0.88rem;
+  }
+  .bar {
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .bar span {
+    display: block;
+    height: 100%;
+    background: var(--gradient);
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+    gap: 12px 24px;
+    margin: 0;
+  }
+  .facts dd {
+    margin: 2px 0 0;
+    font-size: 0.88rem;
+  }
+  .facts dt {
+    font-size: 0.78rem;
+  }
+  .note {
+    border-color: rgb(251 191 36 / 0.4);
+    color: var(--muted);
+    max-width: 72ch;
+  }
+</style>

@@ -1,0 +1,38 @@
+---
+// Score after each compaction, as a small inline line. Values are 0..1.
+interface Props {
+  values: number[];
+  label: string;
+}
+
+const { values, label } = Astro.props;
+const w = 96;
+const h = 28;
+const step = values.length > 1 ? w / (values.length - 1) : 0;
+const points = values.map((v, i) => `${(i * step).toFixed(1)},${(h - 2 - v * (h - 4)).toFixed(1)}`);
+const summary = values.map((v) => (v * 100).toFixed(0)).join(", ");
+---
+
+<svg
+  width={w}
+  height={h}
+  viewBox={`0 0 ${w} ${h}`}
+  role="img"
+  aria-label={`${label}: ${summary}`}
+  class="spark"
+>
+  <polyline points={points.join(" ")} fill="none" stroke="url(#spark-g)" stroke-width="2" />
+  <defs>
+    <linearGradient id="spark-g" x1="0" x2="1">
+      <stop offset="0" stop-color="#22D3EE" />
+      <stop offset="1" stop-color="#8B5CF6" />
+    </linearGradient>
+  </defs>
+</svg>
+
+<style>
+  .spark {
+    display: block;
+    overflow: visible;
+  }
+</style>

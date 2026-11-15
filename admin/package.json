@@ -1,0 +1,13 @@
+{
+  "name": "compactbench-admin",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.22.0" },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.1"
+  }
+}

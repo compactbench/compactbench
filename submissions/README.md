@@ -1,8 +1,8 @@
 # Submissions
 
-Published ranked submissions. Ranked evaluation is paused while the v2 evaluation
-pipeline is finished; when it reopens, each qualifying run is written here and the
-leaderboard updates.
+Published ranked submissions. You don't open a pull request: submit on
+[compactbench.com/submit](https://compactbench.com/submit), and when your run
+qualifies, the evaluation workflow writes it here and the leaderboard updates.
 
 ```
 submissions/<github-handle>/<method-name>/
@@ -15,7 +15,7 @@ submissions/<github-handle>/<method-name>/
 
 `_template/` is a starting point for writing a method; see
 [Writing a compactor](../docs/writing-a-compactor.md). Test it locally against the
-public `practice` suite with any model.
+public `practice` suite with any model, then submit it on the website.
 
 Hidden case content is never published. Resubmitting a method replaces its files
 here; git history keeps every earlier version.

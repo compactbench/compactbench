@@ -658,14 +658,16 @@ def submit(
     """Print the steps to submit a method for ranked scoring."""
     console.print("[bold]Submit a method to the CompactBench leaderboard[/bold]\n")
     console.print(f"  1. Check it qualifies: compactbench qualify --results {results}")
+    console.print("  2. Go to https://compactbench.com/submit and sign in with GitHub.")
     console.print(
-        f"  2. Ranked submissions for [cyan]{method_name}[/cyan] are paused while the v2 "
-        "evaluation pipeline is finished."
+        f"  3. Upload method.py for [cyan]{method_name}[/cyan], pick the model it calls, and add "
+        "your API keys (dedicated, spend-limited)."
     )
-    console.print("     Until then, develop against the public practice suite.")
     console.print(
-        "\nDetails: https://github.com/compactbench/compactbench/blob/main/docs/submitting.md"
+        "  4. Your method runs, sandboxed, on a fresh sample of the hidden Elite set; "
+        "qualifying runs are published automatically. Revoke the keys afterwards."
     )
+    console.print("\nDetails: https://compactbench.com/submit and /submission-terms.")
 
 
 @app.command("sandbox-serve", hidden=True)

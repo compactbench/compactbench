@@ -1,0 +1,82 @@
+name: Site
+
+# Builds compactbench.com (web/) and deploys it to Cloudflare Workers static
+# assets. Pull requests only build; pushes to main also deploy. The deploy step
+# is skipped until the Cloudflare token is configured.
+
+on:
+  # Started by the evaluate workflow after it publishes a submission.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "docs/**"
+      - "docs/data/leaderboard.json"
+      - "seasons/**"
+      - "scripts/export_site_data.py"
+      - "scripts/og_images.py"
+      - "src/compactbench/scenarios/**"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - "docs/**"
+      - "scripts/export_site_data.py"
+      - "scripts/og_images.py"
+      - ".github/workflows/site.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install site dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      # After npm ci: the share images are drawn with the site's font files.
+      - name: Export site data from the package and docs
+        run: |
+          uv sync --locked
+          uv run python scripts/export_site_data.py
+
+      - name: Build
+        working-directory: web
+        env:
+          PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+        run: |
+          npm test
+          npm run build
+
+      - name: Deploy
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        working-directory: web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN isn't set; skipping deploy."
+            exit 0
+          fi
+          npx wrangler deploy

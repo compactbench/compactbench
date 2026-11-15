@@ -1,0 +1,87 @@
+---
+import CostChart from "../components/CostChart.astro";
+import LeaderboardTable from "../components/LeaderboardTable.astro";
+import Base from "../layouts/Base.astro";
+import { families, ordered, rows, season, updatedAt } from "../lib/data";
+
+const seasonRows = ordered(rows.filter((r) => r.season === season.key || r.row_kind !== "submission"));
+const familyKeys = families.map((f) => f.key);
+---
+
+<Base
+  title="Leaderboard"
+  description="Context compaction methods ranked by how much state they keep across repeated compactions, with confidence intervals and per-family scores."
+  path="/leaderboard"
+  markdown="/leaderboard.md"
+>
+  <section class="container section">
+    <p class="eyebrow">Season {season.key.toUpperCase()} · suite {season.suite} {season.suite_version}</p>
+    <h1>Leaderboard</h1>
+    <p class="lede">
+      Score is the share of questions a fixed reader answers correctly from the method's artifact
+      after each compaction, averaged so every failure family counts equally. Shown as a percentage
+      with its 95% interval. Ranks only separate when intervals do.
+    </p>
+    <dl class="pins mono">
+      <div><dt>Budget</dt><dd>{season.budget_tokens} tokens</dd></div>
+      <div><dt>Compactions</dt><dd>{season.drift_cycles + 1}</dd></div>
+      <div><dt>Reader</dt><dd>{season.reader.model} ({season.reader.effort ?? "default"})</dd></div>
+      <div><dt>Cases</dt><dd>fresh sample per run</dd></div>
+    </dl>
+    {
+      seasonRows.length ? (
+        <>
+          <LeaderboardTable rows={seasonRows} familyKeys={familyKeys} />
+          <CostChart rows={seasonRows} />
+          <p class="muted small">
+            Updated {new Date(updatedAt).toUTCString()}. Baselines and controls are reference rows
+            and are never ranked. Download: <a href="/api/leaderboard.json">JSON</a>.
+          </p>
+        </>
+      ) : (
+        <div class="card empty">
+          <h2>Season 1 is being calibrated</h2>
+          <p class="muted">
+            Before a season opens, every question is checked to be answerable from the full
+            conversation and not guessable from nothing, and difficulty is balanced across
+            families. Reference baselines publish first; ranked submissions open after.
+          </p>
+          <p class="muted">
+            You can already run the public <code>practice</code> suite, which matches the ranked
+            set's difficulty:
+          </p>
+          <pre><code>compactbench run --method built-in:naive-summary --suite practice \
+  --provider anthropic --model claude-haiku-5-5 \
+  --reader-model claude-haiku-5-5 --reader-effort high --controls</code></pre>
+        </div>
+      )
+    }
+  </section>
+</Base>
+
+<style>
+  .pins {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin: 1.5rem 0 1.75rem;
+    font-size: 0.85rem;
+  }
+  .pins div {
+    display: flex;
+    gap: 8px;
+  }
+  .pins dt {
+    color: var(--muted);
+  }
+  .pins dd {
+    margin: 0;
+  }
+  .small {
+    font-size: 0.85rem;
+    margin-top: 0.8rem;
+  }
+  .empty h2 {
+    font-size: 1.3rem;
+  }
+</style>

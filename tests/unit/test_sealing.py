@@ -64,13 +64,13 @@ def test_tampering_is_detected() -> None:
         open_sealed(private, flipped, context="c")
 
 
-# Sealed by an independent WebCrypto implementation with a test-only keypair. If either
+# Sealed by web/worker/seal.ts (the website's Worker) with a test-only keypair. If either
 # implementation changes, this stops opening.
 _FIXTURE_PRIVATE = "eAz-9g9f5SlEWgw3afejhSm7fGbuiCBtOrzVIKqrAXE"
 _FIXTURE_SEALED_BY_WORKER = "cbseal1:ccwHv_fzcmYmhsXMiUhT6_MH3Z5n8Mk6JR0_pynthgyozAYVWFIbHm5YqY5Z6ZrKOzPo0CpH904cPs2d7HYMI_6aw5wFhiXqF_kz4N8f"
 
 
-def test_opens_a_value_sealed_by_webcrypto() -> None:
+def test_opens_a_value_sealed_by_the_website_worker() -> None:
     assert (
         open_sealed(_FIXTURE_PRIVATE, _FIXTURE_SEALED_BY_WORKER, context="key:s1:fixture000001")
         == b"sk-interop-fixture"

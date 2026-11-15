@@ -1,0 +1,50 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="Data & API"
+  description="CompactBench's public data: leaderboard JSON, families and season settings, Markdown pages, llms.txt and a remote MCP server for AI assistants."
+  path="/data"
+>
+  <section class="container section prose">
+    <p class="eyebrow">Data & API</p>
+    <h1>Use the data</h1>
+    <p class="lede">
+      Everything on the leaderboard is available as plain files. No key, no sign-up, no rate limit
+      beyond fair use. Licensed Apache 2.0.
+    </p>
+
+    <h2>JSON</h2>
+    <ul>
+      <li><a href="/api/leaderboard.json"><code>/api/leaderboard.json</code></a> — every published row: scores, intervals, per-family and per-compaction scores, settings.</li>
+      <li><a href="/api/families.json"><code>/api/families.json</code></a> — the failure families.</li>
+      <li><a href="/api/season.json"><code>/api/season.json</code></a> — the current season's pinned settings.</li>
+      <li><code>/api/methods/&lt;slug&gt;.json</code> — one row, the same slug as its <code>/methods/&lt;slug&gt;</code> page.</li>
+      <li><a href="/api/leaderboard.csv"><code>/api/leaderboard.csv</code></a> — the leaderboard as CSV, one column per family.</li>
+      <li><a href="/api/openapi.json"><code>/api/openapi.json</code></a> — an OpenAPI 3.1 description of all of the above.</li>
+    </ul>
+
+    <h2>For AI assistants</h2>
+    <ul>
+      <li><a href="/llms.txt"><code>/llms.txt</code></a> and <a href="/llms-full.txt"><code>/llms-full.txt</code></a> — a map of the site, and every page in one file.</li>
+      <li>Every content page has a Markdown twin: <a href="/methodology.md"><code>/methodology.md</code></a>, <a href="/leaderboard.md"><code>/leaderboard.md</code></a>, …</li>
+      <li>
+        A remote MCP server at <code>https://compactbench.com/mcp</code> (Streamable HTTP, read-only) with tools
+        <code>get_leaderboard</code>, <code>get_method</code>, <code>compare_methods</code>,
+        <code>list_families</code> and <code>explain_metric</code>.
+      </li>
+    </ul>
+    <pre><code>{`# Add it to Claude Code
+claude mcp add --transport http compactbench https://compactbench.com/mcp`}</code></pre>
+
+    <h2>Run it yourself</h2>
+    <p>
+      The benchmark is a Python package. Results files hold scores and settings only, so they're safe
+      to share; traces hold everything and stay wherever you write them.
+    </p>
+    <pre><code>{`pip install compactbench
+compactbench run --method built-in:hierarchical-summary --suite practice \\
+  --provider anthropic --model claude-haiku-5-5 --reader-effort high --controls`}</code></pre>
+  </section>
+</Base>

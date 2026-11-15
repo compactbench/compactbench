@@ -28,6 +28,6 @@ in the changelog; retired content stays available for audit but no new ranked ru
 
 ## Review of published runs
 
-Ranked runs are published when they qualify. The maintainers may review any run
+Qualifying runs are published automatically. The maintainers may review any run
 afterwards — for example one whose family scores look implausible — against its sealed
 traces, and remove it if it breaks the submission rules.

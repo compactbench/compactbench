@@ -1,0 +1,73 @@
+---
+import Base from "../layouts/Base.astro";
+import { families, suites } from "../lib/data";
+
+const practice = suites.find((s) => s.key === "practice");
+---
+
+<Base
+  title="Failure families"
+  description="The kinds of state context compaction loses: buried constraints, overridden decisions, look-alike people, references, exact figures, scoped rules, task state and untrusted sources."
+  path="/families"
+  markdown="/families.md"
+>
+  <section class="container section">
+    <p class="eyebrow">Families</p>
+    <h1>What compaction loses</h1>
+    <p class="lede">
+      Each family is a generator for one kind of compaction failure. Every case is generated from a
+      seed, so the public sets are reproducible and the ranked set can be sampled fresh.
+      {practice && ` Practice and ranked cases are mixed sessions with every family at once, at ~${Math.round(practice.opening_tokens / 1000)}k-token openings.`}
+    </p>
+    <div class="list">
+      {
+        families.map((f) => (
+          <article id={f.key} class="card">
+            <h2>{f.title}</h2>
+            <p>{f.description}</p>
+            <p class="muted mono small">
+              compactbench generate --family {f.key} --seed 7 --text
+            </p>
+          </article>
+        ))
+      }
+    </div>
+
+    <h2 class="suites-title">Suites</h2>
+    <div class="grid">
+      {
+        suites.map((s) => (
+          <div class="card">
+            <h3 class="mono">{s.key}</h3>
+            <p class="muted">{s.description}</p>
+          </div>
+        ))
+      }
+      <div class="card">
+        <h3 class="mono">elite (hidden)</h3>
+        <p class="muted">
+          The ranked set: mixed sessions in private worlds — their own people, projects, rules and
+          wording — sampled fresh for every ranked run.
+        </p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .list {
+    display: grid;
+    gap: 16px;
+    margin-top: 2rem;
+  }
+  .list h2 {
+    font-size: 1.3rem;
+  }
+  .small {
+    font-size: 0.8rem;
+    margin: 0;
+  }
+  .suites-title {
+    margin-top: 3rem;
+  }
+</style>

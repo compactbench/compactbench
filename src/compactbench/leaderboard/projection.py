@@ -14,7 +14,7 @@ from compactbench.leaderboard.ranking import rank_key, tier_for
 
 
 class LeaderboardRow(TypedDict):
-    """Public row shape. Keep this stable — published leaderboard data uses it."""
+    """Public row shape. Keep this stable — the website and API read it."""
 
     rank: int | None
     # "submission" — ranked. "baseline" — a maintainer reference run of a

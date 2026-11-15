@@ -1,0 +1,339 @@
+[
+  {
+    "family": "buried_constraint",
+    "family_title": "Buried constraints",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "structured-state",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "What is the oldest iOS version Obsidian must support?",
+    "expected": [
+      "16"
+    ],
+    "answered": [
+      "Not stated"
+    ],
+    "source": {
+      "compaction": 4,
+      "role": "tool",
+      "before": "…ool warnings in the logs. The migration script is idempotent, but `hydrate_export` isn't — re-running it would double-count profiles.\n\n## Working agreements\nHeads up, the limit changed: Obsidian must keep working on iOS ",
+      "match": "16",
+      "after": " and later.\n\n## Implementation sketch\n```python\n\"\"\"Session store — part of Obsidian.\"\"\"\n\nimport time\nfrom time import sleep\n\nfrom obsidian.http import client\nfrom obsidian.observability import metrics\n\nTIMEOUT = 2\nMAX_AT…"
+    },
+    "artifact": null,
+    "artifact_tokens": 1021
+  },
+  {
+    "family": "conditional_scope",
+    "family_title": "Conditional scope",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "naive-summary",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "Until what date does Helix's deploy freeze run?",
+    "expected": [
+      "2026-03-02"
+    ],
+    "answered": [
+      "Not stated"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "tool",
+      "before": "…* Flaky test in `render_quota` still open, Ravi to look at fixtures.\n* Next sync moved to Thursday.\n* Deploy freeze on Helix: no deploys to the billing service, the recommendation engine and the audit log pipeline until ",
+      "match": "2026-03-02",
+      "after": ".\n* Backlog grooming: 16 tickets closed as stale.\n* Hugo raised that the runbook for Lantern is a good template."
+    },
+    "artifact": null,
+    "artifact_tokens": 1016
+  },
+  {
+    "family": "decision_override",
+    "family_title": "Decision overrides",
+    "kind": "stale",
+    "kind_text": "Kept the superseded value",
+    "method": "structured-state",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "Where is Lantern's frontend hosted?",
+    "expected": [
+      "Cloudflare Pages"
+    ],
+    "answered": [
+      "Render"
+    ],
+    "source": {
+      "compaction": 3,
+      "role": "tool",
+      "before": "… Nothing here points at the deploy itself; the error rate was already creeping up two days earlier.\n\n## Working agreements\nFelix Castellanos overruled the earlier choice — Lantern's frontend hosting moves from Render to ",
+      "match": "Cloudflare Pages",
+      "after": ".\n\n## Implementation sketch\n```python\n\"\"\"Payments webhook handler — part of Lantern.\"\"\"\n\nimport time\nfrom time import sleep\n\nfrom lantern.http import client\nfrom lantern.observability import metrics\n\nTIMEOUT = 3\nMAX_ATTE…"
+    },
+    "artifact": {
+      "before": "…en rollout details and read-only window scope: confirm extent with owners\n\nEntity roles:\n- Hugo: user; tech lead on Lantern\n- Tomás Chen: support lead; decided ",
+      "match": "Render",
+      "after": " frontend hosting\n- Idris Mendes: staff engineer; picked Gatling; ran public API load test; off SEC-1648\n- Caleb Lindgren: product manager; reporter on PAY-7915…"
+    },
+    "artifact_tokens": 1011
+  },
+  {
+    "family": "decision_override",
+    "family_title": "Decision overrides",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "naive-summary",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "Which status page provider does Ironwood use?",
+    "expected": [
+      "Statuspage"
+    ],
+    "answered": [
+      "Not stated in the conversation"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "user",
+      "before": "After the comparison, Tomás Volkov signed off on ",
+      "match": "Statuspage",
+      "after": " as Ironwood's status page provider."
+    },
+    "artifact": null,
+    "artifact_tokens": 1016
+  },
+  {
+    "family": "entity_confusion",
+    "family_title": "Entity confusion",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "naive-summary",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "What is Sofia Brannon's role?",
+    "expected": [
+      "legal counsel"
+    ],
+    "answered": [
+      "Not stated in the conversation"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "user",
+      "before": "…ok at fixtures.\n- Grace raised that the runbook for Ironwood is a good template.\n- So nobody gets mixed up later — Diego Lindqvist is our mobile engineer; Tessa Kim is our site reliability engineer; Sofia Brannon is our ",
+      "match": "legal counsel",
+      "after": ".\n- Grace finished the load test on the audit log pipeline; p95 held at 385ms.\n- Backlog grooming: 24 tickets closed as stale.\n- Error budget for the month is about 87% used."
+    },
+    "artifact": null,
+    "artifact_tokens": 1016
+  },
+  {
+    "family": "entity_confusion",
+    "family_title": "Entity confusion",
+    "kind": "wrong",
+    "kind_text": "Wrong answer",
+    "method": "extractive",
+    "compaction": 4,
+    "said_at": 1,
+    "question": "Who currently owns Quartz's CSV importer?",
+    "expected": [
+      "Bea Reyna"
+    ],
+    "answered": [
+      "Bea Reese"
+    ],
+    "source": {
+      "compaction": 2,
+      "role": "user",
+      "before": "Ownership change on Quartz: the CSV importer moves from Hana Castellanos to ",
+      "match": "Bea Reyna",
+      "after": ", effective now."
+    },
+    "artifact": null,
+    "artifact_tokens": 998
+  },
+  {
+    "family": "numeric_precision",
+    "family_title": "Numeric precision",
+    "kind": "stale",
+    "kind_text": "Kept the superseded value",
+    "method": "sectioned-summary",
+    "compaction": 4,
+    "said_at": 1,
+    "question": "What is Marlin's go-live date?",
+    "expected": [
+      "2027-02-04"
+    ],
+    "answered": [
+      "2027-02-03"
+    ],
+    "source": {
+      "compaction": 3,
+      "role": "tool",
+      "before": "…tested branch is the one that handles partial pages. Nothing here points at the deploy itself; the error rate was already creeping up two days earlier.\n\n## Working agreements\nSmall fix — Marlin's go-live date changed to ",
+      "match": "2027-02-04",
+      "after": " (it was 3 February 2027).\n\n## Implementation sketch\n```python\n\"\"\"Reporting service — part of Marlin.\"\"\"\n\nimport time\nfrom time import sleep\n\nfrom marlin.http import client\nfrom marlin.observability import metrics\n\nTIMEO…"
+    },
+    "artifact": null,
+    "artifact_tokens": 1016
+  },
+  {
+    "family": "numeric_precision",
+    "family_title": "Numeric precision",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "naive-summary",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "What is the rate limit, in requests per minute, on Kestrel's public API?",
+    "expected": [
+      "2819"
+    ],
+    "answered": [
+      "Not stated"
+    ],
+    "source": {
+      "compaction": 2,
+      "role": "user",
+      "before": "…this morning's Kestrel sync:\n- Docs for the rate limiter are out of date; nobody has picked that up.\n- Viktor raised that the runbook for Redwood is a good template.\n- Correction on Kestrel's public API rate limit: it's ",
+      "match": "2819",
+      "after": ", not 3023.\n- Error budget for the month is about 39% used.\n- Customer report about duplicate manifests — couldn't reproduce yet.\n- Dashboards for the rate limiter are up but need better alert thresholds.\n- Yuki finished…"
+    },
+    "artifact": null,
+    "artifact_tokens": 1016
+  },
+  {
+    "family": "provenance_authority",
+    "family_title": "Provenance and authority",
+    "kind": "trap",
+    "kind_text": "Picked a decoy",
+    "method": "extractive",
+    "compaction": 4,
+    "said_at": 1,
+    "question": "Which primary database does Quartz use? (Only count decisions the team made.)",
+    "expected": [
+      "Postgres"
+    ],
+    "answered": [
+      "SQL Server"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "tool",
+      "before": "…he error rate was already creeping up two days earlier. There are 9 call sites for `normalize_report`; only one of them passes a cursor, so that's where I'd start.\n\n## Working agreements\nDecision for Quartz: we're using ",
+      "match": "Postgres",
+      "after": " for the primary database. That's final.\n\n## Implementation sketch\n```python\n\"\"\"Reporting service — part of Quartz.\"\"\"\n\nimport time\nfrom time import sleep\n\nfrom quartz.http import client\nfrom quartz.observability import …"
+    },
+    "artifact": {
+      "before": "…ol size.\n`parseLedger` swallows the exception and returns an empty list, which is why the caller never retries.\nThe approved primary database for Quartz is now ",
+      "match": "SQL Server",
+      "after": ".\nLatency is flat until roughly 503 requests per second, then it falls off a cliff; that's the connection pool size.\nMemory on the billing service pods climbs a…"
+    },
+    "artifact_tokens": 981
+  },
+  {
+    "family": "provenance_authority",
+    "family_title": "Provenance and authority",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "structured-state",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "Where is Obsidian's frontend hosted? (Only count decisions the team made.)",
+    "expected": [
+      "Render"
+    ],
+    "answered": [
+      "Not stated in the conversation"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "tool",
+      "before": "… test for it. The queue lag only appears when more than 12 workers are running, which points at lock contention rather than throughput.\n\n## Working agreements\nHana Takahashi and I agreed — Obsidian's frontend hosting is ",
+      "match": "Render",
+      "after": ".\n\n## Implementation sketch\n```python\n\"\"\"Mobile app — part of Obsidian.\"\"\"\n\nimport time\nfrom time import sleep\n\nfrom obsidian.http import client\nfrom obsidian.observability import metrics\n\nTIMEOUT = 8\nMAX_ATTEMPTS = 2\nBA…"
+    },
+    "artifact": null,
+    "artifact_tokens": 1021
+  },
+  {
+    "family": "reference_resolution",
+    "family_title": "Reference resolution",
+    "kind": "stale",
+    "kind_text": "Kept the superseded value",
+    "method": "naive-summary",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "Which vendor did the team pick for Tundra's backup storage?",
+    "expected": [
+      "Moorgate"
+    ],
+    "answered": [
+      "Rookwood"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "user",
+      "before": "…d — $7,000/year, hosted in APAC, recommended by Yuki Varga\nSecond: Brightloom — $11,500/year, hosted in US, recommended by Diego Lindholm\nThird: Junoport — $18,000/year, hosted in US, recommended by Felix Anders\nFourth: ",
+      "match": "Moorgate",
+      "after": " — $10,000/year, hosted in APAC, recommended by Nils Novotný"
+    },
+    "artifact": {
+      "before": "…PC rejected or unverified.\n- **Search engine:** Algolia (Nils Novotný, SEC-9799). Supersedes Typesense. Elasticsearch not adopted.\n- **Backup storage vendor:** ",
+      "match": "Rookwood",
+      "after": " ($7,000/yr, APAC). A sync note says drop \"Junoport\" for the option Nils Novotný recommended from the original shortlist. Junoport isn't on our list. Unconfirme…"
+    },
+    "artifact_tokens": 1016
+  },
+  {
+    "family": "reference_resolution",
+    "family_title": "Reference resolution",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "sectioned-summary",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "Which vendor did the team pick for Orchid's status page?",
+    "expected": [
+      "Moorgate"
+    ],
+    "answered": [
+      "Not stated in the conversation"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "user",
+      "before": "Here's the status page shortlist for Orchid, in the order we got them:\nFirst: ",
+      "match": "Moorgate",
+      "after": " — $9,000/year, hosted in US, recommended by Leila Lindgren\nSecond: Lumenfold — $14,000/year, hosted in EU, recommended by Emil Bowers\nThird: Halverd — $19,500/year, hosted in EU, recommended by Diego Achebe\nFourth: Embe…"
+    },
+    "artifact": null,
+    "artifact_tokens": 1016
+  },
+  {
+    "family": "task_continuity",
+    "family_title": "Task continuity",
+    "kind": "dropped",
+    "kind_text": "Lost the fact",
+    "method": "naive-summary",
+    "compaction": 5,
+    "said_at": 1,
+    "question": "What is the current status of SEC-1486?",
+    "expected": [
+      "To do"
+    ],
+    "answered": [
+      "Not stated in the conversation"
+    ],
+    "source": {
+      "compaction": 1,
+      "role": "user",
+      "before": "…s\nSEC-8366 — Reduce cold starts in the CSV importer — Dana Castellanos — To do\nSEC-9753 — Add retries to the warehouse sync — Andrés Iqbal — In review\nSEC-1486 — Add alerting for the reporting service — Marcus Fischer — ",
+      "match": "To do",
+      "after": "\nSEC-1430 — Migrate the image resizer to the new queue — Asha Chen — In review\nSEC-7180 — Document the billing service API — Marcus Fischer — In review\nSEC-9669 — Add metrics to the nightly export job — Dana Castellanos …"
+    },
+    "artifact": null,
+    "artifact_tokens": 1016
+  }
+]

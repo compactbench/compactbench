@@ -1,0 +1,74 @@
+---
+import Base from "../layouts/Base.astro";
+import { calibration, familyTitle, pct, season } from "../lib/data";
+
+const pins: [string, string][] = [
+  ["Suite", `${season.suite} ${season.suite_version} — mixed sessions in private worlds`],
+  ["Difficulty", String(season.difficulty)],
+  ["Compactions", `${season.drift_cycles + 1} per case`],
+  ["Cases", `${season.cases_per_family} per run, sampled fresh`],
+  ["Token budget", `${season.budget_tokens} tokens per artifact`],
+  ["Reader", `${season.reader.model} (effort ${season.reader.effort ?? "default"})`],
+  [
+    "Controls",
+    season.controls
+      ? "full-conversation and empty-context, on every run"
+      : "measured once per season (below)",
+  ],
+];
+---
+
+<Base
+  title="Seasons"
+  description="How CompactBench seasons pin every setting that affects a score, and what the current season uses."
+  path="/seasons"
+>
+  <section class="container section prose">
+    <p class="eyebrow">Seasons</p>
+    <h1>Season {season.key.toUpperCase()}</h1>
+    <p class="lede">
+      A season pins every setting that affects a score, so every row in it is comparable. Submitters
+      choose only their method and the model it calls. Rows from different seasons are never ranked
+      together, and a season's rows stay pinned to its versions permanently.
+    </p>
+    <table>
+      <tbody>
+        {pins.map(([k, v]) => (<tr><th scope="row">{k}</th><td>{v}</td></tr>))}
+      </tbody>
+    </table>
+    {
+      calibration && (
+        <>
+          <h2>Ceiling and floor</h2>
+          <p>
+            Measured on a calibration sample of {calibration.cases} cases ({calibration.measured_at}):
+            what the reader scores answering from the full conversation (ceiling) and from nothing
+            (floor). A method's score only means something between the two.
+          </p>
+          <table>
+            <thead>
+              <tr><th>Family</th><th>Ceiling</th><th>Floor</th></tr>
+            </thead>
+            <tbody>
+              {Object.entries(calibration.families).map(([key, v]) => (
+                <tr><td>{familyTitle(key)}</td><td class="mono">{pct(v.ceiling)}</td><td class="mono">{pct(v.floor)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )
+    }
+    <h2>Why these settings</h2>
+    <p>
+      Compacting a ~32k-token session into {season.budget_tokens} tokens is about 32x — roughly what
+      production auto-compaction does. A terse notes artifact holding everything the questions ask
+      about still fits, so a near-perfect score is reachable; what separates methods is how much they
+      keep, and how much of it survives being compacted again and again.
+    </p>
+    <p>
+      The ranked cases come from a private generator and are sampled fresh for every run. Before a
+      season opens, every family is checked to be answerable from the full conversation (at least
+      90%) and not guessable from nothing (at most 10%).
+    </p>
+  </section>
+</Base>

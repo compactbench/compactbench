@@ -7,7 +7,8 @@ A working starting point for a ranked submission.
 - `requirements.txt` — extra dependencies, pinned (`name==version`). Leave it empty if
   you need nothing beyond `compactbench[providers]`.
 
-Test against the public `practice` suite (commands are at the top of `method.py`).
-Ranked submissions are paused while the v2 evaluation pipeline is finished. See
+Test against the public `practice` suite (commands are at the top of `method.py`), then
+add both at [compactbench.com/submit](https://compactbench.com/submit) (choose or paste
+them into the form). See
 [Writing a compactor](../../docs/writing-a-compactor.md) and
 [Submitting](../../docs/submitting.md).

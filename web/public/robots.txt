@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /auth/
+Disallow: /status
+Disallow: /api/submissions
+Disallow: /api/internal/
+
+Sitemap: https://compactbench.com/sitemap-index.xml

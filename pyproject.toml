@@ -82,9 +82,9 @@ docs = [
 compactbench = "compactbench.cli:app"
 
 [project.urls]
-Homepage = "https://compactbench.github.io/compactbench"
+Homepage = "https://compactbench.com"
 Repository = "https://github.com/compactbench/compactbench"
-Documentation = "https://compactbench.github.io/compactbench"
+Documentation = "https://compactbench.com/docs"
 Issues = "https://github.com/compactbench/compactbench/issues"
 Changelog = "https://github.com/compactbench/compactbench/blob/main/CHANGELOG.md"
 
@@ -119,6 +119,7 @@ dev = [
     "mkdocs-include-markdown-plugin>=6.2",
     "langchain-core>=0.3",
     "llama-index-core>=0.11",
+    "pillow>=13",  # share images for the site (scripts/og_images.py)
 ]
 
 [tool.ruff]

@@ -1,0 +1,36 @@
+// Cloudflare Workers: the built site as static assets, plus a small Worker for the
+// dynamic routes (MCP, GitHub sign-in, ranked submissions).
+//
+// Before the first deploy:
+//   wrangler d1 create compactbench            → put the id below
+//   wrangler d1 migrations apply compactbench --remote
+//   wrangler r2 bucket create compactbench-submissions
+//   wrangler secret put GITHUB_CLIENT_SECRET | SESSION_SECRET | GITHUB_DISPATCH_TOKEN
+//   (optional) wrangler secret put TURNSTILE_SECRET
+{
+  "name": "compactbench-web",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash",
+    // Only these paths run code; every page and file is served straight from assets.
+    "run_worker_first": ["/mcp", "/auth/*", "/api/me", "/api/submissions", "/api/submissions/*", "/api/internal/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "compactbench", "database_id": "REPLACE_AFTER_wrangler_d1_create", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [{ "binding": "BUNDLES", "bucket_name": "compactbench-submissions" }],
+  "vars": {
+    "GITHUB_REPO": "compactbench/compactbench",
+    "GITHUB_CLIENT_ID": "REPLACE_WITH_OAUTH_APP_CLIENT_ID",
+    "SEASON_KEY": "s1",
+    "SEASON_PUBLIC_KEY": "REPLACE_WITH_SEASON_PUBLIC_KEY",
+    "OIDC_AUDIENCE": "https://compactbench.com",
+    "SUBMISSIONS_OPEN": "true",
+    "LIMIT_PER_WEEK": "2",
+    "LIMIT_PER_DAY": "20"
+  }
+}

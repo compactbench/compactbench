@@ -1,0 +1,36 @@
+---
+import Base from "./Base.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+  eyebrow: string;
+}
+
+const { title, description, path, eyebrow } = Astro.props;
+---
+
+<Base title={title} description={description} path={path} markdown={`${path}.md`}>
+  <article class="container section">
+    <p class="eyebrow">{eyebrow}</p>
+    <div class="prose doc">
+      <slot />
+    </div>
+  </article>
+</Base>
+
+<style>
+  .doc :global(h1) {
+    margin-bottom: 0.6em;
+  }
+  .doc :global(table) {
+    margin: 1.2em 0;
+    display: block;
+    overflow-x: auto;
+  }
+  .doc :global(td),
+  .doc :global(th) {
+    vertical-align: top;
+  }
+</style>

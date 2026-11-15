@@ -1,0 +1,209 @@
+---
+import DecayHero from "../components/DecayHero.astro";
+import LeaderboardTable from "../components/LeaderboardTable.astro";
+import Base from "../layouts/Base.astro";
+import { families, ordered, rows, season } from "../lib/data";
+
+const top = ordered(rows).slice(0, 5);
+const steps = [
+  {
+    title: "A long session",
+    body: "A generated conversation, about 32k tokens to start, where rules, decisions, owners, figures, tickets and policies pile up among code, logs and chatter.",
+  },
+  {
+    title: "Compact, then keep going",
+    body: "The method compacts it into an artifact under a fixed token budget. New turns arrive; it compacts its own artifact plus the new turns — again and again.",
+  },
+  {
+    title: "Ask what survived",
+    body: "After every compaction a fixed reader model answers questions from the artifact alone. Answers are checked mechanically — no model grades another.",
+  },
+];
+const fairness = [
+  ["Mechanical scoring", "Every question has an exact, checkable answer. No LLM judge."],
+  ["Ceiling and floor", "Each run answers the same questions from the full conversation and from nothing, so every score sits between its own bounds."],
+  ["Fresh hidden cases", "Ranked runs draw a new sample from a private generator. There is no answer key to memorize."],
+  ["Sandboxed submissions", "Submitted methods run in a container with no network but a model proxy, and see one compaction at a time."],
+];
+---
+
+<Base
+  title="CompactBench — the benchmark for context compaction"
+  description="An open benchmark for AI context compaction: long agent sessions compacted again and again under a fixed token budget, scored mechanically on what survived."
+  path="/"
+>
+  <script
+    slot="head"
+    type="application/ld+json"
+    set:html={JSON.stringify([
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        name: "CompactBench",
+        description:
+          "Open benchmark for AI context compaction methods: repeated compaction under a token budget, mechanical scoring.",
+        codeRepository: "https://github.com/compactbench/compactbench",
+        programmingLanguage: "Python",
+        license: "https://www.apache.org/licenses/LICENSE-2.0",
+        url: "https://compactbench.com",
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "Dataset",
+        name: "CompactBench leaderboard",
+        description:
+          "Scores of context compaction methods on the CompactBench Elite set, with confidence intervals and per-family breakdowns.",
+        url: "https://compactbench.com/leaderboard",
+        license: "https://www.apache.org/licenses/LICENSE-2.0",
+        distribution: {
+          "@type": "DataDownload",
+          encodingFormat: "application/json",
+          contentUrl: "https://compactbench.com/api/leaderboard.json",
+        },
+      },
+    ])}
+  />
+  <section class="hero container section">
+    <div>
+      <p class="eyebrow">Context compaction benchmark</p>
+      <h1>How much does your agent <span class="gradient-text">forget</span> when it compacts?</h1>
+      <p class="lede">
+        CompactBench measures what survives when long AI agent sessions are compacted — not once,
+        but over and over, under a fixed token budget. Rules, decisions, people, exact figures and
+        task state, scored mechanically after every compaction.
+      </p>
+      <div class="cta">
+        <a class="button primary" href="/leaderboard">See the leaderboard</a>
+        <a class="button" href="/submit">Benchmark your method</a>
+      </div>
+      <pre class="install"><code>pip install compactbench
+compactbench run --suite practice \
+  --method built-in:naive-summary</code></pre>
+    </div>
+    <DecayHero />
+  </section>
+
+  <section class="container section">
+    <p class="eyebrow">How a run works</p>
+    <h2>Compaction is a loop, so we test the loop</h2>
+    <div class="grid steps">
+      {
+        steps.map((s, i) => (
+          <div class="card">
+            <p class="mono step">0{i + 1}</p>
+            <h3>{s.title}</h3>
+            <p class="muted">{s.body}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="container section">
+    <p class="eyebrow">What breaks</p>
+    <h2>{families.length} ways compaction loses state</h2>
+    <p class="lede">
+      Ranked cases are mixed sessions: all of these at once, in one conversation, under one budget.
+    </p>
+    <div class="grid">
+      {
+        families.map((f) => (
+          <a class="card family" href={`/families#${f.key}`}>
+            <h3>{f.title}</h3>
+            <p class="muted">{f.description}</p>
+          </a>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="container section">
+    <p class="eyebrow">Leaderboard · Season {season.key.toUpperCase()}</p>
+    <h2>Who keeps the most</h2>
+    {
+      top.length ? (
+        <>
+          <LeaderboardTable rows={top} familyKeys={families.map((f) => f.key)} compact />
+          <p>
+            <a href="/leaderboard">Full leaderboard →</a>
+          </p>
+        </>
+      ) : (
+        <div class="card empty">
+          <p>
+            <strong>Season 1 is being calibrated.</strong> Reference baselines publish first; ranked
+            submissions open after. Until then, run the public <code>practice</code> suite — it is
+            the same difficulty as the ranked set.
+          </p>
+          <a class="button" href="/submit">How submissions work</a>
+        </div>
+      )
+    }
+  </section>
+
+  <section class="container section">
+    <p class="eyebrow">Why trust the numbers</p>
+    <h2>Fair by construction</h2>
+    <div class="grid">
+      {
+        fairness.map(([title, body]) => (
+          <div class="card">
+            <h3>{title}</h3>
+            <p class="muted">{body}</p>
+          </div>
+        ))
+      }
+    </div>
+    <p><a href="/methodology">Read the methodology →</a></p>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    display: grid;
+    gap: clamp(32px, 5vw, 64px);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+  @media (max-width: 860px) {
+    .hero {
+      grid-template-columns: 1fr;
+    }
+  }
+  .cta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 1.6rem 0 1.4rem;
+  }
+  .install {
+    max-width: 560px;
+  }
+  .step {
+    color: var(--cyan);
+    margin-bottom: 0.4rem;
+  }
+  .family {
+    color: var(--text);
+    transition: border-color 0.2s ease;
+  }
+  .family:hover {
+    text-decoration: none;
+    border-color: var(--violet);
+  }
+  .family p {
+    font-size: 0.92rem;
+    margin: 0;
+  }
+  .empty {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .empty p {
+    margin: 0;
+    max-width: 70ch;
+  }
+</style>

@@ -1,0 +1,212 @@
+---
+import { familyTitle, isCustomEndpoint, modelName, pct, slugOf, type Row } from "../lib/data";
+import Sparkline from "./Sparkline.astro";
+
+interface Props {
+  rows: Row[];
+  familyKeys: string[];
+  compact?: boolean;
+}
+
+const { rows, familyKeys, compact = false } = Astro.props;
+const kindLabel = { submission: "ranked", baseline: "baseline", control: "control" } as const;
+const native = (row: Row) => row.method_name.endsWith("-compaction");
+const heat = (v: number | undefined) =>
+  v === undefined ? "" : `background: rgb(59 130 246 / ${(0.06 + v * 0.6).toFixed(2)})`;
+---
+
+<div class="wrap" data-leaderboard>
+  <table class="board">
+    <caption class="sr-only">
+      Scores after repeated compaction. Higher is better. Score is the share of probes answered
+      correctly from the method's artifact, family-balanced, with a 95% interval.
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col"><button data-sort="rank" data-type="num">#</button></th>
+        <th scope="col" class="left">Method</th>
+        <th scope="col"><button data-sort="score" data-type="num" aria-sort="descending">Score</button></th>
+        {!compact && <th scope="col"><button data-sort="drift" data-type="num">Drift</button></th>}
+        <th scope="col">By compaction</th>
+        {
+          !compact &&
+            familyKeys.map((key) => (
+              <th scope="col" class="fam" title={familyTitle(key)}>
+                <button data-sort={`f-${key}`} data-type="num">
+                  {familyTitle(key).split(" ")[0]}
+                </button>
+              </th>
+            ))
+        }
+        {!compact && <th scope="col"><button data-sort="tokens" data-type="num">Tokens</button></th>}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row, i) => (
+          <tr
+            data-kind={row.row_kind}
+            data-rank={row.rank ?? 999 + i}
+            data-score={row.score}
+            data-drift={row.drift_resistance}
+            data-tokens={row.mean_artifact_tokens}
+            {...Object.fromEntries(familyKeys.map((k) => [`data-f-${k}`, row.by_family[k] ?? -1]))}
+          >
+            <td class="mono rank">{row.rank ?? "—"}</td>
+            <td class="left method">
+              <a class="name" href={`/methods/${slugOf(row)}`}>{row.method_name}</a>
+              <span class="badge {row.row_kind}">{kindLabel[row.row_kind]}</span>
+              {native(row) && <span class="badge native">provider-native</span>}
+              {isCustomEndpoint(row) && <span class="badge">custom endpoint</span>}
+              <span class="sub muted mono">
+                {modelName(row)}
+                {row.handle ? ` · @${row.handle}` : ""}
+              </span>
+            </td>
+            <td class="mono score">
+              <strong>{pct(row.score)}</strong>
+              <span class="ci muted">
+                {pct(row.score_ci_low)}–{pct(row.score_ci_high)}
+              </span>
+            </td>
+            {!compact && <td class="mono">{pct(row.drift_resistance, 0)}</td>}
+            <td>
+              <Sparkline values={row.by_cycle} label={`${row.method_name} score by compaction`} />
+            </td>
+            {!compact &&
+              familyKeys.map((key) => (
+                <td class="mono heat" style={heat(row.by_family[key])}>
+                  {pct(row.by_family[key], 0)}
+                </td>
+              ))}
+            {!compact && (
+              <td class="mono muted">
+                {Math.round(row.mean_artifact_tokens)}
+                {row.budget_tokens && row.mean_artifact_tokens > row.budget_tokens && (
+                  <span class="over" title={`Over the ${row.budget_tokens}-token budget: cut to fit before the reader saw it`}>
+                    {" "}cut
+                  </span>
+                )}
+              </td>
+            )}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>
+
+<script>
+  // Progressive enhancement: click a column header to sort. The table reads fine without it.
+  for (const root of document.querySelectorAll<HTMLElement>("[data-leaderboard]")) {
+    const tbody = root.querySelector("tbody");
+    if (!tbody) continue;
+    for (const button of root.querySelectorAll<HTMLButtonElement>("button[data-sort]")) {
+      button.addEventListener("click", () => {
+        const key = button.dataset.sort ?? "score";
+        const current = button.getAttribute("aria-sort");
+        const ascending = key === "rank" ? current !== "ascending" : current === "descending";
+        for (const other of root.querySelectorAll("button[data-sort]")) {
+          other.removeAttribute("aria-sort");
+        }
+        button.setAttribute("aria-sort", ascending ? "ascending" : "descending");
+        const rows = [...tbody.querySelectorAll<HTMLTableRowElement>("tr")];
+        rows.sort((a, b) => {
+          const x = Number(a.dataset[toCamel(key)]);
+          const y = Number(b.dataset[toCamel(key)]);
+          return ascending ? x - y : y - x;
+        });
+        tbody.append(...rows);
+      });
+    }
+  }
+  function toCamel(key: string): string {
+    return key.replace(/-([a-z_])/g, (_, c: string) => c.toUpperCase());
+  }
+</script>
+
+<style>
+  .wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .board {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  th,
+  td {
+    padding: 0.7em 0.75em;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+    white-space: nowrap;
+  }
+  th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--surface-2);
+    position: sticky;
+    top: 0;
+  }
+  th button {
+    all: unset;
+    cursor: pointer;
+  }
+  th button:focus-visible {
+    outline: 2px solid var(--cyan);
+  }
+  th button[aria-sort]::after {
+    content: " ↓";
+    color: var(--cyan);
+  }
+  th button[aria-sort="ascending"]::after {
+    content: " ↑";
+  }
+  .left {
+    text-align: left;
+  }
+  tbody tr:hover {
+    background: rgb(59 130 246 / 0.05);
+  }
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .method .name {
+    font-weight: 600;
+    margin-right: 0.5em;
+    color: var(--text);
+  }
+  .method .sub {
+    display: block;
+    font-size: 0.75rem;
+    margin-top: 2px;
+  }
+  .score strong {
+    font-size: 1.05rem;
+  }
+  .ci {
+    display: block;
+    font-size: 0.72rem;
+  }
+  .heat {
+    min-width: 52px;
+    text-align: center;
+  }
+  tr[data-kind="submission"]:nth-child(-n + 3) .rank {
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 700;
+  }
+  .over {
+    color: var(--warn);
+    font-size: 0.75em;
+  }
+</style>
