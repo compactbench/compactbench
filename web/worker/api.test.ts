@@ -195,3 +195,36 @@ test("internal endpoints accept only the evaluate workflow on main", async () =>
   assert.equal(view.status, "published");
   assert.equal(view.score, 0.42);
 });
+
+test("a reference-method submission runs a built-in on the submitter's model, with no code", async () => {
+  const { call, signIn, store } = await setup();
+  const session = await signIn();
+  const reference = {
+    reference_method: "sectioned-summary",
+    provider: "openrouter",
+    model: "qwen/qwen3-235b",
+    // Anything sent for an uploaded method is ignored.
+    method_name: "ignored",
+    method_py: "import os\n",
+    requirements: "torch==2.0.0\n",
+    method_config: { reasoning_effort: "high" },
+    method_key: form.method_key,
+    reader_key: form.reader_key,
+  };
+  const created = await call("/api/submissions", post(session, reference));
+  assert.equal(created.status, 201);
+  const { id } = (await created.json()) as { id: string };
+  const parsed = JSON.parse((await store.getBundle(id)) ?? "{}");
+  assert.equal(parsed.reference_method, "sectioned-summary");
+  assert.equal(parsed.method_name, "sectioned-summary");
+  assert.equal(parsed.method_version, "1.0.0");
+  assert.equal(parsed.class_name, null);
+  assert.equal(parsed.method_py, "");
+  assert.equal(parsed.requirements, "");
+  assert.deepEqual(parsed.method_config, {});
+
+  const other = await setup();
+  const s2 = await other.signIn();
+  const unknown = await other.call("/api/submissions", post(s2, { ...reference, reference_method: "ledger" }));
+  assert.equal(unknown.status, 400);
+});

@@ -46,6 +46,15 @@ fill in:
 Everything else — suite, difficulty, compactions, cases, token budget, and the reader model
 and its effort — is pinned by the season.
 
+**No method of your own? Benchmark a model.** Choose *A reference method on my model*
+instead of uploading code, pick one of the published built-ins (`sectioned-summary`,
+`hierarchical-summary`, `naive-summary` or `structured-state`), and give the model and keys
+as above. The built-in runs unchanged with its default settings, so rows differ only in the
+model; they appear on the leaderboard's **By model** board, ranked against other models on
+the same method, and are published under
+`submissions/<your-handle>/<method>--<provider>--<model>/`. This is how a lab or a provider
+can put a number for its model on the board, paid for by its own keys.
+
 **About your keys.** Create dedicated keys with spend limits, and revoke them after your
 run. A key is sent once over HTTPS and sealed immediately to the season's public key; only
 the evaluation's model proxy (for your method's key) and grader (for the reader key) can

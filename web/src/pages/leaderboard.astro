@@ -1,10 +1,14 @@
 ---
+import ByModelTable from "../components/ByModelTable.astro";
 import CostChart from "../components/CostChart.astro";
 import LeaderboardTable from "../components/LeaderboardTable.astro";
 import Base from "../layouts/Base.astro";
-import { families, ordered, rows, season, seasonLabel, updatedAt } from "../lib/data";
+import { families, isModelRow, ordered, rows, season, seasonLabel, updatedAt } from "../lib/data";
 
 const seasonRows = ordered(rows.filter((r) => r.season === season.key || r.row_kind !== "submission"));
+// Methods are ranked on the main board; models run on a reference method get their own.
+const methodRows = seasonRows.filter((r) => !isModelRow(r));
+const modelRows = seasonRows.filter((r) => r.reference_method);
 const familyKeys = families.map((f) => f.key);
 // Dataset metadata for search engines and AI crawlers (schema.org, Google Dataset Search).
 const dataset = {
@@ -53,12 +57,27 @@ const dataset = {
     {
       seasonRows.length ? (
         <>
-          <LeaderboardTable rows={seasonRows} familyKeys={familyKeys} />
-          <CostChart rows={seasonRows} />
+          <LeaderboardTable rows={methodRows} familyKeys={familyKeys} />
+          <CostChart rows={methodRows} />
           <p class="muted small">
             Updated {new Date(updatedAt).toUTCString()}. Baselines and controls are reference rows
             and are never ranked. Download: <a href="/api/leaderboard.json">JSON</a>.
           </p>
+          {modelRows.length > 0 && (
+            <section class="by-model" id="by-model" aria-labelledby="by-model-title">
+              <h2 id="by-model-title">By model</h2>
+              <p class="muted">
+                Which model compacts best? The same published methods, run unchanged on different
+                models, so the only difference in a column is the model. <span class="mono">#</span> ranks
+                a model among the others on that method; models share a rank until their intervals separate.
+              </p>
+              <ByModelTable rows={modelRows} />
+              <p class="muted small">
+                Put your model on the board: <a href="/submit?reference=sectioned-summary">run a
+                reference method on it</a> with your own API keys. No code needed.
+              </p>
+            </section>
+          )}
         </>
       ) : (
         <div class="card empty">
@@ -105,5 +124,16 @@ const dataset = {
   }
   .empty h2 {
     font-size: 1.3rem;
+  }
+  .by-model {
+    margin-top: 3rem;
+    scroll-margin-top: 130px;
+  }
+  .by-model h2 {
+    margin-bottom: 0.4rem;
+  }
+  .by-model > p:first-of-type {
+    max-width: 70ch;
+    margin-bottom: 1.25rem;
   }
 </style>

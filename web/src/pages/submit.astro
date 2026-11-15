@@ -19,6 +19,14 @@ const providers: [string, string][] = [
   ["xai", "xAI"],
   ["custom", "My own endpoint (OpenAI-compatible)"],
 ];
+
+// Built-ins anyone can run on their own model (worker/submissions.ts REFERENCE_METHODS).
+const referenceMethods: [string, string][] = [
+  ["sectioned-summary", "Sectioned summary: Season 1's best method"],
+  ["hierarchical-summary", "Hierarchical summary: steadiest over many compactions"],
+  ["naive-summary", "Plain summary"],
+  ["structured-state", "Structured state: JSON records"],
+];
 ---
 
 <Base
@@ -32,7 +40,9 @@ const providers: [string, string][] = [
     <h1>Submit a method</h1>
     <p class="lede">
       Your method runs on a fresh sample of the hidden Elite set, in a sandbox, using your own API
-      keys. It takes about an hour; qualifying runs go straight onto the leaderboard.
+      keys. It takes about an hour; qualifying runs go straight onto the leaderboard. No method of your
+      own? Run a reference method on any model to put that model on the <a href="/leaderboard#by-model">By
+      model</a> board.
     </p>
 
     <noscript>
@@ -49,6 +59,22 @@ const providers: [string, string][] = [
 
       <fieldset>
         <legend>Method</legend>
+        <div class="choice" role="radiogroup" aria-label="What to run">
+          <label class="check"><input type="radio" name="source" value="upload" checked data-source /> My own method</label>
+          <label class="check"><input type="radio" name="source" value="reference" data-source /> A reference method on my model</label>
+        </div>
+        <div data-reference hidden>
+          <label>Reference method
+            <select name="reference_method" disabled>
+              {referenceMethods.map(([value, label]) => <option value={value}>{label}</option>)}
+            </select>
+          </label>
+          <p class="muted small">
+            Runs the published built-in unchanged, with its default settings, so the only difference
+            between rows is the model. No code to upload.
+          </p>
+        </div>
+        <div class="upload" data-upload>
         <div class="row">
           <label>Name <input name="method_name" required pattern="[a-z0-9][a-z0-9._\-]{0,63}" placeholder="my-ledger" autocomplete="off" /></label>
           <label>Version <input name="method_version" required pattern="[0-9]+\.[0-9]+\.[0-9]+" value="1.0.0" /></label>
@@ -64,10 +90,11 @@ const providers: [string, string][] = [
         <label>Method config <span class="muted">(optional JSON passed as self.config)</span>
           <input name="method_config" placeholder='{"effort": "low"}' autocomplete="off" />
         </label>
+        </div>
       </fieldset>
 
       <fieldset>
-        <legend>The model your method calls</legend>
+        <legend data-model-legend>The model your method calls</legend>
         <div class="row">
           <label>Provider
             <select name="provider" data-provider>
@@ -148,6 +175,30 @@ const providers: [string, string][] = [
   provider.addEventListener("change", sync);
   sync();
 
+  // Own method or a reference method: the hidden half is disabled, so it is neither
+  // required nor sent.
+  const upload = form.querySelector<HTMLElement>("[data-upload]")!;
+  const reference = form.querySelector<HTMLElement>("[data-reference]")!;
+  const syncSource = () => {
+    const useReference = form.querySelector<HTMLInputElement>("[data-source]:checked")?.value === "reference";
+    upload.hidden = useReference;
+    reference.hidden = !useReference;
+    upload.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea").forEach((el) => (el.disabled = useReference));
+    reference.querySelector("select")!.disabled = !useReference;
+    form.querySelector("[data-model-legend]")!.textContent = useReference
+      ? "The model to run it on"
+      : "The model your method calls";
+  };
+  form.querySelectorAll("[data-source]").forEach((el) => el.addEventListener("change", syncSource));
+  // /submit?reference=<method> (from the By model board) starts on that reference method.
+  const preset = new URLSearchParams(location.search).get("reference");
+  const presetOption = preset ? reference.querySelector<HTMLOptionElement>(`option[value="${CSS.escape(preset)}"]`) : null;
+  if (presetOption) {
+    form.querySelector<HTMLInputElement>('[data-source][value="reference"]')!.checked = true;
+    presetOption.selected = true;
+  }
+  syncSource();
+
   form.querySelector<HTMLInputElement>("[data-file]")!.addEventListener("change", async (event) => {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (file) (form.elements.namedItem("method_py") as HTMLTextAreaElement).value = await file.text();
@@ -161,7 +212,7 @@ const providers: [string, string][] = [
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     error.hidden = true;
-    const { "cf-turnstile-response": turnstile_token, ...data } = Object.fromEntries(new FormData(form).entries());
+    const { "cf-turnstile-response": turnstile_token, source: _source, ...data } = Object.fromEntries(new FormData(form).entries());
     const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
     button.disabled = true;
     try {
@@ -242,6 +293,16 @@ const providers: [string, string][] = [
     display: flex;
     gap: 8px;
     align-items: center;
+  }
+  .choice {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+  }
+  .upload,
+  [data-reference] {
+    display: grid;
+    gap: 12px;
   }
   .small {
     font-size: 0.85rem;

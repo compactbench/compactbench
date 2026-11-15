@@ -67,8 +67,9 @@ jobs:
           uv run --project harness python - <<'PY'
           import json, pathlib
           b = json.loads(pathlib.Path("bundle.json").read_text())
-          pathlib.Path("ctx/submission/method.py").write_text(b["method_py"])
-          if b["requirements"].strip():
+          # A reference-method submission has no code: the image runs a built-in.
+          pathlib.Path("ctx/submission/method.py").write_text(b.get("method_py") or "")
+          if (b.get("requirements") or "").strip():
               pathlib.Path("ctx/submission/requirements.txt").write_text(b["requirements"])
           PY
           cp harness/docker/submission.Dockerfile ctx/Dockerfile

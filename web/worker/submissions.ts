@@ -9,6 +9,15 @@ export const PROVIDERS = [
   "together", "fireworks", "xai", "gemini", "custom",
 ] as const;
 
+/** Built-in methods a submitter can run on their own model without uploading code, and the
+ * version a run records. Mirrors compactbench.leaderboard.REFERENCE_METHODS. */
+export const REFERENCE_METHODS: Record<string, string> = {
+  "sectioned-summary": "1.0.0",
+  "hierarchical-summary": "2.0.0",
+  "naive-summary": "2.0.0",
+  "structured-state": "2.0.0",
+};
+
 const PATTERNS = {
   method_name: /^[a-z0-9][a-z0-9._-]{0,63}$/,
   method_version: /^[0-9]+\.[0-9]+\.[0-9]+$/,
@@ -37,6 +46,7 @@ export interface SubmitInput {
   base_url?: unknown;
   model_label?: unknown;
   method_config?: unknown;
+  reference_method?: unknown;
   method_py?: unknown;
   requirements?: unknown;
   method_key?: unknown;
@@ -66,6 +76,28 @@ export function validate(input: SubmitInput) {
   if (!(PROVIDERS as readonly string[]).includes(provider)) {
     throw new SubmitError(`provider: choose one of ${PROVIDERS.join(", ")}`);
   }
+  const endpoint = validateEndpoint(provider, input);
+  const model = check("model", str(input.model), "the model id your provider expects, no spaces");
+  const reference = str(input.reference_method);
+  if (reference) {
+    // No code: the evaluation runs the built-in on the submitter's model, as published.
+    const version = REFERENCE_METHODS[reference];
+    if (!version) {
+      throw new SubmitError(`reference_method: choose one of ${Object.keys(REFERENCE_METHODS).join(", ")}`);
+    }
+    return {
+      method_name: reference,
+      method_version: version,
+      class_name: null,
+      reference_method: reference,
+      provider,
+      model,
+      ...endpoint,
+      method_config: {},
+      method_py: "",
+      requirements: "",
+    };
+  }
   const methodPy = typeof input.method_py === "string" ? input.method_py : "";
   if (!methodPy.trim()) throw new SubmitError("method.py is empty");
   if (bytes(methodPy) > MAX_METHOD_BYTES) throw new SubmitError("method.py is larger than 200 KB");
@@ -87,6 +119,22 @@ export function validate(input: SubmitInput) {
     config = parsed as Record<string, unknown>;
     if (bytes(JSON.stringify(config)) > MAX_CONFIG_BYTES) throw new SubmitError("method_config is larger than 16 KB");
   }
+  return {
+    method_name: check("method_name", str(input.method_name), "lowercase letters, digits, . _ - (max 64)"),
+    method_version: check("method_version", str(input.method_version), "semver, e.g. 1.0.0"),
+    class_name: check("class_name", str(input.class_name), "a Python class name"),
+    reference_method: null,
+    provider,
+    model,
+    ...endpoint,
+    method_config: config,
+    method_py: methodPy,
+    requirements,
+  };
+}
+
+/** A custom endpoint's URL and display name; hosted providers take neither. */
+function validateEndpoint(provider: string, input: SubmitInput) {
   const baseUrl = str(input.base_url) || null;
   const label = str(input.model_label) || null;
   if (provider === "custom") {
@@ -105,18 +153,7 @@ export function validate(input: SubmitInput) {
     if (baseUrl) throw new SubmitError("base_url is only for a custom endpoint");
     if (label) throw new SubmitError("a display name is only for a custom endpoint; hosted models keep their id");
   }
-  return {
-    method_name: check("method_name", str(input.method_name), "lowercase letters, digits, . _ - (max 64)"),
-    method_version: check("method_version", str(input.method_version), "semver, e.g. 1.0.0"),
-    class_name: check("class_name", str(input.class_name), "a Python class name"),
-    provider,
-    model: check("model", str(input.model), "the model id your provider expects, no spaces"),
-    base_url: baseUrl,
-    model_label: label,
-    method_config: config,
-    method_py: methodPy,
-    requirements,
-  };
+  return { base_url: baseUrl, model_label: label };
 }
 
 function safeJson(text: string): unknown {

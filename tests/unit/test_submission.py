@@ -93,3 +93,76 @@ def test_custom_models_can_have_a_display_name_hosted_ones_cannot() -> None:
         SubmissionBundle.model_validate(
             _bundle(provider="custom", base_url="https://m.example/v1", model_label="<script>")
         )
+
+
+def _reference(**overrides: Any) -> dict[str, Any]:
+    fields = _bundle(
+        reference_method="sectioned-summary",
+        method_name="sectioned-summary",
+        method_version="1.0.0",
+        class_name=None,
+        method_py="",
+        requirements="",
+    )
+    fields.update(overrides)
+    return fields
+
+
+def test_a_reference_method_runs_a_built_in_on_the_submitters_model() -> None:
+    bundle = SubmissionBundle.model_validate(_reference())
+    assert bundle.method_spec == "built-in:sectioned-summary"
+    assert bundle.submission == "alice/sectioned-summary--openrouter--qwen-qwen3-235b"
+    assert bundle.public()["reference_method"] == "sectioned-summary"
+
+
+def test_an_uploaded_method_runs_from_the_image() -> None:
+    bundle = SubmissionBundle.model_validate(_bundle())
+    assert bundle.method_spec == "/opt/submission/method.py:Ledger"
+    assert bundle.reference_method is None
+
+
+def test_a_custom_models_display_name_names_its_directory() -> None:
+    bundle = SubmissionBundle.model_validate(
+        _reference(
+            provider="custom",
+            base_url="https://models.example.com/v1",
+            sealed_method_key=None,
+            model="ft:abc123",
+            model_label="Acme Mini (2026)",
+        )
+    )
+    assert bundle.submission == "alice/sectioned-summary--custom--acme-mini-2026"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"reference_method": "ledger"},
+        {"method_py": "class X: ...\n"},
+        {"requirements": "tiktoken==0.12.0\n"},
+        {"class_name": "X"},
+        {"method_config": {"reasoning_effort": "high"}},
+        {"method_name": "my-summary"},
+        {"method_version": "9.9.9"},
+    ],
+)
+def test_a_reference_method_submission_is_only_the_method_and_model(
+    overrides: dict[str, Any],
+) -> None:
+    with pytest.raises(ValidationError):
+        SubmissionBundle.model_validate(_reference(**overrides))
+
+
+def test_an_uploaded_method_needs_code_and_a_class() -> None:
+    with pytest.raises(ValidationError, match=r"method\.py is empty"):
+        SubmissionBundle.model_validate(_bundle(method_py="  \n"))
+    with pytest.raises(ValidationError, match="class_name is required"):
+        SubmissionBundle.model_validate(_bundle(class_name=None))
+
+
+def test_reference_versions_match_the_built_ins() -> None:
+    from compactbench.compactors import get_built_in
+    from compactbench.submission import REFERENCE_METHODS
+
+    for key, version in REFERENCE_METHODS.items():
+        assert get_built_in(key).version == version

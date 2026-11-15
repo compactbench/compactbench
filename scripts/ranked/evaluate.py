@@ -257,7 +257,7 @@ def main() -> int:
             "--suite-pack",
             str(args.suite_pack),
             "--method",
-            f"/opt/submission/method.py:{bundle.class_name}",
+            bundle.method_spec,
             "--provider",
             provider,
             "--model",

@@ -188,3 +188,46 @@ def test_overlapping_intervals_share_a_rank() -> None:
         ci(_row(0.40, minutes=2), 0.35, 0.45),  # clearly behind both
     ]
     assert [r["rank"] for r in rank_rows(rows)] == [1, 1, 3]
+
+
+def _model_row(score: float, model: str, *, kind: str = "submission") -> LeaderboardRow:
+    row = project_row(
+        _run(score, method_name="sectioned-summary", method_version="1.0.0", compactor_model=model),
+        handle="h",
+        org=None,
+        published_at=datetime(2026, 11, 1, tzinfo=UTC),
+        row_kind=kind,
+        reference_method="sectioned-summary",
+    )
+    return {**row, "score_ci_low": score - 0.02, "score_ci_high": score + 0.02}
+
+
+def test_reference_method_rows_are_ranked_among_models_not_methods() -> None:
+    rows = [
+        _row(0.5),
+        _model_row(0.8, "model-a"),
+        _model_row(0.6, "model-b"),
+        _model_row(0.61, "claude-haiku-5-5", kind="baseline"),
+    ]
+    ranked = {
+        r["compactor_model"] if r["reference_method"] else "method": r for r in rank_rows(rows)
+    }
+    # The method board ranks only the uploaded method; model rows don't push it down.
+    assert ranked["method"]["rank"] == 1
+    assert ranked["method"]["model_rank"] is None
+    assert ranked["model-a"]["rank"] is None
+    # The by-model board includes the maintainer's baseline on its model.
+    assert ranked["model-a"]["model_rank"] == 1
+    assert ranked["model-b"]["model_rank"] == 2
+    assert ranked["claude-haiku-5-5"]["model_rank"] == 2
+
+
+def test_a_row_only_counts_as_a_reference_method_if_it_ran_one() -> None:
+    with pytest.raises(ValueError, match="is not reference method"):
+        project_row(
+            _run(0.5),
+            handle="h",
+            org=None,
+            published_at=datetime(2026, 11, 1, tzinfo=UTC),
+            reference_method="sectioned-summary",
+        )

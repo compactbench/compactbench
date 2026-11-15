@@ -46,11 +46,12 @@ def main() -> int:
         print("::error::the run's method name or version doesn't match the submission")
         return 1
 
-    target = args.repo / "submissions" / bundle.handle / bundle.method_name
+    target = args.repo / "submissions" / bundle.submission
     if target.exists():
         shutil.rmtree(target)
     target.mkdir(parents=True)
-    (target / "method.py").write_text(bundle.method_py, encoding="utf-8")
+    if bundle.method_py:
+        (target / "method.py").write_text(bundle.method_py, encoding="utf-8")
     if bundle.requirements.strip():
         (target / "requirements.txt").write_text(bundle.requirements, encoding="utf-8")
     (target / "submission.json").write_text(

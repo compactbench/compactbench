@@ -22,6 +22,8 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from compactbench.leaderboard.projection import REFERENCE_METHODS
+
 #: Providers a ranked method may call: each has a route in the model proxy.
 #: ``custom`` is the submitter's own OpenAI-compatible endpoint (``base_url``).
 RankedProvider = Literal[
@@ -66,14 +68,17 @@ class SubmissionBundle(BaseModel):
     github_id: int = Field(ge=1)
     method_name: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")
     method_version: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
-    class_name: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    class_name: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    reference_method: str | None = None
+    """A key of :data:`REFERENCE_METHODS`: run that built-in on the submitter's model; no
+    uploaded code."""
     provider: RankedProvider
     model: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$")
     base_url: str | None = None
     model_label: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._+()/-]{0,47}$")
     """Display name for a custom endpoint's model, shown instead of ``model``."""
     method_config: dict[str, Any] = Field(default_factory=dict)
-    method_py: str = Field(min_length=1)
+    method_py: str = ""
     requirements: str = ""
     sealed_method_key: str | None = Field(default=None, pattern=_SEALED)
     sealed_reader_key: str | None = Field(default=None, pattern=_SEALED)
@@ -110,6 +115,29 @@ class SubmissionBundle(BaseModel):
         return value
 
     @model_validator(mode="after")
+    def _method_source(self) -> Self:
+        if self.reference_method is None:
+            if not self.method_py.strip():
+                raise ValueError("method.py is empty")
+            if self.class_name is None:
+                raise ValueError("class_name is required with method.py")
+            return self
+        version = REFERENCE_METHODS.get(self.reference_method)
+        if version is None:
+            raise ValueError(
+                f"reference_method must be one of {', '.join(sorted(REFERENCE_METHODS))}"
+            )
+        if self.method_py or self.requirements.strip() or self.class_name is not None:
+            raise ValueError("a reference-method submission has no code, requirements or class")
+        if self.method_config:
+            raise ValueError("a reference method runs with its default config")
+        if (self.method_name, self.method_version) != (self.reference_method, version):
+            raise ValueError(
+                f"a {self.reference_method} run is recorded as {self.reference_method} {version}"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _keys_and_endpoint(self) -> Self:
         if self.model_label is not None and self.provider != "custom":
             raise ValueError(
@@ -128,8 +156,20 @@ class SubmissionBundle(BaseModel):
 
     @property
     def submission(self) -> str:
-        """``<handle>/<method>``: where the published submission lives in the repo."""
-        return f"{self.handle}/{self.method_name}"
+        """Where the published submission lives under ``submissions/``: ``<handle>/<method>``,
+        or ``<handle>/<method>--<provider>--<model>`` for a reference method, so one
+        account can publish the same method on many models."""
+        if self.reference_method is None:
+            return f"{self.handle}/{self.method_name}"
+        model = re.sub(r"[^a-z0-9._-]+", "-", (self.model_label or self.model).lower()).strip("-.")
+        return f"{self.handle}/{self.method_name}--{self.provider}--{model[:80]}"
+
+    @property
+    def method_spec(self) -> str:
+        """``--method`` for the run inside the sandbox image."""
+        if self.reference_method is not None:
+            return f"built-in:{self.reference_method}"
+        return f"/opt/submission/method.py:{self.class_name}"
 
     def public(self) -> dict[str, Any]:
         """What is published with the results: everything except the sealed keys."""

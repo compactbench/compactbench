@@ -6,14 +6,14 @@ import { families, modelName, ordered, rows, slugOf } from "../../lib/data";
 export const GET: APIRoute = () => {
   const familyKeys = families.map((f) => f.key);
   const header = [
-    "rank", "kind", "method", "version", "handle", "org", "model", "provider", "endpoint",
+    "rank", "kind", "reference_method", "model_rank", "method", "version", "handle", "org", "model", "provider", "endpoint",
     "score", "ci_low", "ci_high", "normalized_score", "drift_resistance", "stale_rate",
     "trap_rate", "hallucination_rate", "artifact_tokens", "method_tokens", "cases",
     "budget_tokens", "season", "suite", "reader", "reader_effort", "scorer", "published_at",
     ...familyKeys.map((k) => `family_${k}`), "url",
   ];
   const body = ordered(rows).map((r) => [
-    r.rank, r.row_kind, r.method_name, r.method_version, r.handle, r.org, modelName(r),
+    r.rank, r.row_kind, r.reference_method ?? null, r.model_rank ?? null, r.method_name, r.method_version, r.handle, r.org, modelName(r),
     r.compactor_provider, r.compactor_endpoint_kind ?? "hosted", r.score, r.score_ci_low,
     r.score_ci_high, r.normalized_score, r.drift_resistance, r.stale_rate, r.trap_rate,
     r.hallucination_rate, r.mean_artifact_tokens, r.method_tokens, r.cases, r.budget_tokens,

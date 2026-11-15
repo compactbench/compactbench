@@ -27,6 +27,10 @@ export interface Suite {
 export interface Row {
   slug: string;
   rank: number | null;
+  /** Set when the row ran a reference method unchanged on its model (the By model board). */
+  reference_method?: string | null;
+  /** Rank among models on the same reference method; `rank` is the method board's. */
+  model_rank?: number | null;
   row_kind: "submission" | "baseline" | "control";
   method_name: string;
   method_version: string;
@@ -121,3 +125,47 @@ export const slugOf = (row: Row): string => row.slug;
 /** The model as shown: a custom endpoint's display name, else the model id. */
 export const modelName = (row: Row): string => row.model_label || row.compactor_model;
 export const isCustomEndpoint = (row: Row): boolean => row.compactor_endpoint_kind === "custom";
+
+/** Built-ins anyone can run on their own model, in board order, with display titles. */
+export const referenceMethods: { key: string; title: string }[] = [
+  { key: "sectioned-summary", title: "Sectioned summary" },
+  { key: "hierarchical-summary", title: "Hierarchical summary" },
+  { key: "naive-summary", title: "Plain summary" },
+  { key: "structured-state", title: "Structured state" },
+];
+
+/** A submitted model row (not a maintainer baseline) that ran a reference method. */
+export const isModelRow = (row: Row): boolean => row.row_kind === "submission" && !!row.reference_method;
+
+export interface ModelLine {
+  model: string;
+  provider: string;
+  custom: boolean;
+  by: string;
+  cells: Record<string, Row>;
+}
+
+/** The By model board: one line per model (and submitter), one cell per reference method,
+ * ordered by the first method's score. */
+export function byModel(list: Row[]): ModelLine[] {
+  const lines = new Map<string, ModelLine>();
+  for (const row of list) {
+    if (!row.reference_method) continue;
+    const by = row.handle ? `@${row.handle}` : (row.org ?? "");
+    const key = [row.compactor_provider, row.compactor_model, row.model_label ?? "", by].join("|");
+    const line = lines.get(key) ?? {
+      model: modelName(row),
+      provider: row.compactor_provider,
+      custom: isCustomEndpoint(row),
+      by,
+      cells: {},
+    };
+    const held = line.cells[row.reference_method];
+    if (!held || row.published_at > held.published_at) line.cells[row.reference_method] = row;
+    lines.set(key, line);
+  }
+  const best = (line: ModelLine) =>
+    referenceMethods.map((m) => line.cells[m.key]?.score ?? -1).find((score) => score >= 0) ?? -1;
+  const order = (line: ModelLine) => referenceMethods.findIndex((m) => line.cells[m.key]);
+  return [...lines.values()].sort((a, b) => order(a) - order(b) || best(b) - best(a));
+}

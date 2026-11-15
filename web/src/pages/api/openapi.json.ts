@@ -85,7 +85,12 @@ const spec = {
         type: "object",
         description: "One published result. Ranks are CI-aware: rows whose 95% intervals overlap share a rank.",
         properties: {
-          rank: { type: ["integer", "null"] },
+          rank: { type: ["integer", "null"], description: "Rank on the method board; null for baselines, controls and model rows" },
+          reference_method: {
+            type: ["string", "null"],
+            description: "Set when the row ran this published built-in unchanged on its model: the By model board",
+          },
+          model_rank: { type: ["integer", "null"], description: "Rank among models on the same reference_method" },
           row_kind: { enum: ["submission", "baseline", "control"] },
           method_name: { type: "string" },
           method_version: { type: "string" },
