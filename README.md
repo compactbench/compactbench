@@ -85,6 +85,26 @@ compactbench qualify --results results.jsonl
 
 Already running LangChain or LlamaIndex? Wrap it with `compactbench.integrations` (`pip install 'compactbench[langchain]'` or `[llamaindex]`). See [writing a compactor](docs/writing-a-compactor.md) and [integrations](docs/integrations.md).
 
+## Forget less
+
+Season 1 shows what makes a compaction summary hold up: fixed sections, replacing changed facts instead of keeping both, and tracking tasks with their status. [Forget less](docs/forget-less.md) turns that into instructions you can paste into Claude Code, Codex, LangChain or LlamaIndex, and shows how to measure them on your own setup.
+
+## Check your method in CI
+
+`compactbench check` runs a small, fixed Practice sample of your method with your keys and fails when the score drops below a saved baseline. The GitHub Action wraps it and posts the report on the pull request:
+
+```yaml
+- uses: compactbench/compactbench@main # pin a release tag or commit SHA
+  with:
+    method: my_compactor.py:MyCompactor
+    baseline: .compactbench/baseline.json
+    comment: true
+  env:
+    COMPACTBENCH_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+See [checking in CI](docs/ci.md).
+
 ## Leaderboard
 
 Season 1's reference baselines are on the **[leaderboard](https://compactbench.github.io/compactbench/leaderboard/)** (data: [`docs/data/leaderboard.json`](docs/data/leaderboard.json)).

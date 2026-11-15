@@ -29,6 +29,16 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
 
 ### Added
 
+- **`compactbench check`** — runs a small, fixed Practice sample (4 cases, seed group `ci`,
+  Season 1 budget and reader by default) on your keys, prints a Markdown report (score and
+  interval, score after each compaction, per family) and compares it with a saved baseline:
+  `--max-drop` and `--min-score` fail the run on a regression, `--update-baseline` records a
+  new one. Baselines from different settings are refused rather than compared.
+- **"Forget less" guide** (`docs/forget-less.md`): what Season 1 shows about compaction
+  instructions, with paste-in instructions for Claude Code, Codex CLI, LangChain and
+  LlamaIndex and a recipe to measure them.
+- **GitHub Action** (`action.yml`) wrapping `compactbench check`: job summary, an optional
+  pull-request comment kept up to date, and `score` / `change` / `passed` outputs.
 - **Scenario families**: `buried_constraint`, `decision_override`, `entity_confusion`,
   `reference_resolution`, `numeric_precision`, `conditional_scope`, `task_continuity` and
   `provenance_authority` — long, multi-cycle conversations (up to ~32k-token openings and
