@@ -307,6 +307,162 @@ def _print_estimate(args: Any) -> None:
 
 
 @app.command()
+def check(
+    method: str = typer.Option(
+        ..., "--method", "-m", help="'built-in:<key>' or '<path.py>:<ClassName>'."
+    ),
+    provider: str = typer.Option(
+        "anthropic", "--provider", "-p", help="Provider the method uses for its own calls."
+    ),
+    model: str = typer.Option("claude-haiku-5-5", "--model", help="Model the method uses."),
+    reader_provider: str = typer.Option(
+        "anthropic", "--reader-provider", help="Provider for the reader."
+    ),
+    reader_model: str = typer.Option(
+        "claude-haiku-5-5", "--reader-model", help="Model that answers the questions."
+    ),
+    reader_effort: str | None = typer.Option(
+        "high", "--reader-effort", help="Reasoning effort for the reader (low|medium|high)."
+    ),
+    suite: str = typer.Option("practice", "--suite", "-s", help="Public suite to sample."),
+    cases: int = typer.Option(
+        4, "--cases", min=1, help="Cases to run. More cases give a tighter interval."
+    ),
+    seed_group: str = typer.Option(
+        "ci", "--seed-group", help="Picks the cases; keep it fixed so runs stay comparable."
+    ),
+    budget: int = typer.Option(
+        1024, "--budget", min=0, help="Token budget for each artifact. 0 disables it."
+    ),
+    method_config: str = typer.Option(
+        "{}", "--method-config", help="JSON object passed to the method as self.config."
+    ),
+    baseline: Path | None = typer.Option(
+        None, "--baseline", "-b", help="Baseline JSON to compare against (see --update-baseline)."
+    ),
+    update_baseline: bool = typer.Option(
+        False, "--update-baseline", help="Write this run to --baseline instead of comparing."
+    ),
+    max_drop: float = typer.Option(
+        5.0, "--max-drop", min=0, help="Fail if the score falls more than this many points."
+    ),
+    min_score: float | None = typer.Option(
+        None, "--min-score", min=0, max=100, help="Fail if the score is below this (0-100)."
+    ),
+    summary: Path | None = typer.Option(
+        None, "--summary", help="Append the Markdown report here, e.g. $GITHUB_STEP_SUMMARY."
+    ),
+    json_out: Path | None = typer.Option(
+        None, "--json", help="Write the score, per-family scores and the verdict as JSON."
+    ),
+    output: Path = typer.Option(
+        Path("compactbench-check.jsonl"), "--output", "-o", help="Full results file."
+    ),
+    traces: Path | None = typer.Option(
+        None, "--traces", help="Write per-cycle traces (conversation, artifacts, answers) here."
+    ),
+    concurrency: int = typer.Option(4, "--concurrency", min=1, max=32),
+    estimate: bool = typer.Option(
+        False, "--estimate", help="Print projected calls, tokens and cost; make no API calls."
+    ),
+) -> None:
+    """Run a small, fixed Practice sample and fail if the score regresses (for CI).
+
+    Every call uses your own provider keys. The same seed group always gives the
+    same cases, so a change in score comes from the method, not the sample.
+    """
+    import asyncio
+    import json
+
+    from rich.markdown import Markdown
+
+    from compactbench.check import compare, load_snapshot, render_markdown, save_snapshot, snapshot
+    from compactbench.runner import RunArgs, RunnerError, run_experiment, to_run_result
+
+    if update_baseline and baseline is None:
+        raise typer.BadParameter("--update-baseline needs --baseline PATH")
+    parsed_config = json.loads(method_config)
+    if not isinstance(parsed_config, dict):
+        raise typer.BadParameter("--method-config must be a JSON object")
+
+    args = RunArgs(
+        method_spec=method,
+        suite=suite,
+        provider_key=provider,
+        model=model,
+        output_path=output,
+        reader_provider_key=reader_provider,
+        reader_model=reader_model,
+        reader_effort=_effort(reader_effort),
+        cases_per_family=cases,
+        seed_group=seed_group,
+        budget_tokens=budget or None,
+        traces_path=traces,
+        concurrency=concurrency,
+        method_config=cast("dict[str, Any]", parsed_config),
+    )
+    if estimate:
+        _print_estimate(args)
+        return
+
+    previous: dict[str, Any] | None = None
+    if baseline is not None and not update_baseline:
+        if baseline.exists():
+            try:
+                previous = load_snapshot(baseline)
+            except ValueError as exc:  # includes malformed JSON
+                console.print(f"[red]{exc}[/red]")
+                raise typer.Exit(code=1) from exc
+        else:
+            console.print(f"[yellow]no baseline at {baseline} yet; reporting only[/yellow]")
+
+    try:
+        asyncio.run(run_experiment(args))
+    except RunnerError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    current = snapshot(to_run_result(output))
+    gate = max_drop if previous else None
+    verdict = compare(current, previous, max_drop=gate, min_score=min_score)
+
+    def report(marker: bool) -> str:
+        return render_markdown(
+            current,
+            previous,
+            verdict,
+            max_drop=gate,
+            min_score=min_score,
+            marker=marker,
+            recorded=update_baseline,
+        )
+
+    console.print(Markdown(report(marker=False)))
+    if summary is not None:
+        with summary.open("a", encoding="utf-8") as fh:
+            fh.write(report(marker=True))
+    if json_out is not None:
+        save_snapshot(
+            json_out,
+            {
+                **current,
+                "check": {
+                    "passed": verdict.passed,
+                    "change": None if verdict.change is None else round(verdict.change, 4),
+                    "baseline_score": previous["score"] if previous else None,
+                    "reasons": verdict.reasons,
+                },
+            },
+        )
+    if update_baseline:
+        assert baseline is not None
+        save_snapshot(baseline, current)
+        console.print(f"[green]recorded baseline {baseline}[/green]")
+    if not verdict.passed:
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def generate(
     family: str = typer.Option(..., "--family", "-f", help="Family key (see `families list`)."),
     seed: int = typer.Option(0, "--seed"),

@@ -63,8 +63,10 @@ nav:
   - Getting started: getting-started.md
   - Writing a compactor: writing-a-compactor.md
   - Integrations: integrations.md
+  - Check in CI: ci.md
   - Submitting to leaderboard: submitting.md
   - Leaderboard: leaderboard.md
+  - Forget less: forget-less.md
   - Methodology: methodology.md
   - Datasheet: datasheet.md
   - Related work: related-work.md

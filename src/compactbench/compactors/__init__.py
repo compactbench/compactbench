@@ -5,6 +5,10 @@ and are loaded by file path (``--method path/to/file.py:ClassName``).
 """
 
 from compactbench.compactors._utils import fit_to_budget
+from compactbench.compactors.agent_defaults import (
+    CodexCliCompactor,
+    LangChainSummarizationCompactor,
+)
 from compactbench.compactors.base import Compactor
 from compactbench.compactors.controls import (
     NullCompactor,
@@ -30,6 +34,9 @@ _BUILT_IN: dict[str, type[Compactor]] = {
     ExtractiveCompactor.name: ExtractiveCompactor,
     # Provider-native compaction, run as the vendor ships it.
     AnthropicCompactionCompactor.name: AnthropicCompactionCompactor,
+    # Agents' default compaction, reproduced from their open-source code.
+    CodexCliCompactor.name: CodexCliCompactor,
+    LangChainSummarizationCompactor.name: LangChainSummarizationCompactor,
     # Control arms. Not compaction methods — reference points that make every
     # other score readable. Cheap enough (zero model calls) to run every time.
     OracleCompactor.name: OracleCompactor,
@@ -62,11 +69,13 @@ def get_built_in(key: str) -> type[Compactor]:
 __all__ = [
     "CONTROL_KEYS",
     "AnthropicCompactionCompactor",
+    "CodexCliCompactor",
     "Compactor",
     "CompactorError",
     "ExtractiveCompactor",
     "HierarchicalSummaryCompactor",
     "HybridLedgerCompactor",
+    "LangChainSummarizationCompactor",
     "NaiveSummaryCompactor",
     "NullCompactor",
     "OracleCompactor",

@@ -1,0 +1,207 @@
+name: CompactBench check
+description: >-
+  Run a small, fixed sample of the CompactBench Practice suite on your compaction method,
+  with your own API keys, and fail the build if it starts forgetting more.
+author: CompactBench contributors
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  method:
+    description: "Method to check: 'built-in:<key>' or '<path.py>:<ClassName>' (relative to working-directory)."
+    required: true
+  provider:
+    description: Provider the method uses for its own model calls.
+    default: anthropic
+  model:
+    description: Model the method uses.
+    default: claude-haiku-5-5
+  reader-provider:
+    description: Provider for the reader that answers the questions.
+    default: anthropic
+  reader-model:
+    description: Reader model. Keep it fixed so scores stay comparable.
+    default: claude-haiku-5-5
+  reader-effort:
+    description: Reader reasoning effort (low, medium or high).
+    default: high
+  suite:
+    description: Public suite to sample.
+    default: practice
+  cases:
+    description: Number of cases. More cases give a tighter interval and cost more.
+    default: "4"
+  seed-group:
+    description: Picks the cases. Keep it fixed so runs stay comparable.
+    default: ci
+  budget:
+    description: Token budget for each compacted artifact (0 disables it).
+    default: "1024"
+  method-config:
+    description: JSON object passed to the method as self.config.
+    default: "{}"
+  baseline:
+    description: Path to a baseline JSON recorded with `compactbench check --update-baseline`.
+    default: ""
+  max-drop:
+    description: Fail if the score falls more than this many points below the baseline.
+    default: "5"
+  min-score:
+    description: Fail if the score is below this (0-100). Empty means no minimum.
+    default: ""
+  update-baseline:
+    description: Write this run to the baseline path instead of comparing (commit it afterwards).
+    default: "false"
+  comment:
+    description: >-
+      Post the report on the pull request and keep it updated (needs
+      `permissions: pull-requests: write`).
+    default: "false"
+  github-token:
+    description: Token used to comment on the pull request.
+    default: ${{ github.token }}
+  install:
+    description: Extra packages your method needs, passed to `pip install` (e.g. `-r requirements.txt` or `.`).
+    default: ""
+  version:
+    description: CompactBench version to install from PyPI. Empty installs the version this action ships with.
+    default: ""
+  python-version:
+    description: Python version to run with.
+    default: "3.12"
+  working-directory:
+    description: Directory the method path and baseline are relative to.
+    default: "."
+
+outputs:
+  score:
+    description: Score on a 0-100 scale.
+    value: ${{ steps.check.outputs.score }}
+  change:
+    description: Points above (+) or below (-) the baseline; empty without a comparable baseline.
+    value: ${{ steps.check.outputs.change }}
+  passed:
+    description: "'true' if every gate passed."
+    value: ${{ steps.check.outputs.passed }}
+  report:
+    description: Path to the JSON report (score, per-family scores, verdict).
+    value: ${{ steps.check.outputs.report }}
+  results:
+    description: Path to the full results file (upload it as an artifact to inspect a run).
+    value: ${{ steps.check.outputs.results }}
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        enable-cache: "false"
+
+    - name: Install CompactBench
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PYTHON_VERSION: ${{ inputs.python-version }}
+        CB_VERSION: ${{ inputs.version }}
+        EXTRA: ${{ inputs.install }}
+      run: |
+        venv="$RUNNER_TEMP/compactbench-venv"
+        uv venv --quiet --python "$PYTHON_VERSION" "$venv"
+        if [ -n "$CB_VERSION" ]; then
+          spec="compactbench[providers]==$CB_VERSION"
+        else
+          spec="$GITHUB_ACTION_PATH[providers]"
+        fi
+        # EXTRA is a list of pip arguments, so it is split on purpose.
+        # shellcheck disable=SC2086
+        uv pip install --quiet --python "$venv/bin/python" "$spec" $EXTRA
+
+    - name: Run the check
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        METHOD: ${{ inputs.method }}
+        PROVIDER: ${{ inputs.provider }}
+        MODEL: ${{ inputs.model }}
+        READER_PROVIDER: ${{ inputs.reader-provider }}
+        READER_MODEL: ${{ inputs.reader-model }}
+        READER_EFFORT: ${{ inputs.reader-effort }}
+        SUITE: ${{ inputs.suite }}
+        CASES: ${{ inputs.cases }}
+        SEED_GROUP: ${{ inputs.seed-group }}
+        BUDGET: ${{ inputs.budget }}
+        METHOD_CONFIG: ${{ inputs.method-config }}
+        BASELINE: ${{ inputs.baseline }}
+        MAX_DROP: ${{ inputs.max-drop }}
+        MIN_SCORE: ${{ inputs.min-score }}
+        UPDATE_BASELINE: ${{ inputs.update-baseline }}
+      run: |
+        venv="$RUNNER_TEMP/compactbench-venv"
+        out="$RUNNER_TEMP/compactbench-check"
+        mkdir -p "$out"
+        rm -f "$out/summary.md" "$out/check.json"
+        args=(check
+          --method "$METHOD" --provider "$PROVIDER" --model "$MODEL"
+          --reader-provider "$READER_PROVIDER" --reader-model "$READER_MODEL"
+          --reader-effort "$READER_EFFORT"
+          --suite "$SUITE" --cases "$CASES" --seed-group "$SEED_GROUP" --budget "$BUDGET"
+          --method-config "$METHOD_CONFIG" --max-drop "$MAX_DROP"
+          --output "$out/results.jsonl" --json "$out/check.json" --summary "$out/summary.md")
+        if [ -n "$BASELINE" ]; then args+=(--baseline "$BASELINE"); fi
+        if [ -n "$MIN_SCORE" ]; then args+=(--min-score "$MIN_SCORE"); fi
+        if [ "$UPDATE_BASELINE" = "true" ]; then args+=(--update-baseline); fi
+
+        status=0
+        "$venv/bin/compactbench" "${args[@]}" || status=$?
+
+        if [ -f "$out/summary.md" ]; then
+          cat "$out/summary.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        if [ -f "$out/check.json" ]; then
+          "$venv/bin/python" - "$out/check.json" >> "$GITHUB_OUTPUT" <<'PY'
+        import json, sys
+        report = json.load(open(sys.argv[1], encoding="utf-8"))
+        change = report["check"]["change"]
+        print(f"score={report['score'] * 100:.1f}")
+        print(f"change={'' if change is None else format(change * 100, '+.1f')}")
+        print(f"passed={'true' if report['check']['passed'] else 'false'}")
+        PY
+        fi
+        {
+          echo "report=$out/check.json"
+          echo "results=$out/results.jsonl"
+          echo "status=$status"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event.pull_request.number
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        summary="$RUNNER_TEMP/compactbench-check/summary.md"
+        if [ ! -f "$summary" ]; then exit 0; fi
+        # The first line is a hidden marker naming the method and model, so each
+        # combination keeps one comment that later runs update.
+        first="$(head -n 1 "$summary")"
+        id="$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+          --jq '.[] | select(.user.login == "github-actions[bot]") | [.id, (.body | split("\n")[0])] | @tsv' \
+          | awk -F '\t' -v m="$first" '$2 == m { id = $1 } END { print id }')"
+        if [ -n "$id" ]; then
+          gh api --method PATCH "repos/$REPO/issues/comments/$id" -F body=@"$summary" > /dev/null
+        else
+          gh api --method POST "repos/$REPO/issues/$PR/comments" -F body=@"$summary" > /dev/null
+        fi
+
+    - name: Report the result
+      if: steps.check.outputs.status != '0'
+      shell: bash
+      env:
+        STATUS: ${{ steps.check.outputs.status }}
+      run: |
+        echo "::error title=CompactBench check failed::See the job summary for the report."
+        exit "$STATUS"
