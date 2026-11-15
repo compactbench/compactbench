@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "Open benchmark for AI conversation compaction methods"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.11"
 authors = [{ name = "CompactBench contributors" }]
 keywords = [

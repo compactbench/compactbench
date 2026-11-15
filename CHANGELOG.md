@@ -34,6 +34,12 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
   interval, score after each compaction, per family) and compares it with a saved baseline:
   `--max-drop` and `--min-score` fail the run on a regression, `--update-baseline` records a
   new one. Baselines from different settings are refused rather than compared.
+- **Agents' default compaction** as built-ins, reproduced from their open-source code at
+  pinned commits: `codex-cli` (Codex CLI's handoff-summary prompt, recent user messages
+  kept verbatim ahead of the prefixed summary) and `langchain-summarization` (LangChain's
+  `SummarizationMiddleware` defaults: keep the last 20 messages, summarize the rest after
+  trimming it to its last ~4,000 tokens). Under a budget, verbatim messages get at most a
+  quarter of it. Attribution in `THIRD_PARTY_NOTICES.md`.
 - **"Forget less" guide** (`docs/forget-less.md`): what Season 1 shows about compaction
   instructions, with paste-in instructions for Claude Code, Codex CLI, LangChain and
   LlamaIndex and a recipe to measure them.

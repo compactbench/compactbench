@@ -175,6 +175,9 @@ compactbench check --method built-in:sectioned-summary --cases 12 \
 compactbench check --method forget_less.py:ForgetLess --cases 12 --baseline baseline.json
 ```
 
-The second command reports the change against the sectioned summary, overall and per family. See
+The second command reports the change against the sectioned summary, overall and per family.
+If your agent uses Codex CLI's or LangChain's default compaction, compare against
+`built-in:codex-cli` or `built-in:langchain-summarization` instead: they reproduce those
+defaults from the agents' open-source code. See
 [checking in CI](ci.md) for the options and [writing a compactor](writing-a-compactor.md) for
 the rest of the interface.

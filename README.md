@@ -35,7 +35,7 @@ compactbench run --method built-in:hybrid-ledger --suite starter \
 compactbench score --results results.jsonl
 ```
 
-Built-in methods: `naive-summary`, `sectioned-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`, `extractive` (no model calls), Anthropic's server-side compaction (`anthropic-compaction`), plus the controls `oracle`, `null` and `truncate-last-n`. Providers: Anthropic, OpenAI (and any OpenAI-compatible server), Groq, Google AI Studio, Ollama.
+Built-in methods: `naive-summary`, `sectioned-summary`, `structured-state`, `hierarchical-summary`, `hybrid-ledger`, `extractive` (no model calls), Anthropic's server-side compaction (`anthropic-compaction`), the default compaction of Codex CLI (`codex-cli`) and LangChain's summarization middleware (`langchain-summarization`) reproduced from their open-source code, plus the controls `oracle`, `null` and `truncate-last-n`. Providers: Anthropic, OpenAI (and any OpenAI-compatible server), Groq, Google AI Studio, Ollama.
 
 ## Suites
 
