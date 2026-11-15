@@ -55,6 +55,58 @@
     {
       "budget_tokens": 1024,
       "by_cycle": [
+        0.493286707739014,
+        0.503670015604078,
+        0.5054526536010683,
+        0.5131430992346598,
+        0.4930166509231488
+      ],
+      "by_family": {
+        "buried_constraint": 0.6668154761904762,
+        "conditional_scope": 0.6805800214822771,
+        "decision_override": 0.7542857142857143,
+        "entity_confusion": 0.2824737344794651,
+        "numeric_precision": 0.5868131868131868,
+        "provenance_authority": 0.7713567839195979,
+        "reference_resolution": 0.09777777777777778,
+        "task_continuity": 0.17246290545203588
+      },
+      "cases": 48,
+      "compactor_endpoint_kind": "default",
+      "compactor_model": "claude-haiku-5-5",
+      "compactor_provider": "anthropic",
+      "compression_ratio": 46.82935879057235,
+      "decay": -0.005417093193130829,
+      "drift_resistance": 0.9139068836995056,
+      "hallucination_rate": 0.00975609756097561,
+      "handle": null,
+      "mean_artifact_tokens": 1016.0625,
+      "method_name": "hierarchical-summary",
+      "method_tokens": 16918095,
+      "method_version": "2.0.0",
+      "model_label": null,
+      "normalized_score": null,
+      "org": "compactbench",
+      "published_at": "2026-11-02T06:08:43.593653+00:00",
+      "rank": null,
+      "reader_effort": "high",
+      "reader_endpoint_kind": "default",
+      "reader_model": "claude-haiku-5-5",
+      "reader_provider": "anthropic",
+      "row_kind": "baseline",
+      "score": 0.5015707000500664,
+      "score_ci_high": 0.5335955176778802,
+      "score_ci_low": 0.4714744250750737,
+      "scorer_version": "3.0.0",
+      "season": "s1",
+      "stale_rate": 0.0443073471676949,
+      "suite": "elite@2.0.1",
+      "tier": "Tight",
+      "trap_rate": 0.017114914425427872
+    },
+    {
+      "budget_tokens": 1024,
+      "by_cycle": [
         0.730583597426226,
         0.5407890217679505,
         0.40532991258294826,
@@ -366,5 +418,5 @@
     }
   ],
   "schema_version": "2.0.0",
-  "updated_at": "2026-11-02T05:21:04.557572+00:00"
+  "updated_at": "2026-11-02T06:09:07.360873+00:00"
 }
