@@ -1,0 +1,16 @@
+{
+  "name": "compactbench",
+  "description": "Claude Code plugins from CompactBench, the open benchmark for context compaction.",
+  "owner": {
+    "name": "CompactBench contributors",
+    "url": "https://github.com/compactbench/compactbench"
+  },
+  "plugins": [
+    {
+      "name": "compactbench",
+      "source": "./plugins/compactbench",
+      "description": "Keep more through context compaction: evidence-based compaction instructions for Claude Code and other agents, and a way to measure what any compaction method forgets.",
+      "category": "development"
+    }
+  ]
+}

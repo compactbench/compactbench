@@ -89,6 +89,16 @@ Already running LangChain or LlamaIndex? Wrap it with `compactbench.integrations
 
 Season 1 shows what makes a compaction summary hold up: fixed sections, replacing changed facts instead of keeping both, and tracking tasks with their status. [Forget less](docs/forget-less.md) turns that into instructions you can paste into Claude Code, Codex, LangChain or LlamaIndex, and shows how to measure them on your own setup.
 
+## Claude Code plugin
+
+The `compactbench` plugin brings this into Claude Code: a `forget-less` skill that writes evidence-based compact instructions for your `CLAUDE.md` (or your agent's summarization prompt), and a `measure-compaction` skill that benchmarks a compaction method on your own keys and can set up the CI check below.
+
+```
+/plugin install compactbench --marketplace compactbench/compactbench
+```
+
+(Or `/plugin marketplace add compactbench/compactbench`, then `/plugin install compactbench@compactbench`.)
+
 ## Check your method in CI
 
 `compactbench check` runs a small, fixed Practice sample of your method with your keys and fails when the score drops below a saved baseline. The GitHub Action wraps it and posts the report on the pull request:

@@ -1,0 +1,14 @@
+{
+  "name": "compactbench",
+  "displayName": "CompactBench",
+  "version": "0.1.0",
+  "description": "Keep more through context compaction: evidence-based compaction instructions for Claude Code and other agents, and a way to measure what any compaction method forgets with the CompactBench benchmark.",
+  "author": {
+    "name": "CompactBench contributors",
+    "url": "https://github.com/compactbench/compactbench"
+  },
+  "homepage": "https://github.com/compactbench/compactbench",
+  "repository": "https://github.com/compactbench/compactbench",
+  "license": "Apache-2.0",
+  "keywords": ["context compaction", "compact", "memory", "summarization", "benchmark", "agents"]
+}
