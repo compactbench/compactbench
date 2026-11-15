@@ -228,3 +228,46 @@ test("a reference-method submission runs a built-in on the submitter's model, wi
   const unknown = await other.call("/api/submissions", post(s2, { ...reference, reference_method: "ledger" }));
   assert.equal(unknown.status, 400);
 });
+
+test("My runs lists only your own submissions, newest first, never cached", async () => {
+  const { call, signIn, store } = await setup();
+  assert.equal((await call("/api/me/submissions")).status, 401);
+  const session = await signIn();
+  assert.equal((await call("/api/submissions", post(session, form))).status, 201);
+  const base = {
+    handle: "bob", method_name: "other", method_version: "1.0.0", provider: "openai", model: "x",
+    model_label: null, status: "published" as const, message: null, score: 0.5,
+    created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-01T00:00:00Z",
+  };
+  await store.insert({ ...base, id: "bobrun000001", github_id: 7 }, "{}");
+  await store.insert({ ...base, id: "aliceold0001", github_id: 42, handle: "alice", method_name: "older" }, "{}");
+
+  const response = await call("/api/me/submissions", { headers: { Cookie: session } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  const body = (await response.json()) as { login: string; submissions: Record<string, unknown>[] };
+  assert.equal(body.login, "alice");
+  assert.deepEqual(body.submissions.map((s) => s.method_name), ["ledger", "older"]);
+  assert.ok(body.submissions.every((s) => s.github_id === undefined), "no account ids in the response");
+  assert.equal(body.submissions[1]!.status_url, "/status?id=aliceold0001");
+});
+
+test("sign-in can return to My runs, and nowhere outside the site", async () => {
+  const { call } = await setup();
+  const back = async (next: string) => {
+    const start = await call(`/auth/github?next=${encodeURIComponent(next)}`);
+    const stateCookie = start.headers.get("Set-Cookie")!.split(";")[0]!;
+    const state = new URL(start.headers.get("Location")!).searchParams.get("state");
+    return (await call(`/auth/callback?code=abc&state=${state}`, { headers: { Cookie: stateCookie } })).headers.get("Location");
+  };
+  assert.equal(await back("/runs"), "/runs");
+  assert.equal(await back("https://evil.test/"), "/submit");
+  assert.equal(await back("//evil.test"), "/submit");
+});
+
+test("without its secrets, sign-in says so instead of failing", async () => {
+  const { call } = await setup({ SESSION_SECRET: "" });
+  const response = await call("/auth/github");
+  assert.equal(response.status, 503);
+  assert.match(await response.text(), /isn't set up/);
+});

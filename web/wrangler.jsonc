@@ -17,7 +17,7 @@
     "not_found_handling": "404-page",
     "html_handling": "drop-trailing-slash",
     // Only these paths run code; every page and file is served straight from assets.
-    "run_worker_first": ["/mcp", "/auth/*", "/api/me", "/api/submissions", "/api/submissions/*", "/api/internal/*"]
+    "run_worker_first": ["/mcp", "/auth/*", "/api/me", "/api/me/*", "/api/submissions", "/api/submissions/*", "/api/internal/*"]
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "compactbench", "database_id": "REPLACE_AFTER_wrangler_d1_create", "migrations_dir": "migrations" }

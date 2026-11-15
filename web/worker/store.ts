@@ -28,12 +28,15 @@ export interface Store {
   activeForUser(githubId: number): Promise<number>;
   countSince(since: string): Promise<number>;
   getBundle(id: string): Promise<string | null>;
+  /** One account's submissions, newest first. */
+  listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]>;
 }
 
 // Minimal shapes of the Cloudflare bindings we use.
 interface D1Statement {
   bind(...values: unknown[]): D1Statement;
   first<T>(): Promise<T | null>;
+  all<T>(): Promise<{ results: T[] }>;
   run(): Promise<unknown>;
 }
 export interface D1 {
@@ -108,6 +111,14 @@ export class CloudflareStore implements Store {
     const object = await this.bucket.get(`bundles/${id}.json`);
     return object ? object.text() : null;
   }
+
+  async listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]> {
+    const rows = await this.db
+      .prepare("SELECT * FROM submissions WHERE github_id = ? ORDER BY created_at DESC LIMIT ?")
+      .bind(githubId, limit)
+      .all<SubmissionRecord>();
+    return rows.results;
+  }
 }
 
 /** In-memory store for tests and local development. */
@@ -137,5 +148,12 @@ export class MemoryStore implements Store {
   }
   async getBundle(id: string): Promise<string | null> {
     return this.bundles.get(id) ?? null;
+  }
+  async listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]> {
+    return [...this.records.values()]
+      .filter((r) => r.github_id === githubId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit)
+      .map((r) => ({ ...r }));
   }
 }

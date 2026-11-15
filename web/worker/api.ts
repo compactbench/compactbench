@@ -30,6 +30,9 @@ const STATE = "cb_oauth_state";
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
+/** Pages a sign-in may return to. A fixed list, so the link can't redirect anywhere else. */
+const RETURN_TO = new Set(["/submit", "/runs"]);
+
 export async function sessionUser(request: Request, env: ApiEnv) {
   return verifyValue<{ login: string; id: number }>(env.SESSION_SECRET, readCookie(request, SESSION));
 }
@@ -41,26 +44,32 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
   const fetcher = deps.fetcher ?? fetch;
 
   if (path === "/auth/github" && request.method === "GET") {
+    if (!env.SESSION_SECRET || !env.GITHUB_CLIENT_ID || env.GITHUB_CLIENT_ID.startsWith("REPLACE_")) {
+      return new Response("Sign-in isn't set up on this server yet.", { status: 503 });
+    }
     const state = crypto.randomUUID();
     const redirect = new URL("/auth/callback", url.origin).toString();
+    const next = url.searchParams.get("next") ?? "";
+    const returnTo = RETURN_TO.has(next) ? next : "/submit";
     return new Response(null, {
       status: 302,
       headers: {
         Location: authorizeUrl(env.GITHUB_CLIENT_ID, redirect, state),
-        "Set-Cookie": cookie(STATE, await signValue(env.SESSION_SECRET, { state }, 600), 600),
+        "Set-Cookie": cookie(STATE, await signValue(env.SESSION_SECRET, { state, returnTo }, 600), 600),
       },
     });
   }
 
   if (path === "/auth/callback" && request.method === "GET") {
-    const expected = await verifyValue<{ state: string }>(env.SESSION_SECRET, readCookie(request, STATE));
+    const expected = await verifyValue<{ state: string; returnTo?: string }>(env.SESSION_SECRET, readCookie(request, STATE));
     const code = url.searchParams.get("code");
     if (!expected || !code || url.searchParams.get("state") !== expected.state) {
       return new Response("Sign-in expired or was tampered with. Please try again.", { status: 400 });
     }
     const user = await userFromCode(code, env.GITHUB_CLIENT_ID, env.GITHUB_CLIENT_SECRET, fetcher);
     if (!user) return new Response("GitHub sign-in failed. Please try again.", { status: 400 });
-    const headers = new Headers({ Location: "/submit" });
+    const returnTo = expected?.returnTo && RETURN_TO.has(expected.returnTo) ? expected.returnTo : "/submit";
+    const headers = new Headers({ Location: returnTo });
     headers.append("Set-Cookie", cookie(SESSION, await signValue(env.SESSION_SECRET, { ...user }, 8 * 3600), 8 * 3600));
     headers.append("Set-Cookie", cookie(STATE, "", 0));
     return new Response(null, { status: 302, headers });
@@ -73,6 +82,16 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
   if (path === "/api/me" && request.method === "GET") {
     const user = await sessionUser(request, env);
     return user ? json({ login: user.login }) : json({ error: "signed out" }, 401);
+  }
+
+  if (path === "/api/me/submissions" && request.method === "GET") {
+    const user = await sessionUser(request, env);
+    if (!user) return json({ error: "signed out" }, 401);
+    const records = await deps.store.listForUser(user.id, 100);
+    return json({
+      login: user.login,
+      submissions: records.map((r) => ({ ...publicView(r), status_url: `/status?id=${r.id}` })),
+    });
   }
 
   if (path === "/api/submissions" && request.method === "POST") {
