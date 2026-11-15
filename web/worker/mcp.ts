@@ -1,7 +1,10 @@
 // A stateless MCP server (Streamable HTTP, JSON responses) over the site's public data.
 // No SDK: the protocol surface used here is small — initialize, tools/list, tools/call.
+import { callSelfTest, SELFTEST_TOOLS, SelfTestError, type SelfTestData } from "./selftest.ts";
 
 export interface Data {
+  /** Public cases for the AI self-test tools; omitted, those tools are not offered. */
+  selftest?: SelfTestData;
   rows: Row[];
   families: { key: string; title: string; description: string }[];
   season: Record<string, unknown> & { key: string; budget_tokens: number; drift_cycles: number };
@@ -116,6 +119,10 @@ function find(data: Data, name: unknown): Row | undefined {
 }
 
 function callTool(data: Data, name: string, args: Json): string {
+  if (data.selftest) {
+    const text = callSelfTest(data.selftest, name, args);
+    if (text !== null) return text;
+  }
   switch (name) {
     case "get_leaderboard": {
       const kind = String(args.kind ?? "all");
@@ -177,16 +184,23 @@ export function handleMessage(data: Data, message: Json): Json | null {
         protocolVersion: SUPPORTED_VERSIONS.includes(asked) ? asked : SUPPORTED_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "compactbench", version: "1.0.0" },
-        instructions:
-          "Read-only access to the CompactBench context-compaction leaderboard, methods, families and metric definitions.",
+        instructions: data.selftest
+          ? "CompactBench, the context-compaction benchmark: read the leaderboard, methods, failure families and metric definitions, or take a self-test (selftest_list) that measures how much your own compaction forgets, scored without any model call."
+          : "Read-only access to the CompactBench context-compaction leaderboard, methods, families and metric definitions.",
       };
     } else if (method === "ping") {
       result = {};
     } else if (method === "tools/list") {
-      result = { tools: TOOLS };
+      result = { tools: data.selftest ? [...TOOLS, ...SELFTEST_TOOLS] : TOOLS };
     } else if (method === "tools/call") {
-      const text = callTool(data, String(params.name ?? ""), (params.arguments ?? {}) as Json);
-      result = { content: [{ type: "text", text }], isError: false };
+      try {
+        const text = callTool(data, String(params.name ?? ""), (params.arguments ?? {}) as Json);
+        result = { content: [{ type: "text", text }], isError: false };
+      } catch (error) {
+        // A tool's own failure (bad case id, malformed answers) goes back to the model to fix.
+        if (!(error instanceof SelfTestError)) throw error;
+        result = { content: [{ type: "text", text: error.message }], isError: true };
+      }
     } else {
       throw new RpcError(-32601, `Method not found: ${method}`);
     }

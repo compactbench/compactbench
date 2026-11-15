@@ -16,6 +16,7 @@ on:
       - "seasons/**"
       - "scripts/export_site_data.py"
       - "scripts/og_images.py"
+      - "scripts/selftest_cases.py"
       - "src/compactbench/scenarios/**"
       - ".github/workflows/site.yml"
   pull_request:
@@ -24,6 +25,7 @@ on:
       - "docs/**"
       - "scripts/export_site_data.py"
       - "scripts/og_images.py"
+      - "scripts/selftest_cases.py"
       - ".github/workflows/site.yml"
 
 permissions:
@@ -59,6 +61,7 @@ jobs:
         run: |
           uv sync --locked
           uv run python scripts/export_site_data.py
+          uv run python scripts/selftest_cases.py
 
       - name: Build
         working-directory: web

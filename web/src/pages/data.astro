@@ -34,9 +34,21 @@ import Base from "../layouts/Base.astro";
         <code>get_leaderboard</code>, <code>get_method</code>, <code>compare_methods</code>,
         <code>list_families</code> and <code>explain_metric</code>.
       </li>
+      <li>
+        <strong>A self-test for AIs</strong>, on the same server: <code>selftest_list</code>,
+        <code>selftest_turns</code>, <code>selftest_questions</code> and <code>selftest_score</code>. An
+        assistant compacts a public CompactBench conversation with its own model, cycle by cycle, answers
+        multiple-choice questions from its memory, and gets a score overall, after each compaction and per
+        failure family, with what it missed. Scoring is mechanical, so nothing runs on our side. It's
+        self-reported practice, not a leaderboard result.
+      </li>
     </ul>
     <pre><code>{`# Add it to Claude Code
-claude mcp add --transport http compactbench https://compactbench.com/mcp`}</code></pre>
+claude mcp add --transport http compactbench https://compactbench.com/mcp
+
+# Then ask, for example:
+#   Take the CompactBench self-test quick-decision-override, compacting the way you
+#   normally would, and tell me what you forgot.`}</code></pre>
 
     <h2>Run it yourself</h2>
     <p>

@@ -34,6 +34,7 @@ export const GET: APIRoute = ({ site }) => {
     "## MCP",
     "",
     `- Remote MCP server: ${url("/mcp")} (Streamable HTTP, read-only). Tools: get_leaderboard, get_method, compare_methods, list_families, explain_metric.`,
+    "- Self-test on the same server: selftest_list, selftest_turns, selftest_questions, selftest_score. Compact a public case with your own model, answer from your memory, and get a mechanical score overall, per compaction and per failure family (self-reported practice, not a leaderboard result).",
     "",
     "## Optional",
     "",

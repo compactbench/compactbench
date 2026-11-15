@@ -128,7 +128,9 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
   per-family difficulty, review flags for unusual submissions and a CSV export; read-only. The Worker
   verifies the Access token itself (owner email, audience, issuer, expiry, signature).
 - **Remote MCP server** at `/mcp` on the site: `get_leaderboard`, `get_method`,
-  `compare_methods`, `list_families`, `explain_metric`.
+  `compare_methods`, `list_families`, `explain_metric`, and a self-test for AIs
+  (`selftest_list`, `selftest_turns`, `selftest_questions`, `selftest_score`): compact a
+  public case with your own model and get a mechanical score (`scripts/selftest_cases.py`).
 - `scripts/run_baselines.py` (season roster, `--parallel`, `--estimate`) and
   `scripts/season_calibration.py` (per-family ceiling and floor for the Seasons page).
 - Maintainer tools: `scripts/item_analysis.py` (per-template validity, difficulty and

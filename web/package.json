@@ -6,7 +6,7 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "data": "cd .. && uv run python scripts/export_site_data.py",
+    "data": "cd .. && uv run python scripts/export_site_data.py && uv run python scripts/selftest_cases.py",
     "dev": "astro dev",
     "build": "astro check && astro build",
     "preview": "astro preview",
