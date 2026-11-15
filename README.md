@@ -46,6 +46,8 @@ Built-in methods: `naive-summary`, `sectioned-summary`, `structured-state`, `hie
 | `drills` | One family per case at Elite difficulty, to work on one failure mode | ~32k tokens | 4 |
 | Elite (hidden) | The ranked set: mixed sessions in private worlds, a fresh sample per run | ~32k tokens | 4 |
 
+The public suites are also on Hugging Face as [`compactbench/compactbench`](https://huggingface.co/datasets/compactbench/compactbench) (`load_dataset("compactbench/compactbench", "practice")`), built by `scripts/hf_dataset.py`.
+
 A mixed session puts every family into one conversation under one token budget. Eight families, each a different way compaction fails: `buried_constraint`, `decision_override`, `entity_confusion`, `reference_resolution`, `numeric_precision`, `conditional_scope`, `task_continuity` and `provenance_authority`. List them with `compactbench families list`, or read one with `compactbench generate --family decision_override --seed 7 --text`.
 
 ## Writing your own compactor

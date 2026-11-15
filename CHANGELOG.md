@@ -29,6 +29,9 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
 
 ### Added
 
+- **Hugging Face export** (`scripts/hf_dataset.py`): the public `practice`, `starter` and
+  `drills` suites, exactly the cases `compactbench run` uses, as JSONL configs with a dataset
+  card (seeds stored as strings so Arrow can hold them). Nothing from the hidden set.
 - **Claude Code plugin** (`plugins/compactbench`, marketplace in `.claude-plugin/`): the
   `forget-less` skill writes compaction instructions from the Season 1 findings for Claude
   Code, Codex CLI, LangChain or LlamaIndex; the `measure-compaction` skill wraps a method,
