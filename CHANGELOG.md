@@ -29,6 +29,11 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
 
 ### Added
 
+- **Claude Code plugin** (`plugins/compactbench`, marketplace in `.claude-plugin/`): the
+  `forget-less` skill writes compaction instructions from the Season 1 findings for Claude
+  Code, Codex CLI, LangChain or LlamaIndex; the `measure-compaction` skill wraps a method,
+  estimates the cost, runs `compactbench check` against a baseline on the user's keys, and can
+  add the GitHub Action.
 - **`compactbench check`** — runs a small, fixed Practice sample (4 cases, seed group `ci`,
   Season 1 budget and reader by default) on your keys, prints a Markdown report (score and
   interval, score after each compaction, per family) and compares it with a saved baseline:

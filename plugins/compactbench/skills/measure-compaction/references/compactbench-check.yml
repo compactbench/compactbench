@@ -1,0 +1,25 @@
+# .github/workflows/compactbench.yml: fail a pull request when the compaction method forgets more.
+# Record the baseline locally first and commit it:
+#   compactbench check --method my_compactor.py:MyCompaction --baseline .compactbench/baseline.json --update-baseline
+name: CompactBench
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # only for comment: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: compactbench/compactbench@main # pin a release tag or commit SHA
+        with:
+          method: my_compactor.py:MyCompaction
+          baseline: .compactbench/baseline.json
+          comment: true
+          # install: -r requirements.txt   # packages your method imports
+        env:
+          COMPACTBENCH_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
