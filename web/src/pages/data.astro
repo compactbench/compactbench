@@ -58,5 +58,20 @@ claude mcp add --transport http compactbench https://compactbench.com/mcp
     <pre><code>{`pip install compactbench
 compactbench run --method built-in:hierarchical-summary --suite practice \\
   --provider anthropic --model claude-haiku-5-5 --reader-effort high --controls`}</code></pre>
+    <ul>
+      <li>
+        The public suites as a dataset on Hugging Face:
+        <a href="https://huggingface.co/datasets/compactbench/compactbench">compactbench/compactbench</a>
+        (<code>load_dataset("compactbench/compactbench", "practice")</code>).
+      </li>
+      <li>
+        A Claude Code plugin with skills to write compact instructions and to benchmark a compaction
+        method: <code>/plugin install compactbench --marketplace compactbench/compactbench</code>.
+      </li>
+      <li>
+        <code>compactbench check</code> and a GitHub Action that fail a pull request when your method
+        starts forgetting more, on your own keys.
+      </li>
+    </ul>
   </section>
 </Base>
