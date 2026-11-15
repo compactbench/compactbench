@@ -37,6 +37,7 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
   path={`/methods/${slugOf(row)}`}
   image={`/og/methods/${slugOf(row)}.png`}
 >
+  <link slot="head" rel="alternate" type="application/json" href={`/api/methods/${slugOf(row)}.json`} title="This row as JSON" />
   <section class="container section">
     <p class="eyebrow"><a href="/leaderboard">Leaderboard</a> / {kind}</p>
     <h1>{row.method_name}</h1>

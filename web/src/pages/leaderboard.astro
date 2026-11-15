@@ -6,6 +6,25 @@ import { families, ordered, rows, season, seasonLabel, updatedAt } from "../lib/
 
 const seasonRows = ordered(rows.filter((r) => r.season === season.key || r.row_kind !== "submission"));
 const familyKeys = families.map((f) => f.key);
+// Dataset metadata for search engines and AI crawlers (schema.org, Google Dataset Search).
+const dataset = {
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  name: `CompactBench leaderboard — ${seasonLabel(season.key)}`,
+  description:
+    "Scores of AI context-compaction methods on CompactBench's hidden Elite set: share of questions answered correctly from the compacted memory after each of five compactions, family-balanced, with 95% intervals and per-family scores.",
+  url: "https://compactbench.com/leaderboard",
+  license: "https://www.apache.org/licenses/LICENSE-2.0",
+  isAccessibleForFree: true,
+  creator: { "@type": "Organization", name: "CompactBench", url: "https://compactbench.com" },
+  dateModified: updatedAt,
+  keywords: ["context compaction", "LLM memory", "AI agents", "benchmark", "summarization", "long context"],
+  variableMeasured: ["score", "95% interval", "score after each compaction", "drift resistance", "per-family score"],
+  distribution: [
+    { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: "https://compactbench.com/api/leaderboard.json" },
+    { "@type": "DataDownload", encodingFormat: "text/csv", contentUrl: "https://compactbench.com/api/leaderboard.csv" },
+  ],
+};
 ---
 
 <Base
@@ -14,6 +33,9 @@ const familyKeys = families.map((f) => f.key);
   path="/leaderboard"
   markdown="/leaderboard.md"
 >
+  <link slot="head" rel="alternate" type="application/json" href="/api/leaderboard.json" title="Leaderboard as JSON" />
+  <link slot="head" rel="alternate" type="text/csv" href="/api/leaderboard.csv" title="Leaderboard as CSV" />
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(dataset)} />
   <section class="container section">
     <p class="eyebrow">{seasonLabel(season.key)} · {season.suite} {season.suite_version}</p>
     <h1>Leaderboard</h1>

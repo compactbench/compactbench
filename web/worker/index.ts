@@ -2,6 +2,7 @@
 // the dynamic routes listed in wrangler.jsonc ("run_worker_first") reach this code.
 import { type ApiEnv, handleApi } from "./api.ts";
 import { type Data, handleHttp } from "./mcp.ts";
+import { secured } from "./security.ts";
 import { CloudflareStore, type D1, type R2 } from "./store.ts";
 
 interface Env extends ApiEnv {
@@ -15,7 +16,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/mcp") {
       const get = async (path: string) => (await env.ASSETS.fetch(new URL(path, url).toString())).json();
-      return handleHttp(request, async () => {
+      const response = await handleHttp(request, async () => {
         const [leaderboard, families, season] = await Promise.all([
           get("/api/leaderboard.json"),
           get("/api/families.json"),
@@ -27,8 +28,10 @@ export default {
           season: season as Data["season"],
         };
       });
+      return secured(response);
     }
     const api = await handleApi(request, env, { store: new CloudflareStore(env.DB, env.BUNDLES) });
-    return api ?? env.ASSETS.fetch(request);
+    // Assets keep their own Content-Security-Policy from public/_headers.
+    return api ? secured(api) : secured(await env.ASSETS.fetch(request), false);
   },
 };
