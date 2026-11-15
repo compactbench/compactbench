@@ -28,6 +28,8 @@ const facts: [string, string][] = [
   ["Cases", String(row.cases)],
   ["Published", new Date(row.published_at).toISOString().slice(0, 10)],
 ];
+const badgeJson = `https://compactbench.com/api/badges/${slugOf(row)}.json`;
+const badgeMarkdown = `[![CompactBench](https://img.shields.io/endpoint?url=${encodeURIComponent(badgeJson)})](https://compactbench.com/methods/${slugOf(row)})`;
 const description = `${row.method_name} scored ${pct(row.score)}% on CompactBench (${row.suite}), keeping state across repeated compactions with ${modelName(row)}.`;
 ---
 
@@ -111,6 +113,12 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
         }
       </dl>
     </div>
+
+    <div class="card">
+      <h2>Badge</h2>
+      <p class="muted">Show this score in a README. It updates when the leaderboard does.</p>
+      <pre class="badge-code"><code>{badgeMarkdown}</code></pre>
+    </div>
   </section>
 </Base>
 
@@ -184,5 +192,10 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
   }
   .nowrap {
     white-space: nowrap;
+  }
+  .badge-code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.8rem;
   }
 </style>

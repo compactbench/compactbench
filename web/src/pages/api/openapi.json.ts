@@ -38,6 +38,14 @@ const spec = {
         responses: { "200": json("Method", "The row"), "404": { description: "No such row" } },
       },
     },
+    "/api/badges/{slug}.json": {
+      get: {
+        operationId: "getBadge",
+        summary: "A shields.io endpoint badge for one row (https://img.shields.io/endpoint?url=…)",
+        parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string", pattern: "^[a-z0-9.-]+$" } }],
+        responses: { "200": { description: "shields.io endpoint JSON", content: { "application/json": { schema: { type: "object" } } } } },
+      },
+    },
     "/api/families.json": {
       get: {
         operationId: "listFamilies",
