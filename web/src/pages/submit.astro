@@ -1,7 +1,7 @@
 ---
 import { Content } from "../generated/submitting.md";
 import Base from "../layouts/Base.astro";
-import { season } from "../lib/data";
+import { season, seasonLabel } from "../lib/data";
 
 // Optional bot check: set PUBLIC_TURNSTILE_SITE_KEY at build time (and TURNSTILE_SECRET on the Worker).
 const turnstileKey: string | undefined = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
@@ -28,7 +28,7 @@ const providers: [string, string][] = [
   markdown="/submit.md"
 >
   <section class="container section">
-    <p class="eyebrow">Submit · Season {season.key.toUpperCase()}</p>
+    <p class="eyebrow">Submit · {seasonLabel(season.key)}</p>
     <h1>Submit a method</h1>
     <p class="lede">
       Your method runs on a fresh sample of the hidden Elite set, in a sandbox, using your own API
@@ -110,7 +110,7 @@ const providers: [string, string][] = [
 
   {turnstileKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
 
-  <section class="container prose">
+  <section class="container prose how">
     <h2>How it works</h2>
     <Content />
   </section>
@@ -261,5 +261,9 @@ const providers: [string, string][] = [
     cursor: pointer;
     padding: 0;
     font: inherit;
+  }
+  /* The embedded guide's own title repeats this section's heading. */
+  .how :global(h1) {
+    display: none;
   }
 </style>

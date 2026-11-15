@@ -2,7 +2,7 @@
 import CostChart from "../components/CostChart.astro";
 import LeaderboardTable from "../components/LeaderboardTable.astro";
 import Base from "../layouts/Base.astro";
-import { families, ordered, rows, season, updatedAt } from "../lib/data";
+import { families, ordered, rows, season, seasonLabel, updatedAt } from "../lib/data";
 
 const seasonRows = ordered(rows.filter((r) => r.season === season.key || r.row_kind !== "submission"));
 const familyKeys = families.map((f) => f.key);
@@ -15,7 +15,7 @@ const familyKeys = families.map((f) => f.key);
   markdown="/leaderboard.md"
 >
   <section class="container section">
-    <p class="eyebrow">Season {season.key.toUpperCase()} · suite {season.suite} {season.suite_version}</p>
+    <p class="eyebrow">{seasonLabel(season.key)} · {season.suite} {season.suite_version}</p>
     <h1>Leaderboard</h1>
     <p class="lede">
       Score is the share of questions a fixed reader answers correctly from the method's artifact

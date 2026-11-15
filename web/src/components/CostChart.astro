@@ -33,8 +33,11 @@ for (const { row, tokens } of [...points].sort((a, b) => b.row.score - a.row.sco
   placed.push({ x: x(tokens), y: ly });
   labelY.set(row, ly);
 }
+// 1-2-5 ticks inside the plotted range, so a range under one decade still gets a scale.
 const ticks = paid.length
-  ? Array.from({ length: Math.floor(hi) - Math.ceil(lo) + 1 }, (_, i) => 10 ** (Math.ceil(lo) + i))
+  ? Array.from({ length: Math.ceil(hi) - Math.floor(lo) + 1 }, (_, i) => Math.floor(lo) + i)
+      .flatMap((k) => [1, 2, 5].map((m) => m * 10 ** k))
+      .filter((t) => Math.log10(t) >= lo - 1e-9 && Math.log10(t) <= hi + 1e-9)
   : [];
 ---
 

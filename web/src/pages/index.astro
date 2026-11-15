@@ -2,7 +2,7 @@
 import DecayHero from "../components/DecayHero.astro";
 import LeaderboardTable from "../components/LeaderboardTable.astro";
 import Base from "../layouts/Base.astro";
-import { families, ordered, rows, season } from "../lib/data";
+import { families, ordered, rows, season, seasonLabel } from "../lib/data";
 
 const top = ordered(rows).slice(0, 5);
 const steps = [
@@ -118,7 +118,7 @@ compactbench run --suite practice \
   </section>
 
   <section class="container section">
-    <p class="eyebrow">Leaderboard · Season {season.key.toUpperCase()}</p>
+    <p class="eyebrow">Leaderboard · {seasonLabel(season.key)}</p>
     <h2>Who keeps the most</h2>
     {
       top.length ? (
@@ -144,7 +144,7 @@ compactbench run --suite practice \
   <section class="container section">
     <p class="eyebrow">Why trust the numbers</p>
     <h2>Fair by construction</h2>
-    <div class="grid">
+    <div class="grid fair">
       {
         fairness.map(([title, body]) => (
           <div class="card">
@@ -205,5 +205,19 @@ compactbench run --suite practice \
   .empty p {
     margin: 0;
     max-width: 70ch;
+  }
+  /* Four cards: two by two, then one row of four on wide screens. */
+  .fair {
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 600px) {
+    .fair {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1100px) {
+    .fair {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
   }
 </style>

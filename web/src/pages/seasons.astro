@@ -1,6 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
-import { calibration, familyTitle, pct, season } from "../lib/data";
+import { calibration, familyTitle, pct, season, seasonLabel } from "../lib/data";
 
 const pins: [string, string][] = [
   ["Suite", `${season.suite} ${season.suite_version} — mixed sessions in private worlds`],
@@ -25,7 +25,7 @@ const pins: [string, string][] = [
 >
   <section class="container section prose">
     <p class="eyebrow">Seasons</p>
-    <h1>Season {season.key.toUpperCase()}</h1>
+    <h1>{seasonLabel(season.key)}</h1>
     <p class="lede">
       A season pins every setting that affects a score, so every row in it is comparable. Submitters
       choose only their method and the model it calls. Rows from different seasons are never ranked

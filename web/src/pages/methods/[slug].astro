@@ -1,7 +1,7 @@
 ---
 import CycleChart from "../../components/CycleChart.astro";
 import Base from "../../layouts/Base.astro";
-import { familyTitle, isCustomEndpoint, modelName, pct, rows, slugOf, type Row } from "../../lib/data";
+import { familyTitle, isCustomEndpoint, modelName, normalizedScore, pct, rows, seasonLabel, slugOf, type Row } from "../../lib/data";
 
 export function getStaticPaths() {
   return rows.map((row) => ({ params: { slug: slugOf(row) }, props: { row } }));
@@ -20,7 +20,7 @@ const facts: [string, string][] = [
       : `${row.compactor_provider} / ${row.compactor_model}`,
   ],
   ["Submitted by", row.handle ? `@${row.handle}${row.org ? ` (${row.org})` : ""}` : (row.org ?? "—")],
-  ["Season", row.season ?? "—"],
+  ["Season", seasonLabel(row.season)],
   ["Suite", row.suite],
   ["Budget", row.budget_tokens ? `${row.budget_tokens} tokens` : "none"],
   ["Reader", `${row.reader_model} (effort ${row.reader_effort ?? "default"})`],
@@ -40,7 +40,7 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
   <section class="container section">
     <p class="eyebrow"><a href="/leaderboard">Leaderboard</a> / {kind}</p>
     <h1>{row.method_name}</h1>
-    <p class="lede">{modelName(row)} · season {row.season ?? "—"} · {row.cases} cases</p>
+    <p class="lede">{modelName(row)} · {seasonLabel(row.season)} · {row.cases} cases</p>
     {
       row.budget_tokens && row.mean_artifact_tokens > row.budget_tokens && (
         <p class="card note">
@@ -59,8 +59,8 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
       </div>
       <div class="card stat">
         <span class="muted">Normalized</span>
-        <strong class="mono big">{pct(row.normalized_score)}</strong>
-        <span class="muted">share of the achievable range</span>
+        <strong class="mono big">{pct(normalizedScore(row))}</strong>
+        <span class="muted">of the achievable range, between the season's floor and ceiling</span>
       </div>
       <div class="card stat">
         <span class="muted">Drift resistance</span>
@@ -69,7 +69,7 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
       </div>
       <div class="card stat">
         <span class="muted">Stale · trap · invented</span>
-        <strong class="mono big">{pct(row.stale_rate, 0)} · {pct(row.trap_rate, 0)} · {pct(row.hallucination_rate, 0)}</strong>
+        <strong class="mono big nowrap">{pct(row.stale_rate, 0)} · {pct(row.trap_rate, 0)} · {pct(row.hallucination_rate, 0)}</strong>
         <span class="muted">% of chances taken</span>
       </div>
     </div>
@@ -180,5 +180,8 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
     border-color: rgb(251 191 36 / 0.4);
     color: var(--muted);
     max-width: 72ch;
+  }
+  .nowrap {
+    white-space: nowrap;
   }
 </style>

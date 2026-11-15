@@ -140,6 +140,16 @@ pre code {
   padding-block: clamp(48px, 8vw, 96px);
 }
 
+/* The last section sits right above the footer, which brings its own spacing. */
+main > .section:last-child {
+  padding-bottom: clamp(24px, 4vw, 48px);
+}
+
+/* Component display rules must never un-hide an element with the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 .eyebrow {
   font-family: var(--mono);
   font-size: 0.78rem;

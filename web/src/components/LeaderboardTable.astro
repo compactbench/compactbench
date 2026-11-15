@@ -11,6 +11,8 @@ interface Props {
 const { rows, familyKeys, compact = false } = Astro.props;
 const kindLabel = { submission: "ranked", baseline: "baseline", control: "control" } as const;
 const native = (row: Row) => row.method_name.endsWith("-compaction");
+// Only ranked submissions get a rank; until there are any, the column would be all dashes.
+const ranked = rows.some((row) => row.rank !== null);
 const heat = (v: number | undefined) =>
   v === undefined ? "" : `background: rgb(59 130 246 / ${(0.06 + v * 0.6).toFixed(2)})`;
 ---
@@ -23,7 +25,7 @@ const heat = (v: number | undefined) =>
     </caption>
     <thead>
       <tr>
-        <th scope="col"><button data-sort="rank" data-type="num">#</button></th>
+        {ranked && <th scope="col"><button data-sort="rank" data-type="num">#</button></th>}
         <th scope="col" class="left">Method</th>
         <th scope="col"><button data-sort="score" data-type="num" aria-sort="descending">Score</button></th>
         {!compact && <th scope="col"><button data-sort="drift" data-type="num">Drift</button></th>}
@@ -52,7 +54,7 @@ const heat = (v: number | undefined) =>
             data-tokens={row.mean_artifact_tokens}
             {...Object.fromEntries(familyKeys.map((k) => [`data-f-${k}`, row.by_family[k] ?? -1]))}
           >
-            <td class="mono rank">{row.rank ?? "—"}</td>
+            {ranked && <td class="mono rank">{row.rank ?? "—"}</td>}
             <td class="left method">
               <a class="name" href={`/methods/${slugOf(row)}`}>{row.method_name}</a>
               <span class="badge {row.row_kind}">{kindLabel[row.row_kind]}</span>
@@ -208,5 +210,37 @@ const heat = (v: number | undefined) =>
   .over {
     color: var(--warn);
     font-size: 0.75em;
+  }
+  /* Phones: the method cell wraps (badges under the name) so the score stays in view, and
+     it stays pinned while the wider columns scroll sideways. */
+  @media (max-width: 640px) {
+    th,
+    td {
+      padding: 0.6em 0.5em;
+    }
+    td.method {
+      white-space: normal;
+      min-width: 9.5em;
+      max-width: 11em;
+    }
+    .method .name {
+      display: block;
+      margin-right: 0;
+      overflow-wrap: anywhere;
+    }
+    .method .badge {
+      font-size: 0.65rem;
+    }
+    td.method,
+    th.left {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: var(--surface);
+    }
+    th.left {
+      background: var(--surface-2);
+      z-index: 2;
+    }
   }
 </style>

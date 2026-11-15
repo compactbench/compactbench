@@ -78,6 +78,29 @@ export const season = seasonJson;
 export const rows: Row[] = (leaderboardJson as { entries: Row[] }).entries;
 export const updatedAt: string = (leaderboardJson as { updated_at: string }).updated_at;
 
+/** "s1" → "Season 1"; any other key is shown as is. */
+export const seasonLabel = (key: string | null | undefined): string => {
+  if (!key) return "—";
+  const m = /^s(\d+)$/i.exec(key);
+  return m ? `Season ${m[1]}` : key;
+};
+
+/**
+ * Score as a share of what's achievable: per family, (score − floor) / (ceiling − floor)
+ * from the season's calibration, averaged over families. Null without a calibration for
+ * the row's season.
+ */
+export function normalizedScore(row: Row): number | null {
+  if (row.normalized_score !== null) return row.normalized_score;
+  if (!calibration || calibration.season !== row.season) return null;
+  const shares = Object.entries(row.by_family).flatMap(([family, score]) => {
+    const band = calibration?.families[family];
+    if (!band || band.ceiling <= band.floor) return [];
+    return [Math.min(1, Math.max(0, (score - band.floor) / (band.ceiling - band.floor)))];
+  });
+  return shares.length ? shares.reduce((a, b) => a + b, 0) / shares.length : null;
+}
+
 export const pct = (value: number | null | undefined, digits = 1): string =>
   value === null || value === undefined ? "—" : `${(value * 100).toFixed(digits)}`;
 
