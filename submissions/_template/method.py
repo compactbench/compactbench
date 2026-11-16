@@ -19,7 +19,7 @@ through Ollama, a hosted one, or your own OpenAI-compatible server:
 
 Then submit it on https://compactbench.com/submit for a ranked run.
 
-Full API docs: docs/writing-a-compactor.md in https://github.com/compactbench/compactbench
+Full API docs: https://compactbench.com/docs/writing-a-compactor
 """
 
 from __future__ import annotations

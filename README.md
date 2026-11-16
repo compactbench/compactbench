@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/compactbench.svg)](https://pypi.org/project/compactbench/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/compactbench/compactbench/actions/workflows/ci.yml/badge.svg)](https://github.com/compactbench/compactbench/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-compactbench.github.io-black)](https://compactbench.github.io/compactbench/)
+[![Docs](https://img.shields.io/badge/docs-compactbench.com-black)](https://compactbench.com/docs)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/compactbench/compactbench/blob/main/notebooks/try_compactbench.ipynb)
 
 Long-running LLM agents compact their history — summarize it, extract state, keep a ledger — and then carry on with only the compacted version. CompactBench gives your compactor a long, adversarial conversation, compacts it again and again as the conversation continues, and after every compaction asks a fixed reader model structured questions about what survived.
@@ -119,9 +119,9 @@ See [checking in CI](docs/ci.md).
 
 ## Leaderboard
 
-Season 1's reference baselines are on the **[leaderboard](https://compactbench.github.io/compactbench/leaderboard/)** (data: [`docs/data/leaderboard.json`](docs/data/leaderboard.json)).
+Season 1's reference baselines are on the **[leaderboard](https://compactbench.com/leaderboard)** (data: [`docs/data/leaderboard.json`](docs/data/leaderboard.json)).
 
-**Ranked submissions open soon** on compactbench.com: sign in with GitHub, upload your method, and bring your own API keys; it runs sandboxed on a fresh sample of the hidden Elite set and publishes itself when it qualifies. Until then, develop against the public `practice` suite — it's the same difficulty — and check your run with `compactbench qualify`. See [submitting](docs/submitting.md).
+**Ranked submissions are open** at [compactbench.com/submit](https://compactbench.com/submit): sign in with GitHub, upload your method (or pick a reference method and benchmark your model), and bring your own API keys; it runs sandboxed on a fresh sample of the hidden Elite set and publishes itself when it qualifies. Develop against the public `practice` suite — it's the same difficulty — and check your run with `compactbench qualify` first. See [submitting](docs/submitting.md).
 
 ## Project status
 

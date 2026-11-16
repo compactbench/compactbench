@@ -1,10 +1,5 @@
 # Submitting to the leaderboard
 
-!!! note "Opening soon"
-    Ranked submissions open with the launch of compactbench.com. Everything below describes
-    how it will work; until then, develop against the public `practice` suite and check
-    your runs with `compactbench qualify`.
-
 Ranked scores come from a **hidden Elite set** that is generated fresh for every ranked
 run, at the same difficulty as the public `practice` suite: mixed sessions in private
 worlds. There is nothing fixed to memorize, and what you see in your own provider logs
