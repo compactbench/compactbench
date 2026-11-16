@@ -19,11 +19,11 @@ they set it in their environment or in a `.env` file (`COMPACTBENCH_ANTHROPIC_AP
 
 ## Steps
 
-1. **Install.** `compactbench --version` must be 0.3 or later (PyPI's 0.1 is a different,
-   older benchmark). Until 0.3 is on PyPI:
+1. **Install.** `compactbench --version` must be 0.3 or later (0.1 is a different, older
+   benchmark):
 
    ```bash
-   pip install "compactbench[providers] @ git+https://github.com/compactbench/compactbench"
+   pip install 'compactbench[providers]>=0.3'
    ```
 
 2. **Wrap the method** as a compactor: copy [references/compactor_template.py](references/compactor_template.py)

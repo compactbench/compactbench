@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-11-16
+
 Benchmark v2 — **scorer_version 2.0.0 → 3.0.0**. Case generation, the compaction loop and
 scoring are rewritten. Scores are not comparable with 0.2; v1 leaderboard rows are retired
 to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
+
+0.2.0 was never published to PyPI, so PyPI goes from 0.1.0 straight to 0.3.0; its changes
+are listed under 0.2.0 below and included here.
 
 ### Breaking
 
@@ -203,7 +208,7 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
 - The pull-request submission flow: `submissions/_template/`, `validate_submissions.py`,
   `validate_submission_config.py` and the separate publish workflow.
 
-## [0.2.0] — 2026-08-24
+## 0.2.0 — 2026-08-24 (not published to PyPI)
 
 ### Scoring integrity — **scorer_version 1.0.0 → 2.0.0**
 
@@ -488,6 +493,6 @@ across three launch families.
   - `compactbench generate --template <key> --seed <int>` command wired up
   - Three regression fixtures pinning the starter templates at seed=42, medium
 
-[Unreleased]: https://github.com/compactbench/compactbench/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/compactbench/compactbench/compare/v0.1.0...v0.2.0
+[Unreleased]: https://github.com/compactbench/compactbench/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/compactbench/compactbench/compare/v0.1.0...v0.3.0
 [0.1.0]: https://github.com/compactbench/compactbench/releases/tag/v0.1.0
