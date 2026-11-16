@@ -39,8 +39,8 @@
     "SUBMISSIONS_OPEN": "false",
     // GitHub logins that may submit while submissions are closed (the launch smoke test).
     "SUBMISSIONS_EARLY_ACCESS": "UsernameLoad",
-    "LIMIT_PER_WEEK": "2",
-    "LIMIT_PER_DAY": "20",
+    "LIMIT_PER_WEEK": "5",
+    "LIMIT_PER_DAY": "50",
     // The contact form sends from this address on our domain; where it goes is the
     // CONTACT_TO secret (wrangler secret put CONTACT_TO), never written here.
     "CONTACT_FROM": "contact@compactbench.com",

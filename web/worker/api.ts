@@ -153,8 +153,8 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
         store: deps.store,
         limits: {
           open: env.SUBMISSIONS_OPEN !== "false" || earlyAccess(env.SUBMISSIONS_EARLY_ACCESS, user.login),
-          perUserPerWeek: Number(env.LIMIT_PER_WEEK ?? 2),
-          globalPerDay: Number(env.LIMIT_PER_DAY ?? 20),
+          perUserPerWeek: Number(env.LIMIT_PER_WEEK ?? 5),
+          globalPerDay: Number(env.LIMIT_PER_DAY ?? 50),
         },
         season: env.SEASON_KEY,
         seasonPublicKey: env.SEASON_PUBLIC_KEY,
