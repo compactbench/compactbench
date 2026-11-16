@@ -16,88 +16,129 @@ const native = (row: Row) => row.method_name.endsWith("-compaction");
 const ranked = rows.some((row) => row.rank !== null);
 const heat = (v: number | undefined) =>
   v === undefined ? "" : `background: rgb(59 130 246 / ${(0.06 + v * 0.6).toFixed(2)})`;
+// The folded strip: one bar per family, as tall as its score.
+const bar = (v: number | undefined) => (v === undefined ? "" : `height: ${Math.max(v * 100, 8).toFixed(0)}%`);
+const references = rows.some((row) => row.row_kind !== "submission");
+const familySummary = (row: Row) =>
+  familyKeys.map((key) => `${familyTitle(key)} ${pct(row.by_family[key], 0)}`).join(", ");
 ---
 
-<div class="wrap" data-leaderboard>
-  <table class="board">
-    <caption class="sr-only">
-      Scores after repeated compaction. Higher is better. Score is the share of probes answered
-      correctly from the method's artifact, family-balanced, with a 95% interval.
-    </caption>
-    <thead>
-      <tr>
-        {ranked && <th scope="col"><button data-sort="rank" data-type="num">#</button></th>}
-        <th scope="col" class="left">Method</th>
-        <th scope="col"><button data-sort="score" data-type="num" aria-sort="descending">Score</button></th>
-        {!compact && <th scope="col"><button data-sort="drift" data-type="num">Drift</button></th>}
-        <th scope="col">By compaction</th>
-        {
-          !compact &&
-            familyKeys.map((key) => (
-              <th scope="col" class="fam" title={familyTitle(key)}>
-                <button data-sort={`f-${key}`} data-type="num">
-                  {familyTitle(key).split(" ")[0]}
+<!-- Family columns start folded into one small strip so the ranking reads first; the
+     buttons (shown once the script runs) unfold them and hide the reference rows. -->
+<div class="root" data-leaderboard data-families="closed">
+  {
+    !compact && (
+      <div class="tools" data-tools hidden>
+        <button type="button" class="chip" data-toggle="families" aria-pressed="false">
+          Family scores
+        </button>
+        {ranked && references && (
+          <button type="button" class="chip" data-toggle="references" aria-pressed="true">
+            Baselines and controls
+          </button>
+        )}
+      </div>
+    )
+  }
+  <div class="wrap">
+    <table class="board">
+      <caption class="sr-only">
+        Scores after repeated compaction. Higher is better. Score is the share of probes answered
+        correctly from the method's artifact, family-balanced, with a 95% interval.
+      </caption>
+      <thead>
+        <tr>
+          {ranked && <th scope="col"><button data-sort="rank" data-type="num">#</button></th>}
+          <th scope="col" class="left">Method</th>
+          <th scope="col"><button data-sort="score" data-type="num" aria-sort="descending">Score</button></th>
+          {!compact && <th scope="col"><button data-sort="drift" data-type="num">Drift</button></th>}
+          <th scope="col">By compaction</th>
+          {
+            !compact && (
+              <th scope="col" class="strip-col">
+                <button type="button" data-open-families title="Show each family's score">
+                  Families
                 </button>
               </th>
-            ))
-        }
-        {!compact && <th scope="col"><button data-sort="tokens" data-type="num">Tokens</button></th>}
-      </tr>
-    </thead>
-    <tbody>
-      {
-        rows.map((row, i) => (
-          <tr
-            data-kind={row.row_kind}
-            data-rank={row.rank ?? 999 + i}
-            data-score={row.score}
-            data-drift={row.drift_resistance}
-            data-tokens={row.mean_artifact_tokens}
-            {...Object.fromEntries(familyKeys.map((k) => [`data-f-${k}`, row.by_family[k] ?? -1]))}
-          >
-            {ranked && <td class="mono rank">{row.rank ?? "—"}</td>}
-            <td class="left method">
-              <a class="name" href={`/methods/${slugOf(row)}`}>{row.method_name}</a>
-              <span class="badge {row.row_kind}">{kindLabel[row.row_kind]}</span>
-              {native(row) && <span class="badge native">provider-native</span>}
-              {isCustomEndpoint(row) && <span class="badge">custom endpoint</span>}
-              <span class="sub">
-                {row.handle && <Submitter handle={row.handle} />}
-                {row.handle && <span class="muted"> · </span>}
-                <span class="muted mono">{modelName(row)}</span>
-              </span>
-            </td>
-            <td class="mono score">
-              <strong>{pct(row.score)}</strong>
-              <span class="ci muted">
-                {pct(row.score_ci_low)}–{pct(row.score_ci_high)}
-              </span>
-            </td>
-            {!compact && <td class="mono">{pct(row.drift_resistance, 0)}</td>}
-            <td>
-              <Sparkline values={row.by_cycle} label={`${row.method_name} score by compaction`} />
-            </td>
-            {!compact &&
+            )
+          }
+          {
+            !compact &&
               familyKeys.map((key) => (
-                <td class="mono heat" style={heat(row.by_family[key])}>
-                  {pct(row.by_family[key], 0)}
-                </td>
-              ))}
-            {!compact && (
-              <td class="mono muted">
-                {Math.round(row.mean_artifact_tokens)}
-                {row.budget_tokens && row.mean_artifact_tokens > row.budget_tokens && (
-                  <span class="over" title={`Over the ${row.budget_tokens}-token budget: cut to fit before the reader saw it`}>
-                    {" "}cut
-                  </span>
-                )}
+                <th scope="col" class="fam" title={familyTitle(key)}>
+                  <button data-sort={`f-${key}`} data-type="num">
+                    {familyTitle(key).split(" ")[0]}
+                  </button>
+                </th>
+              ))
+          }
+          {!compact && <th scope="col"><button data-sort="tokens" data-type="num">Tokens</button></th>}
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((row, i) => (
+            <tr
+              data-kind={row.row_kind}
+              data-rank={row.rank ?? 999 + i}
+              data-score={row.score}
+              data-drift={row.drift_resistance}
+              data-tokens={row.mean_artifact_tokens}
+              {...Object.fromEntries(familyKeys.map((k) => [`data-f-${k}`, row.by_family[k] ?? -1]))}
+            >
+              {ranked && <td class="mono rank">{row.rank ?? "—"}</td>}
+              <td class="left method">
+                <a class="name" href={`/methods/${slugOf(row)}`}>{row.method_name}</a>
+                <span class="badge {row.row_kind}">{kindLabel[row.row_kind]}</span>
+                {native(row) && <span class="badge native">provider-native</span>}
+                {isCustomEndpoint(row) && <span class="badge">custom endpoint</span>}
+                <span class="sub">
+                  {row.handle && <Submitter handle={row.handle} />}
+                  {row.handle && <span class="muted"> · </span>}
+                  <span class="muted mono">{modelName(row)}</span>
+                </span>
               </td>
-            )}
-          </tr>
-        ))
-      }
-    </tbody>
-  </table>
+              <td class="mono score">
+                <strong>{pct(row.score)}</strong>
+                <span class="ci muted">
+                  {pct(row.score_ci_low)}–{pct(row.score_ci_high)}
+                </span>
+              </td>
+              {!compact && <td class="mono">{pct(row.drift_resistance, 0)}</td>}
+              <td>
+                <Sparkline values={row.by_cycle} label={`${row.method_name} score by compaction`} />
+              </td>
+              {!compact && (
+                <td class="strip-col">
+                  <span class="strip" role="img" aria-label={familySummary(row)} title={familySummary(row)}>
+                    {familyKeys.map((key) => (
+                      <span style={bar(row.by_family[key])} />
+                    ))}
+                  </span>
+                </td>
+              )}
+              {!compact &&
+                familyKeys.map((key) => (
+                  <td class="mono heat" style={heat(row.by_family[key])}>
+                    {pct(row.by_family[key], 0)}
+                  </td>
+                ))}
+              {!compact && (
+                <td class="mono muted">
+                  {Math.round(row.mean_artifact_tokens)}
+                  {row.budget_tokens && row.mean_artifact_tokens > row.budget_tokens && (
+                    <span class="over" title={`Over the ${row.budget_tokens}-token budget: cut to fit before the reader saw it`}>
+                      {" "}cut
+                    </span>
+                  )}
+                </td>
+              )}
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <script>
@@ -105,6 +146,7 @@ const heat = (v: number | undefined) =>
   for (const root of document.querySelectorAll<HTMLElement>("[data-leaderboard]")) {
     const tbody = root.querySelector("tbody");
     if (!tbody) continue;
+    setUpToggles(root);
     for (const button of root.querySelectorAll<HTMLButtonElement>("button[data-sort]")) {
       button.addEventListener("click", () => {
         const key = button.dataset.sort ?? "score";
@@ -124,12 +166,125 @@ const heat = (v: number | undefined) =>
       });
     }
   }
+  // The two view switches, remembered per browser (storage can be missing or blocked).
+  function setUpToggles(root: HTMLElement): void {
+    const tools = root.querySelector<HTMLElement>("[data-tools]");
+    if (!tools) return;
+    tools.hidden = false;
+    const families = root.querySelector<HTMLButtonElement>('[data-toggle="families"]');
+    const references = root.querySelector<HTMLButtonElement>('[data-toggle="references"]');
+    const showFamilies = (open: boolean) => {
+      root.dataset.families = open ? "open" : "closed";
+      families?.setAttribute("aria-pressed", String(open));
+      remember("cb-families", open ? "open" : "closed");
+    };
+    const showReferences = (shown: boolean) => {
+      root.dataset.references = shown ? "shown" : "hidden";
+      references?.setAttribute("aria-pressed", String(shown));
+      remember("cb-references", shown ? "shown" : "hidden");
+    };
+    families?.addEventListener("click", () => showFamilies(root.dataset.families !== "open"));
+    references?.addEventListener("click", () => showReferences(root.dataset.references === "hidden"));
+    root.querySelector("[data-open-families]")?.addEventListener("click", () => showFamilies(true));
+    if (recall("cb-families") === "open") showFamilies(true);
+    if (references && recall("cb-references") === "hidden") showReferences(false);
+  }
+  function remember(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Private window or blocked storage: the choice just isn't kept.
+    }
+  }
+  function recall(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
   function toCamel(key: string): string {
     return key.replace(/-([a-z_])/g, (_, c: string) => c.toUpperCase());
   }
 </script>
 
 <style>
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .tools[hidden] {
+    display: none;
+  }
+  .chip {
+    font: 600 0.78rem var(--font);
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 0.4em 0.9em 0.4em 0.75em;
+    cursor: pointer;
+  }
+  .chip::before {
+    content: "";
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    margin-right: 0.5em;
+    border-radius: 50%;
+    border: 1px solid var(--muted);
+    vertical-align: 0.05em;
+  }
+  .chip[aria-pressed="true"] {
+    color: var(--text);
+    border-color: rgb(34 211 238 / 0.55);
+  }
+  .chip[aria-pressed="true"]::before {
+    background: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: 0 0 6px rgb(34 211 238 / 0.7);
+  }
+  .chip:hover {
+    color: var(--text);
+  }
+  .chip:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+  /* Folded: one strip of eight cells per row. Unfolded: a sortable column per family. */
+  .root[data-families="closed"] .fam,
+  .root[data-families="closed"] .heat,
+  .root[data-families="open"] .strip-col {
+    display: none;
+  }
+  .root[data-references="hidden"] tbody tr:not([data-kind="submission"]) {
+    display: none;
+  }
+  .strip-col {
+    text-align: center;
+  }
+  .strip-col button::after {
+    content: " ›";
+    color: var(--cyan);
+  }
+  .strip {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 22px;
+    padding: 0 2px;
+    border-bottom: 1px solid var(--border-strong);
+    vertical-align: middle;
+  }
+  .strip span {
+    width: 7px;
+    height: 8%;
+    border-radius: 2px 2px 0 0;
+    background: linear-gradient(to top, rgb(59 130 246 / 0.55), var(--blue));
+  }
   .wrap {
     overflow-x: auto;
     border: 1px solid var(--border);
