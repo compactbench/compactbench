@@ -113,6 +113,28 @@ def curve(img: Image.Image, pts: Sequence[Point], floor_y: float, *, width: int 
         )
 
 
+def season_series() -> tuple[list[tuple[str, list[float], RGB]], float | None]:
+    """Best method and the steadiest within 5 points of it, plus the mean ceiling."""
+    import json
+
+    board = json.loads((ROOT / "docs" / "data" / "leaderboard.json").read_text(encoding="utf-8"))
+    rows = [r for r in board["entries"] if r["row_kind"] != "control" and len(r["by_cycle"]) > 1]
+    series: list[tuple[str, list[float], RGB]] = []
+    if rows:
+        best = max(rows, key=lambda r: r["score"])
+        series.append((best["method_name"], best["by_cycle"], BLUE))
+        near = [r for r in rows if r is not best and r["score"] >= best["score"] - 0.05]
+        if near:
+            steady = min(near, key=lambda r: abs(r["by_cycle"][0] - r["by_cycle"][-1]))
+            series.insert(0, (steady["method_name"], steady["by_cycle"], VIOLET))
+    calib = ROOT / "seasons" / "s1.calibration.json"
+    ceiling = None
+    if calib.exists():
+        fams = json.loads(calib.read_text(encoding="utf-8"))["families"].values()
+        ceiling = sum(f["ceiling"] for f in fams) / len(fams)
+    return series, ceiling
+
+
 def save(img: Image.Image, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     img.resize((W, H), Image.Resampling.LANCZOS).save(out, optimize=True)
@@ -147,35 +169,60 @@ def site_image(out: Path = SITE_IMAGE) -> None:
     )
     d.text((x0 * S, 540 * S), "compactbench.com", font=font("jetbrains-mono", 26, 500), fill=TEXT)
 
-    # Decay curve, from the home page hero (600x260 viewBox) into the right column.
-    rx, ry, rw, rh = 700, 250, 440, 230
+    # Season results, the same series as the home page chart: the best method and the
+    # steadiest one near it, under the full-conversation ceiling.
+    series, ceiling = season_series()
+    rx, ry, rw, rh = 690, 236, 250, 230
 
-    def at(p: Point) -> Point:
-        return ((rx + p[0] / 600 * rw) * S, (ry + p[1] / 260 * rh) * S)
+    def at(i: int, v: float, n: int) -> Point:
+        return ((rx + rw * i / (n - 1)) * S, (ry + rh * (1 - v)) * S)
 
-    line = [
-        *bezier((0, 40), (90, 48), (140, 84), (240, 118)),
-        *bezier((240, 118), (340, 152), (420, 176), (600, 206)),
-    ]
-    kept = [
-        *bezier((0, 40), (120, 42), (240, 46), (360, 50)),
-        *bezier((360, 50), (480, 54), (520, 56), (600, 58)),
-    ]
-    pts = [at(p) for p in kept]
-    for i in range(0, len(pts) - 1, 4):  # dashed: what a perfect memory keeps
-        d.line([pts[i], pts[min(i + 2, len(pts) - 1)]], fill=(39, 48, 73), width=3 * S)
-    curve(img, [at(p) for p in line], at((0, 260))[1])
-    d = ImageDraw.Draw(img)
-    for p in [(0, 40), (120, 66), (240, 118), (360, 152), (480, 182)]:
-        cx, cy = at(p)
-        r = 8 * S
-        d.ellipse(
-            [cx - r, cy - r, cx + r, cy + r], fill=BG, outline=gradient(p[0] / 600), width=3 * S
+    small = font("jetbrains-mono", 16, 500)
+    for v in (0.0, 0.5, 1.0):
+        y = (ry + rh * (1 - v)) * S
+        d.line([(rx * S, y), ((rx + rw) * S, y)], fill=GRID, width=2 * S)
+    if ceiling is not None:
+        y = (ry + rh * (1 - ceiling)) * S
+        for x in range(rx, rx + rw, 14):
+            d.line([(x * S, y), ((x + 7) * S, y)], fill=(58, 69, 96), width=2 * S)
+        d.text(
+            ((rx + rw + 16) * S, y - 10 * S),
+            f"full conversation {ceiling * 100:.0f}",
+            font=small,
+            fill=MUTED,
+        )
+    label = font("inter", 20, 650)
+    ends: list[float] = []
+    for _name, values, color in series:
+        n = len(values)
+        pts = [at(i, v, n) for i, v in enumerate(values)]
+        d.line(pts, fill=color, width=6 * S, joint="curve")
+        for cx, cy in pts:
+            r = 7 * S
+            d.ellipse(
+                [cx - r, cy - r, cx + r, cy + r],
+                fill=BG,
+                outline=CYAN if color == BLUE else color,
+                width=3 * S,
+            )
+        ends.append(pts[-1][1])
+    if len(ends) == 2 and abs(ends[0] - ends[1]) < 50 * S:
+        mid = (ends[0] + ends[1]) / 2
+        up = 0 if ends[0] < ends[1] else 1
+        ends[up], ends[1 - up] = mid - 25 * S, mid + 25 * S
+    for (name, values, color), y in zip(series, ends, strict=True):
+        tx = (rx + rw + 16) * S
+        d.text((tx, y - 22 * S), name, font=label, fill=color)
+        d.text(
+            (tx, y + 2 * S),
+            f"{values[0] * 100:.0f} at first, {values[-1] * 100:.0f} at last",
+            font=small,
+            fill=MUTED,
         )
     d.text(
         (rx * S, (ry + rh + 22) * S),
-        "compaction 1 · 2 · 3 · 4 · 5",  # the latin font subset has no arrows
-        font=font("jetbrains-mono", 18, 500),
+        "score after each of 5 compactions",  # the latin font subset has no arrows
+        font=small,
         fill=MUTED,
     )
     save(img, out)

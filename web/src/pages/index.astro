@@ -1,34 +1,71 @@
 ---
-import DecayHero from "../components/DecayHero.astro";
+import SeasonChart from "../components/SeasonChart.astro";
 import LeaderboardTable from "../components/LeaderboardTable.astro";
 import Base from "../layouts/Base.astro";
-import { families, ordered, rows, season, seasonLabel } from "../lib/data";
+import gallery from "../generated/failure-gallery.json";
+import { calibration, families, ordered, rows, season, seasonLabel } from "../lib/data";
 
 const top = ordered(rows).slice(0, 5);
-const steps = [
-  {
-    title: "A long session",
-    body: "A generated conversation, about 32k tokens to start, where rules, decisions, owners, figures, tickets and policies pile up among code, logs and chatter.",
-  },
-  {
-    title: "Compact, then keep going",
-    body: "The method compacts it into an artifact under a fixed token budget. New turns arrive; it compacts its own artifact plus the new turns — again and again.",
-  },
-  {
-    title: "Ask what survived",
-    body: "After every compaction a fixed reader model answers questions from the artifact alone. Answers are checked mechanically — no model grades another.",
-  },
-];
+const methods = rows.filter((r) => r.row_kind !== "control");
+const pctOf = (v: number) => Math.round(v * 100);
+
+// One real failure from the public Practice runs, to show the loop instead of describing it:
+// a corrected figure the memory kept in its old form.
+interface Example {
+  family: string;
+  kind: string;
+  kind_text: string;
+  method: string;
+  compaction: number;
+  question: string;
+  expected: string[];
+  answered: string[];
+  source: { compaction: number | string; role: string; before: string; match: string; after: string };
+}
+const examples = gallery as Example[];
+const example =
+  examples.find((e) => e.family === "numeric_precision" && e.kind === "stale") ??
+  examples.find((e) => e.kind === "stale") ??
+  examples[0];
+const clip = (text: string, n: number, end: boolean) => {
+  const flat = text.replace(/\s+/g, " ");
+  if (flat.length <= n) return flat;
+  return end ? "…" + flat.slice(-n).replace(/^\S*\s/, "") : flat.slice(0, n).replace(/\s\S*$/, "") + "…";
+};
+const said = example && {
+  before: clip(example.source.before.split(/\n/).pop() ?? "", 70, true),
+  match: example.source.match,
+  after: clip(example.source.after.split(/\n/)[0] ?? "", 50, false),
+};
+const where = example?.source.role === "user" ? "a message from the user" : "notes pasted into the conversation";
+
+// Per family: the best any method has kept, against what the full conversation allows.
+const familyStats = Object.fromEntries(
+  families.map((f) => [
+    f.key,
+    {
+      best: methods.length ? Math.max(...methods.map((r) => r.by_family[f.key] ?? 0)) : null,
+      ceiling: calibration?.families[f.key]?.ceiling ?? null,
+    },
+  ]),
+);
+const ceilings = calibration ? Object.values(calibration.families).map((f) => f.ceiling) : [];
+const floors = calibration ? Object.values(calibration.families).map((f) => f.floor) : [];
 const fairness = [
-  ["Mechanical scoring", "Every question has an exact, checkable answer. No LLM judge."],
-  ["Ceiling and floor", "Each run answers the same questions from the full conversation and from nothing, so every score sits between its own bounds."],
-  ["Fresh hidden cases", "Ranked runs draw a new sample from a private generator. There is no answer key to memorize."],
-  ["Sandboxed submissions", "Submitted methods run in a container with no network but a model proxy, and see one compaction at a time."],
+  ["Mechanical scoring", "Every question has an exact answer: an option letter or a normalized value. No model grades another."],
+  [
+    "Ceiling and floor",
+    ceilings.length
+      ? `From the full conversation the reader answers ${pctOf(Math.min(...ceilings))}–${pctOf(Math.max(...ceilings))}% per family; from nothing, ${pctOf(Math.max(...floors))}%. Every score sits between the two.`
+      : "Each season measures what the reader gets from the full conversation and from nothing, so every score sits between its own bounds.",
+  ],
+  ["Fresh hidden cases", `Every ranked run draws its own ${season.cases_per_family} cases from private worlds, so there's no answer key to learn. One method's score moves by about 2 points between samples, and the intervals show it.`],
+  ["A second reader", "Re-scored by a model from a different family, the reference methods came out in the same order, so the board isn't one model's taste."],
 ];
 ---
 
 <Base
-  title="CompactBench — the benchmark for context compaction"
+  title="CompactBench: the benchmark for context compaction"
   description="An open benchmark for AI context compaction: long agent sessions compacted again and again under a fixed token budget, scored mechanically on what survived."
   path="/"
 >
@@ -68,9 +105,9 @@ const fairness = [
       <p class="eyebrow">Context compaction benchmark</p>
       <h1>How much does your agent <span class="gradient-text">forget</span> when it compacts?</h1>
       <p class="lede">
-        CompactBench measures what survives when long AI agent sessions are compacted — not once,
-        but over and over, under a fixed token budget. Rules, decisions, people, exact figures and
-        task state, scored mechanically after every compaction.
+        When a long AI session runs out of room, the agent rewrites it as a short memory and carries on.
+        CompactBench does that five times under a fixed token budget, then checks which rules, decisions,
+        owners, figures and tasks survived.
       </p>
       <div class="cta">
         <a class="button primary" href="/leaderboard">See the leaderboard</a>
@@ -80,30 +117,50 @@ const fairness = [
 compactbench run --suite practice \
   --method built-in:naive-summary</code></pre>
     </div>
-    <DecayHero />
+    <SeasonChart />
   </section>
 
   <section class="container section">
     <p class="eyebrow">How a run works</p>
-    <h2>Compaction is a loop, so we test the loop</h2>
-    <div class="grid steps">
-      {
-        steps.map((s, i) => (
-          <div class="card">
-            <p class="mono step">0{i + 1}</p>
-            <h3>{s.title}</h3>
-            <p class="muted">{s.body}</p>
-          </div>
-        ))
-      }
-    </div>
+    <h2>One fact, five compactions</h2>
+    {
+      example && said ? (
+        <ol class="walk">
+          <li class="card">
+            <p class="mono step">said once</p>
+            <blockquote class="quote">
+              {said.before}<mark>{said.match}</mark>{said.after}
+            </blockquote>
+            <p class="muted">In {where}, before compaction {example.source.compaction}, in a ~32k-token working session full of code, logs and other projects' figures.</p>
+          </li>
+          <li class="card">
+            <p class="mono step">compacted, again and again</p>
+            <p>
+              The method, <code>{example.method}</code>, rewrote its memory after every stretch of conversation, each time from its own
+              previous memory plus the new turns, within {season.budget_tokens.toLocaleString("en-US")} tokens.
+            </p>
+            <p class="muted">The earlier turns are gone for good: whatever the memory dropped can't come back.</p>
+          </li>
+          <li class="card">
+            <p class="mono step">asked what survived</p>
+            <p class="q">{example.question}</p>
+            <dl class="answers">
+              <div><dt>Right answer</dt><dd class="good mono">{example.expected.join(", ")}</dd></div>
+              <div><dt>Memory said</dt><dd class="bad mono">{example.answered.join(", ")}</dd></div>
+            </dl>
+            <p class="muted">{example.kind_text}, after compaction {example.compaction}. <a href="/failures">More real failures</a></p>
+          </li>
+        </ol>
+      ) : null
+    }
   </section>
 
   <section class="container section">
     <p class="eyebrow">What breaks</p>
     <h2>{families.length} ways compaction loses state</h2>
     <p class="lede">
-      Ranked cases are mixed sessions: all of these at once, in one conversation, under one budget.
+      Ranked cases are mixed sessions: all eight at once, in one conversation, under one budget. Each card shows the
+      most any method has kept so far, against what the reader gets from the full conversation.
     </p>
     <div class="grid">
       {
@@ -111,6 +168,16 @@ compactbench run --suite practice \
           <a class="card family" href={`/families#${f.key}`}>
             <h3>{f.title}</h3>
             <p class="muted">{f.description}</p>
+            {familyStats[f.key]?.best !== null && familyStats[f.key]?.ceiling !== null && (
+              <p class="kept mono">
+                best kept <strong>{pctOf(familyStats[f.key]!.best!)}</strong> · full conversation {pctOf(familyStats[f.key]!.ceiling!)}
+              </p>
+              <span
+                class="bar"
+                aria-hidden="true"
+                style={`--best:${pctOf(familyStats[f.key]!.best!)}%;--ceiling:${pctOf(familyStats[f.key]!.ceiling!)}%`}
+              ></span>
+            )}
           </a>
         ))
       }
@@ -132,7 +199,7 @@ compactbench run --suite practice \
         <div class="card empty">
           <p>
             <strong>Season 1 is being calibrated.</strong> Reference baselines publish first; ranked
-            submissions open after. Until then, run the public <code>practice</code> suite — it is
+            submissions open after. Until then, run the public <code>practice</code> suite: it is
             the same difficulty as the ranked set.
           </p>
           <a class="button" href="/submit">How submissions work</a>
@@ -181,7 +248,104 @@ compactbench run --suite practice \
   }
   .step {
     color: var(--cyan);
-    margin-bottom: 0.4rem;
+    margin: 0 0 0.6rem;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  /* The worked example: three cards joined by arrows on wide screens. */
+  .walk {
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0 0;
+    display: grid;
+    gap: 18px;
+    grid-template-columns: 1fr;
+    counter-reset: walk;
+  }
+  @media (min-width: 900px) {
+    .walk {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .walk li + li {
+      position: relative;
+    }
+    .walk li + li::before {
+      content: "→";
+      position: absolute;
+      left: -15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+    }
+  }
+  .walk li p {
+    margin: 0 0 0.6rem;
+  }
+  .quote {
+    margin: 0 0 0.8rem;
+    padding: 10px 12px;
+    background: var(--bg);
+    border-left: 3px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+  .quote mark {
+    background: rgb(59 130 246 / 0.3);
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+  .q {
+    font-weight: 600;
+  }
+  .answers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 0 0 0.8rem;
+  }
+  .answers dt {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .answers dd {
+    margin: 2px 0 0;
+  }
+  .good {
+    color: var(--good);
+  }
+  .bad {
+    color: var(--bad);
+  }
+  .kept {
+    margin-top: 0.7rem !important;
+    font-size: 0.78rem !important;
+    color: var(--muted);
+  }
+  .kept strong {
+    color: var(--text);
+  }
+  /* Best score as a filled bar, the full-conversation ceiling as a tick. */
+  .bar {
+    display: block;
+    position: relative;
+    height: 6px;
+    margin-top: 8px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--blue, #3b82f6) var(--best), #161c2c var(--best));
+  }
+  .bar::after {
+    content: "";
+    position: absolute;
+    left: var(--ceiling);
+    top: -3px;
+    width: 2px;
+    height: 12px;
+    background: var(--muted);
   }
   .family {
     color: var(--text);

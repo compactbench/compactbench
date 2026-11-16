@@ -30,6 +30,42 @@ const uses: [string, string][] = [
     "A technical report on the methodology and results, the public dataset, and keeping the CI check, the Claude Code plugin and the MCP self-test free and maintained.",
   ],
 ];
+
+// The long view: what CompactBench could become if money weren't the limit.
+const vision: [string, string][] = [
+  [
+    "Every model and agent, measured within days of release",
+    "When a new model or a new version of a coding agent ships, its compaction is on the board that week, run the same way as everything else, so nobody has to take a launch post's word for how well it remembers.",
+  ],
+  [
+    "Agents judged by what they do, not only what they recall",
+    "Sandboxed tasks (fix this repository, finish this migration, follow this team's rules) where an agent compacts mid-task and has to carry on. The question becomes: does it still do the job right after it forgets?",
+  ],
+  [
+    "Real sessions, not only synthetic ones",
+    "A consented, anonymized collection of real long working sessions donated by developers and teams, so results reflect the messy conversations people actually have.",
+  ],
+  [
+    "Every way of keeping memory, on one board",
+    "Summaries, retrieval stores, structured notes, memory layers and cache compression measured side by side, with cost and speed next to what they keep.",
+  ],
+  [
+    "Longer, harder and in more languages",
+    "Sessions of a million tokens and dozens of compactions, hand-offs between agents, and the benchmark in many languages, with every question checked by people who speak them.",
+  ],
+  [
+    "A free, open compaction model",
+    "A small model trained to write memories that keep what matters, released openly so every developer can use it, and measured in public like everything else.",
+  ],
+  [
+    "A standard others can cite",
+    "Peer-reviewed papers, an annual report on what agents forget, grants for students and independent researchers studying memory, and a simple way for model cards to report compaction quality.",
+  ],
+  [
+    "Free evaluation for open-source projects",
+    "Paying the model costs so open-source agents and frameworks can be measured and improved without spending their own money.",
+  ],
+];
 ---
 
 <Base
@@ -65,6 +101,25 @@ const uses: [string, string][] = [
         ))
       }
     </ul>
+
+    <h2>Where it could go</h2>
+    <p>
+      Donations today keep CompactBench running and growing step by step. If money weren't the limit,
+      this is what it could become: the reference for whether AI agents remember what they're told.
+    </p>
+    <ul class="vision">
+      {
+        vision.map(([title, text]) => (
+          <li>
+            <strong>{title}.</strong> {text}
+          </li>
+        ))
+      }
+    </ul>
+    <p class="muted small">
+      This is a vision, not a promise: we'll say plainly what each piece costs and what donations
+      made possible as it happens.
+    </p>
 
     <h2>Donations never affect results</h2>
     <p>
@@ -106,9 +161,18 @@ const uses: [string, string][] = [
   h2 {
     margin-top: 2rem;
   }
-  .uses {
+  .uses,
+  .vision {
     display: grid;
     gap: 10px;
+  }
+  .vision {
+    padding-left: 0;
+    list-style: none;
+  }
+  .vision li {
+    border-left: 2px solid var(--violet);
+    padding: 2px 0 2px 14px;
   }
   .thanks {
     margin-top: 2rem;
