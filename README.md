@@ -121,7 +121,7 @@ See [checking in CI](docs/ci.md).
 
 Season 1's reference baselines are on the **[leaderboard](https://compactbench.github.io/compactbench/leaderboard/)** (data: [`docs/data/leaderboard.json`](docs/data/leaderboard.json)).
 
-**Ranked submissions are paused** while the v2 evaluation pipeline is finished. Until they open, develop against the public `practice` suite — the same difficulty as the hidden Elite set — and check your run with `compactbench qualify`. See [submitting](docs/submitting.md).
+**Ranked submissions open soon** on compactbench.com: sign in with GitHub, upload your method, and bring your own API keys; it runs sandboxed on a fresh sample of the hidden Elite set and publishes itself when it qualifies. Until then, develop against the public `practice` suite — it's the same difficulty — and check your run with `compactbench qualify`. See [submitting](docs/submitting.md).
 
 ## Project status
 

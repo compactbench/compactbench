@@ -24,8 +24,9 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
   (`compactbench.scenarios`); suites are `starter` and `practice`. `generate` takes
   `--family`; `run` takes `--cases` instead of `--case-count`; `--benchmarks-dir` is gone.
 - **Results files use a new format** (`results_schema: "2"`). 0.2 files can't be read.
-- **Submission `config.yaml` is gone.** Seasons pin every evaluation setting; ranked
-  submissions are paused while the v2 evaluation pipeline is finished.
+- **Submissions move to the website.** Ranked runs are submitted at compactbench.com/submit
+  instead of by pull request; `submissions/<handle>/<method>/config.yaml` is gone, and the
+  season pins every evaluation setting.
 
 ### Added
 
@@ -98,7 +99,16 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
   logs metadata only, and refuses requests that would have the provider reach the
   internet for the method (server-side tools, MCP servers, content by URL). Keys are
   sealed to the season's public key (X25519, HKDF-SHA256, AES-256-GCM), bound to their
-  submission. A datasheet (`docs/datasheet.md`).
+  submission. The container runs under gVisor in CI. Dockerfiles, submission terms,
+  privacy policy and a datasheet.
+- **Self-serve ranked submissions.** Sign in with GitHub on the site, upload `method.py`,
+  pick the model and add your keys; the Worker (D1 + R2) validates the submission, seals
+  the keys on arrival, applies per-account and daily limits (with an optional Turnstile
+  check and a kill switch) and starts the evaluation. Qualifying runs
+  publish themselves — method source, public settings, scores and a commitment to the
+  sealed traces under `submissions/<handle>/<method>/` — and the site redeploys. A status
+  page follows each run and says why a run didn't qualify. Runs are recorded under the
+  name and version given on the form, and method pages include the submitter's handle. Submitters pay for their method's calls and the reader.
 - **Published results are redacted** (`compactbench.redaction`). Results files from a
   hidden suite carry probe keys named after the private world's people, rules and
   tickets, and each cycle carries the method's own warning text. Published copies (ranked
@@ -113,14 +123,34 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
 - `Suite.probes_per_case`: keep a fixed, family-balanced subset of each case's probes,
   asked at every compaction, so a run can afford many more cases. The score interval
   resamples whole cases, so a mixed case's families move together.
+- **Owner dashboard** (`admin/`, Cloudflare Worker behind Cloudflare Access): website
+  submissions with stuck-run flags, ranked evaluation runs, the published leaderboard,
+  per-family difficulty, review flags for unusual submissions and a CSV export; read-only. The Worker
+  verifies the Access token itself (owner email, audience, issuer, expiry, signature).
+- **Remote MCP server** at `/mcp` on the site: `get_leaderboard`, `get_method`,
+  `compare_methods`, `list_families`, `explain_metric`, and a self-test for AIs
+  (`selftest_list`, `selftest_turns`, `selftest_questions`, `selftest_score`): compact a
+  public case with your own model and get a mechanical score (`scripts/selftest_cases.py`).
 - `scripts/run_baselines.py` (season roster, `--parallel`, `--estimate`) and
-  `scripts/season_calibration.py` (per-family ceiling and floor for a season).
+  `scripts/season_calibration.py` (per-family ceiling and floor for the Seasons page).
 - Maintainer tools: `scripts/item_analysis.py` (per-template validity, difficulty and
   discrimination), `scripts/qa_sheet.py` (a human review sheet for a suite's questions),
   `scripts/reader_robustness.py` (re-read traced artifacts with a second reader and
-  compare method orderings).
+  compare method orderings) and `scripts/failure_gallery.py`.
 - Per-probe control scores (`oracle_score`, `null_score` on each probe result), so any
   grouping has its own ceiling and floor.
+- **Website** (`web/`, Astro, deployed to Cloudflare Workers static assets): home,
+  leaderboard (sortable, per-family heat map, score-by-compaction sparklines, intervals),
+  methodology, families, submit, privacy and terms pages rendered from `docs/`, a page per
+  method (score by compaction, by family, run details), a two-method comparison, and a
+  score-versus-cost chart, plus
+  `llms.txt`, `llms-full.txt`, a Markdown twin of every page, JSON endpoints
+  (`/api/leaderboard.json`, `/api/methods/<slug>.json`, `/api/families.json`,
+  `/api/season.json`) with an OpenAPI description, a CSV download, JSON-LD, share images
+  (one per method, with its score and score by compaction), security headers with a strict
+  Content-Security-Policy, the developer docs under `/docs`, and a failure gallery of
+  real failures from public Practice runs.
+  `scripts/export_site_data.py` feeds it from the package so the site never drifts.
 - **Season 1** (`seasons/s1.yaml`): Elite 2.0.1, 4 drift cycles, 48 mixed cases of 20 probes,
   1,024-token budget (Tight), `claude-haiku-5-5` reader at high effort, fresh sampling;
   controls are measured once per season on a calibration sample rather than on every run.
@@ -159,6 +189,10 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
   `reasoning_effort` on `CompletionRequest`. The Anthropic SDK moves to 2.x (API version
   `2026-10-21`); 529 responses are now retried; refusals and empty token-limit stops raise
   clear errors. Cost catalogue refreshed.
+- The ranked evaluation workflow is rebuilt around the sandbox and started by the site:
+  an untrusted build with no secrets, an evaluation in a protected environment, and a
+  publish job that commits the results and redeploys the site. The site's internal
+  endpoints accept only that workflow's OIDC token from `main`.
 - Dependabot uses the `uv` ecosystem and batches security updates.
 
 ### Removed
@@ -166,9 +200,8 @@ to `docs/data/archive/` and v1 baseline results to `baselines/archive/`.
 - `compactbench.dsl`, `compactbench.engine`, the v1 scorer (`checks`, `contradictions`,
   `drift`, `compression`, `diagnostics`), model-generated continuation turns, and
   `benchmarks/public` / `benchmarks/schemas`.
-- The pull-request submission flow (`config.yaml`, `validate_submissions.py`,
-  `validate_submission_config.py`); ranked evaluation stays paused until the v2 pipeline
-  opens.
+- The pull-request submission flow: `submissions/_template/`, `validate_submissions.py`,
+  `validate_submission_config.py` and the separate publish workflow.
 
 ## [0.2.0] — 2026-08-24
 

@@ -10,8 +10,8 @@ Ranked evaluation uses this twice:
   to the maintainers' public key before they leave the runner.
 
 The scheme is an ECIES-style sealed box: an ephemeral X25519 key agreement,
-HKDF-SHA256, and AES-256-GCM — all available in WebCrypto too, so other
-implementations can seal with exactly the same scheme. A ``context`` string is bound into the key
+HKDF-SHA256, and AES-256-GCM — all available in WebCrypto, so the website's Worker
+seals with exactly the same scheme. A ``context`` string is bound into the key
 derivation, so a sealed value only opens for the purpose it was made for — a key
 sealed for one submission can't be pasted into another.
 """

@@ -1,0 +1,330 @@
+---
+import { Content } from "../generated/submitting.md";
+import Base from "../layouts/Base.astro";
+import { season, seasonLabel } from "../lib/data";
+
+// Optional bot check: set PUBLIC_TURNSTILE_SITE_KEY at build time (and TURNSTILE_SECRET on the Worker).
+const turnstileKey: string | undefined = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+
+const providers: [string, string][] = [
+  ["anthropic", "Anthropic"],
+  ["openai", "OpenAI"],
+  ["openrouter", "OpenRouter (hundreds of models)"],
+  ["gemini", "Google Gemini"],
+  ["groq", "Groq"],
+  ["deepseek", "DeepSeek"],
+  ["mistral", "Mistral"],
+  ["together", "Together"],
+  ["fireworks", "Fireworks"],
+  ["xai", "xAI"],
+  ["custom", "My own endpoint (OpenAI-compatible)"],
+];
+
+// Built-ins anyone can run on their own model (worker/submissions.ts REFERENCE_METHODS).
+const referenceMethods: [string, string][] = [
+  ["sectioned-summary", "Sectioned summary: Season 1's best method"],
+  ["hierarchical-summary", "Hierarchical summary: steadiest over many compactions"],
+  ["naive-summary", "Plain summary"],
+  ["structured-state", "Structured state: JSON records"],
+];
+---
+
+<Base
+  title="Submit a method"
+  description="Submit a context-compaction method for a ranked CompactBench run: sign in with GitHub, upload your method, use any model with your own API key."
+  path="/submit"
+  markdown="/submit.md"
+>
+  <section class="container section">
+    <p class="eyebrow">Submit · {seasonLabel(season.key)}</p>
+    <h1>Submit a method</h1>
+    <p class="lede">
+      Your method runs on a fresh sample of the hidden Elite set, in a sandbox, using your own API
+      keys. It takes about an hour; qualifying runs go straight onto the leaderboard. No method of your
+      own? Run a reference method on any model to put that model on the <a href="/leaderboard#by-model">By
+      model</a> board.
+    </p>
+
+    <noscript>
+      <div class="card"><p>Submitting needs JavaScript. The steps are below.</p></div>
+    </noscript>
+
+    <div class="card signin" data-signed-out hidden>
+      <p>Sign in with GitHub to submit. We only read your public profile, for attribution and rate limits.</p>
+      <a class="button primary" href="/auth/github">Sign in with GitHub</a>
+    </div>
+
+    <form class="card form" data-submit hidden>
+      <p class="muted who">Signed in as <strong data-login></strong> · <a href="/runs">My runs</a> · <button type="button" class="link" data-logout>sign out</button></p>
+
+      <fieldset>
+        <legend>Method</legend>
+        <div class="choice" role="radiogroup" aria-label="What to run">
+          <label class="check"><input type="radio" name="source" value="upload" checked data-source /> My own method</label>
+          <label class="check"><input type="radio" name="source" value="reference" data-source /> A reference method on my model</label>
+        </div>
+        <div data-reference hidden>
+          <label>Reference method
+            <select name="reference_method" disabled>
+              {referenceMethods.map(([value, label]) => <option value={value}>{label}</option>)}
+            </select>
+          </label>
+          <p class="muted small">
+            Runs the published built-in unchanged, with its default settings, so the only difference
+            between rows is the model. No code to upload.
+          </p>
+        </div>
+        <div class="upload" data-upload>
+        <div class="row">
+          <label>Name <input name="method_name" required pattern="[a-z0-9][a-z0-9._\-]{0,63}" placeholder="my-ledger" autocomplete="off" /></label>
+          <label>Version <input name="method_version" required pattern="[0-9]+\.[0-9]+\.[0-9]+" value="1.0.0" /></label>
+          <label>Class name <input name="class_name" required pattern="[A-Za-z_][A-Za-z0-9_]{0,63}" placeholder="MyCompactor" /></label>
+        </div>
+        <label>method.py
+          <input type="file" accept=".py,text/x-python" data-file />
+          <textarea name="method_py" rows="8" required placeholder="Paste method.py, or choose the file above" spellcheck="false"></textarea>
+        </label>
+        <label>requirements.txt <span class="muted">(optional; pinned, e.g. tiktoken==0.12.0)</span>
+          <textarea name="requirements" rows="3" spellcheck="false"></textarea>
+        </label>
+        <label>Method config <span class="muted">(optional JSON passed as self.config)</span>
+          <input name="method_config" placeholder='{"effort": "low"}' autocomplete="off" />
+        </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-model-legend>The model your method calls</legend>
+        <div class="row">
+          <label>Provider
+            <select name="provider" data-provider>
+              {providers.map(([value, label]) => <option value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label>Model id <input name="model" required placeholder="e.g. qwen/qwen3-235b" autocomplete="off" /></label>
+        </div>
+        <div class="row" data-custom hidden>
+          <label>Endpoint URL <input name="base_url" type="url" placeholder="https://models.example.com/v1" autocomplete="off" /></label>
+          <label>Display name <span class="muted">(optional)</span> <input name="model_label" maxlength="48" placeholder="Acme Recall v2" autocomplete="off" /></label>
+        </div>
+        <label><span data-key-label>API key for that provider</span>
+          <input name="method_key" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Grading</legend>
+        <p class="muted small">
+          A fixed reader (Anthropic's {season.reader.model}) grades every run; you pay for it — about
+          $0.50 a run. <span data-reader-note>Add an Anthropic API key for it.</span>
+        </p>
+        <label data-reader>Anthropic API key for grading
+          <input name="reader_key" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+      </fieldset>
+
+      <p class="muted small">
+        Use dedicated keys with spend limits, and revoke them after your run. Keys are sent once over
+        HTTPS and sealed immediately; only the evaluation's model proxy can open them, and your method
+        never sees one.
+      </p>
+      <label class="check"><input type="checkbox" required /> I agree to the <a href="/submission-terms">submission terms</a>, including publishing my method's source.</label>
+      {turnstileKey && <div class="cf-turnstile" data-sitekey={turnstileKey} data-theme="dark"></div>}
+      <button class="button primary" type="submit">Start a ranked run</button>
+      <p class="error" data-error role="alert" hidden></p>
+    </form>
+  </section>
+
+  {turnstileKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+
+  <section class="container prose how">
+    <h2>How it works</h2>
+    <Content />
+  </section>
+</Base>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-submit]")!;
+  const signedOut = document.querySelector<HTMLElement>("[data-signed-out]")!;
+  const error = document.querySelector<HTMLElement>("[data-error]")!;
+  const provider = form.querySelector<HTMLSelectElement>("[data-provider]")!;
+
+  fetch("/api/me").then(async (r) => {
+    if (r.ok) {
+      const me = (await r.json()) as { login: string };
+      form.querySelector("[data-login]")!.textContent = me.login;
+      form.hidden = false;
+    } else {
+      signedOut.hidden = false;
+    }
+  });
+
+  const sync = () => {
+    const custom = provider.value === "custom";
+    const anthropic = provider.value === "anthropic";
+    form.querySelector<HTMLElement>("[data-custom]")!.hidden = !custom;
+    form.querySelector<HTMLElement>("[data-key-label]")!.textContent = custom
+      ? "API key for your endpoint (optional)"
+      : "API key for that provider";
+    form.querySelector<HTMLElement>("[data-reader-note]")!.textContent = anthropic
+      ? "Your Anthropic key above pays for it unless you add a separate one."
+      : "Add an Anthropic API key for it.";
+    (form.elements.namedItem("reader_key") as HTMLInputElement).required = !anthropic;
+    (form.elements.namedItem("method_key") as HTMLInputElement).required = !custom;
+  };
+  provider.addEventListener("change", sync);
+  sync();
+
+  // Own method or a reference method: the hidden half is disabled, so it is neither
+  // required nor sent.
+  const upload = form.querySelector<HTMLElement>("[data-upload]")!;
+  const reference = form.querySelector<HTMLElement>("[data-reference]")!;
+  const syncSource = () => {
+    const useReference = form.querySelector<HTMLInputElement>("[data-source]:checked")?.value === "reference";
+    upload.hidden = useReference;
+    reference.hidden = !useReference;
+    upload.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea").forEach((el) => (el.disabled = useReference));
+    reference.querySelector("select")!.disabled = !useReference;
+    form.querySelector("[data-model-legend]")!.textContent = useReference
+      ? "The model to run it on"
+      : "The model your method calls";
+  };
+  form.querySelectorAll("[data-source]").forEach((el) => el.addEventListener("change", syncSource));
+  // /submit?reference=<method> (from the By model board) starts on that reference method.
+  const preset = new URLSearchParams(location.search).get("reference");
+  const presetOption = preset ? reference.querySelector<HTMLOptionElement>(`option[value="${CSS.escape(preset)}"]`) : null;
+  if (presetOption) {
+    form.querySelector<HTMLInputElement>('[data-source][value="reference"]')!.checked = true;
+    presetOption.selected = true;
+  }
+  syncSource();
+
+  form.querySelector<HTMLInputElement>("[data-file]")!.addEventListener("change", async (event) => {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (file) (form.elements.namedItem("method_py") as HTMLTextAreaElement).value = await file.text();
+  });
+
+  form.querySelector("[data-logout]")!.addEventListener("click", async () => {
+    await fetch("/auth/logout", { method: "POST" });
+    location.reload();
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    error.hidden = true;
+    const { "cf-turnstile-response": turnstile_token, source: _source, ...data } = Object.fromEntries(new FormData(form).entries());
+    const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, turnstile_token }),
+      });
+      const body = (await response.json()) as { error?: string; status_url?: string };
+      if (!response.ok || !body.status_url) throw new Error(body.error ?? "Submission failed.");
+      location.href = body.status_url;
+    } catch (e) {
+      error.textContent = (e as Error).message;
+      error.hidden = false;
+      button.disabled = false;
+      (window as { turnstile?: { reset(): void } }).turnstile?.reset();
+    }
+  });
+</script>
+
+<style>
+  .signin {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+  .signin p {
+    margin: 0;
+  }
+  .form {
+    margin-top: 1.5rem;
+    display: grid;
+    gap: 18px;
+    max-width: 860px;
+  }
+  fieldset {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px 6px;
+    display: grid;
+    gap: 12px;
+  }
+  legend {
+    padding: 0 6px;
+    font-weight: 600;
+  }
+  label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.9rem;
+  }
+  .row {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  }
+  input,
+  select,
+  textarea {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 0.55em 0.7em;
+    font: inherit;
+  }
+  textarea {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+  }
+  input[type="file"] {
+    padding: 0.4em;
+  }
+  .check {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .choice {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+  }
+  .upload,
+  [data-reference] {
+    display: grid;
+    gap: 12px;
+  }
+  .small {
+    font-size: 0.85rem;
+    margin: 0;
+  }
+  .error {
+    color: var(--bad);
+    margin: 0;
+  }
+  .who {
+    margin: 0;
+  }
+  .link {
+    background: none;
+    border: 0;
+    color: var(--cyan);
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+  }
+  /* The embedded guide's own title repeats this section's heading. */
+  .how :global(h1) {
+    display: none;
+  }
+</style>

@@ -1,0 +1,106 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Run status" description="Status of a ranked CompactBench run." path="/status">
+  <section class="container section">
+    <p class="eyebrow">Ranked run</p>
+    <h1 data-title>Run status</h1>
+    <div class="card" data-card>
+      <p class="muted" data-loading>Loading…</p>
+      <dl class="facts" data-facts hidden>
+        <div><dt class="muted">Status</dt><dd data-status></dd></div>
+        <div><dt class="muted">Method</dt><dd class="mono" data-method></dd></div>
+        <div><dt class="muted">Model</dt><dd class="mono" data-model></dd></div>
+        <div><dt class="muted">Score</dt><dd class="mono" data-score>—</dd></div>
+        <div><dt class="muted">Submitted</dt><dd class="mono" data-created></dd></div>
+      </dl>
+      <p data-message></p>
+    </div>
+    <ol class="steps muted">
+      <li data-step="queued">Queued</li>
+      <li data-step="building">Building your method</li>
+      <li data-step="running">Running on a fresh hidden sample</li>
+      <li data-step="published">Published</li>
+    </ol>
+    <p class="muted"><a href="/runs">All my runs</a></p>
+    <noscript><p>This page needs JavaScript to show live status.</p></noscript>
+  </section>
+</Base>
+
+<script>
+  type View = {
+    status: string;
+    message: string | null;
+    score: number | null;
+    handle: string;
+    method_name: string;
+    method_version: string;
+    model: string;
+    model_label: string | null;
+    created_at: string;
+  };
+  const id = new URLSearchParams(location.search).get("id") ?? "";
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
+  const order = ["queued", "building", "running", "published"];
+  const words: Record<string, string> = {
+    queued: "Queued",
+    building: "Building your method",
+    running: "Running — this takes about an hour",
+    published: "Published on the leaderboard",
+    failed: "Failed",
+    rejected: "Finished, but didn't qualify",
+  };
+
+  async function refresh(): Promise<boolean> {
+    if (!/^[a-z0-9]{12,32}$/.test(id)) {
+      $("[data-loading]").textContent = "No run id in this link.";
+      return false;
+    }
+    const response = await fetch(`/api/submissions/${id}`);
+    if (!response.ok) {
+      $("[data-loading]").textContent = "Run not found.";
+      return false;
+    }
+    const v = (await response.json()) as View;
+    $("[data-loading]").hidden = true;
+    $("[data-facts]").hidden = false;
+    $("[data-title]").textContent = `${v.method_name} ${v.method_version}`;
+    $("[data-status]").textContent = words[v.status] ?? v.status;
+    $("[data-method]").textContent = `@${v.handle} / ${v.method_name}`;
+    $("[data-model]").textContent = v.model_label ? `${v.model_label} (${v.model})` : v.model;
+    $("[data-score]").textContent = v.score === null ? "—" : (v.score * 100).toFixed(1);
+    $("[data-created]").textContent = v.created_at.slice(0, 16).replace("T", " ") + " UTC";
+    $("[data-message]").textContent = v.message ?? "";
+    const reached = order.indexOf(v.status);
+    for (const li of document.querySelectorAll<HTMLElement>("[data-step]")) {
+      li.classList.toggle("done", reached >= order.indexOf(li.dataset.step ?? ""));
+    }
+    return ["queued", "building", "running"].includes(v.status);
+  }
+
+  async function loop() {
+    if (await refresh()) setTimeout(loop, 15000);
+  }
+  loop();
+</script>
+
+<style>
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+    gap: 12px 24px;
+    margin: 0 0 8px;
+  }
+  .facts dd {
+    margin: 2px 0 0;
+  }
+  .steps {
+    margin-top: 1.5rem;
+    display: grid;
+    gap: 6px;
+  }
+  .steps li.done {
+    color: var(--cyan);
+  }
+</style>

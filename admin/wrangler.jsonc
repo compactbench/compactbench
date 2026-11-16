@@ -1,0 +1,21 @@
+// admin.compactbench.com — the owner's dashboard (read-only).
+// Put it behind a Cloudflare Access application for admin.compactbench.com with a policy
+// that allows only the owner's email; the Worker re-verifies the Access token itself.
+// Set at deploy time, not in this file:
+//   wrangler secret put OWNER_EMAIL     (the one email allowed in)
+//   wrangler secret put ACCESS_AUD      (the Access application's AUD tag)
+//   wrangler secret put GITHUB_TOKEN    (fine-grained, read-only: actions)
+// DB is the site's submissions database (same id as web/wrangler.jsonc); this Worker only reads it.
+{
+  "name": "compactbench-admin",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "admin.compactbench.com", "custom_domain": true }],
+  "d1_databases": [{ "binding": "DB", "database_name": "compactbench", "database_id": "b624f5e0-f5ab-42d5-8247-4c514d4c19ea" }],
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "compactbench.cloudflareaccess.com",
+    "GITHUB_REPO": "compactbench/compactbench",
+    "SITE_URL": "https://compactbench.com"
+  }
+}

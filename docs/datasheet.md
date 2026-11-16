@@ -84,7 +84,7 @@ Claude-written summaries.
 
 **How is it distributed?** As an Apache-2.0 Python package (`pip install compactbench`) that
 generates the public suites locally, plus the public leaderboard data
-(`docs/data/leaderboard.json` in the repository). Results files hold scores and
+(`/api/leaderboard.json`, `/llms.txt`, a remote MCP server). Results files hold scores and
 settings only, never conversation text; published hidden-set results also have their
 question keys hashed, so they reveal nothing of the private worlds.
 

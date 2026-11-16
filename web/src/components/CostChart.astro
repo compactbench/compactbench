@@ -1,0 +1,111 @@
+---
+// Score against what the method spent: model tokens per case, log scale.
+// Methods that make no model calls sit at the left edge.
+import { pct, slugOf, type Row } from "../lib/data";
+
+interface Props {
+  rows: Row[];
+}
+
+const { rows } = Astro.props;
+const points = rows.map((r) => ({
+  row: r,
+  tokens: r.method_tokens && r.cases ? r.method_tokens / r.cases : 0,
+}));
+const paid = points.filter((p) => p.tokens > 0).map((p) => p.tokens);
+const lo = paid.length ? Math.log10(Math.min(...paid)) - 0.2 : 3;
+const hi = paid.length ? Math.log10(Math.max(...paid)) + 0.2 : 6;
+const w = 640;
+const h = 300;
+const pad = { l: 44, r: 20, t: 16, b: 40 };
+const x = (t: number) =>
+  t <= 0
+    ? pad.l + 6
+    : pad.l + 30 + ((Math.log10(t) - lo) / Math.max(hi - lo, 0.1)) * (w - pad.l - pad.r - 40);
+const y = (v: number) => pad.t + (1 - v) * (h - pad.t - pad.b);
+const fmt = (t: number) => (t >= 1e6 ? `${(t / 1e6).toFixed(1)}M` : `${Math.round(t / 1000)}k`);
+// Nudge labels apart when two points sit close together.
+const labelY = new Map<Row, number>();
+const placed: { x: number; y: number }[] = [];
+for (const { row, tokens } of [...points].sort((a, b) => b.row.score - a.row.score)) {
+  let ly = y(row.score) + 4;
+  while (placed.some((p) => Math.abs(p.x - x(tokens)) < 120 && Math.abs(p.y - ly) < 14)) ly += 14;
+  placed.push({ x: x(tokens), y: ly });
+  labelY.set(row, ly);
+}
+// 1-2-5 ticks inside the plotted range, so a range under one decade still gets a scale.
+const ticks = paid.length
+  ? Array.from({ length: Math.ceil(hi) - Math.floor(lo) + 1 }, (_, i) => Math.floor(lo) + i)
+      .flatMap((k) => [1, 2, 5].map((m) => m * 10 ** k))
+      .filter((t) => Math.log10(t) >= lo - 1e-9 && Math.log10(t) <= hi + 1e-9)
+  : [];
+---
+
+<figure class="chart card">
+  <figcaption>
+    <h2>Score vs. cost</h2>
+    <p class="muted">Model tokens the method spent per case (log scale). Up and to the left is better.</p>
+  </figcaption>
+  <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Score against model tokens spent per case">
+    {
+      [0, 0.25, 0.5, 0.75, 1].map((t) => (
+        <g>
+          <line x1={pad.l} x2={w - pad.r} y1={y(t)} y2={y(t)} class="grid" />
+          <text x={pad.l - 8} y={y(t) + 4} class="tick" text-anchor="end">{t * 100}</text>
+        </g>
+      ))
+    }
+    {ticks.map((t) => <text x={x(t)} y={h - 14} class="tick" text-anchor="middle">{fmt(t)}</text>)}
+    <text x={pad.l + 6} y={h - 14} class="tick">free</text>
+    {
+      points.map(({ row, tokens }) => (
+        <a href={`/methods/${slugOf(row)}`}>
+          <circle cx={x(tokens)} cy={y(row.score)} r="6" class={`pt ${row.row_kind}`}>
+            <title>{`${row.method_name}: ${pct(row.score)} at ${tokens ? fmt(tokens) : "no"} tokens per case`}</title>
+          </circle>
+          <text x={x(tokens) + 9} y={labelY.get(row)} class="label">{row.method_name}</text>
+        </a>
+      ))
+    }
+  </svg>
+</figure>
+
+<style>
+  .chart {
+    margin: 24px 0 0;
+  }
+  figcaption h2 {
+    font-size: 1.1rem;
+    margin-bottom: 0.2em;
+  }
+  figcaption p {
+    font-size: 0.85rem;
+  }
+  svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .grid {
+    stroke: var(--border);
+  }
+  .tick {
+    fill: var(--muted);
+    font: 11px var(--mono);
+  }
+  .label {
+    fill: var(--text);
+    font: 11px var(--font);
+  }
+  .pt {
+    fill: var(--blue);
+    stroke: var(--bg);
+    stroke-width: 2;
+  }
+  .pt.submission {
+    fill: var(--violet);
+  }
+  .pt.control {
+    fill: var(--muted);
+  }
+</style>

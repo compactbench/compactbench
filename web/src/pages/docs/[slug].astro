@@ -1,0 +1,17 @@
+---
+import type { MarkdownInstance } from "astro";
+import Doc from "../../layouts/Doc.astro";
+import { docs, type DocPage } from "../../lib/docs";
+
+export function getStaticPaths() {
+  return docs.map((doc) => ({ params: { slug: doc.slug }, props: { doc } }));
+}
+
+const { doc } = Astro.props as { doc: DocPage };
+const modules = import.meta.glob<MarkdownInstance<Record<string, unknown>>>("../../generated/docs/*.md", { eager: true });
+const { Content } = modules[`../../generated/docs/${doc.slug}.md`]!;
+---
+
+<Doc title={doc.title} eyebrow="Docs" path={`/docs/${doc.slug}`} description={doc.description}>
+  <Content />
+</Doc>

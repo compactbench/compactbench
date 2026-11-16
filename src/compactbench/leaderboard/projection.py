@@ -12,11 +12,25 @@ from typing import TypedDict
 from compactbench.contracts import RunResult
 from compactbench.leaderboard.ranking import rank_key, tier_for
 
+#: Built-in methods anyone can run on their own model; the by-model board compares
+#: models on these. Each maps to the version a run of it records.
+REFERENCE_METHODS: dict[str, str] = {
+    "sectioned-summary": "1.0.0",
+    "hierarchical-summary": "2.0.0",
+    "naive-summary": "2.0.0",
+    "structured-state": "2.0.0",
+}
+
 
 class LeaderboardRow(TypedDict):
-    """Public row shape. Keep this stable — published leaderboard data uses it."""
+    """Public row shape. Keep this stable — the website and API read it."""
 
     rank: int | None
+    # Set when the row ran a reference method (a key of REFERENCE_METHODS) unchanged:
+    # the by-model board. ``model_rank`` ranks it among models on the same method;
+    # ``rank`` stays the method board's (None for these rows).
+    reference_method: str | None
+    model_rank: int | None
     # "submission" — ranked. "baseline" — a maintainer reference run of a
     # built-in or provider-native method; shown, never ranked. "control" —
     # oracle / null / truncate-last-n; shown, never ranked.
@@ -65,6 +79,7 @@ def project_row(
     published_at: datetime,
     row_kind: str = "submission",
     model_label: str | None = None,
+    reference_method: str | None = None,
 ) -> LeaderboardRow:
     """Turn a :class:`RunResult` into a :class:`LeaderboardRow` (``rank`` assigned later)."""
     m = run.metrics
@@ -74,8 +89,17 @@ def project_row(
         for cycle in case.cycles
         if cycle.compactor_usage is not None
     )
+    if reference_method is not None and (
+        REFERENCE_METHODS.get(reference_method) != run.method_version
+        or run.method_name != reference_method
+    ):
+        raise ValueError(
+            f"{run.method_name} {run.method_version} is not reference method {reference_method}"
+        )
     return LeaderboardRow(
         rank=None,
+        reference_method=reference_method,
+        model_rank=None,
         row_kind=row_kind,
         method_name=run.method_name,
         method_version=run.method_version,
@@ -155,16 +179,33 @@ def rank_rows(rows: list[LeaderboardRow]) -> list[LeaderboardRow]:
     ordered: list[LeaderboardRow] = []
     for segment in sorted(segments):
         members = segments[segment]
-        competing = sorted((r for r in members if r["row_kind"] == "submission"), key=_key)
-        reference = sorted((r for r in members if r["row_kind"] != "submission"), key=_key)
+        competing = sorted(
+            (
+                r
+                for r in members
+                if r["row_kind"] == "submission" and r.get("reference_method") is None
+            ),
+            key=_key,
+        )
+        others = sorted((r for r in members if r not in competing), key=_key)
         for row in competing:
             ranked: LeaderboardRow = dict(row)  # pyright: ignore[reportAssignmentType]
-            ranked["rank"] = 1 + sum(
-                1 for other in competing if other["score_ci_low"] > row["score_ci_high"]
-            )
+            ranked["rank"] = _rank_among(row, competing)
             ordered.append(ranked)
-        for row in reference:
+        for row in others:
             unranked: LeaderboardRow = dict(row)  # pyright: ignore[reportAssignmentType]
             unranked["rank"] = None
             ordered.append(unranked)
+        # The by-model board: models compared on each reference method, baselines included.
+        for row in ordered:
+            method = row.get("reference_method")
+            if method is None or _segment(row) != segment:
+                continue
+            peers = [r for r in members if r.get("reference_method") == method]
+            row["model_rank"] = _rank_among(row, peers)
     return ordered
+
+
+def _rank_among(row: LeaderboardRow, rows: list[LeaderboardRow]) -> int:
+    """One plus the rows whose whole interval lies above ``row``'s."""
+    return 1 + sum(1 for other in rows if other["score_ci_low"] > row["score_ci_high"])

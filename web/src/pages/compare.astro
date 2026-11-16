@@ -1,0 +1,166 @@
+---
+import Base from "../layouts/Base.astro";
+import { families, modelName, ordered, pct, rows, slugOf } from "../lib/data";
+
+const list = ordered(rows);
+const payload = list.map((r) => ({
+  id: slugOf(r),
+  name: `${r.method_name} ${r.method_version} · ${modelName(r)}`,
+  score: r.score,
+  by_family: r.by_family,
+  by_cycle: r.by_cycle,
+}));
+const familyList = families.map((f) => ({ key: f.key, title: f.title }));
+---
+
+<Base
+  title="Compare methods"
+  description="Compare two context compaction methods side by side: overall score, each failure family, and score after every compaction."
+  path="/compare"
+>
+  <section class="container section">
+    <p class="eyebrow">Compare</p>
+    <h1>Compare two methods</h1>
+    {
+      list.length < 2 ? (
+        <p class="lede">Comparisons open once at least two methods are on the leaderboard.</p>
+      ) : (
+        <>
+          <form class="pick" data-compare>
+            <label>
+              <span class="muted">Method A</span>
+              <select name="a">
+                {list.map((r, i) => <option value={slugOf(r)} selected={i === 0}>{r.method_name} · {modelName(r)}</option>)}
+              </select>
+            </label>
+            <label>
+              <span class="muted">Method B</span>
+              <select name="b">
+                {list.map((r, i) => <option value={slugOf(r)} selected={i === 1}>{r.method_name} · {modelName(r)}</option>)}
+              </select>
+            </label>
+          </form>
+          <div class="card" data-result hidden />
+          <noscript>
+            <p class="muted">Without JavaScript, here is every method by family:</p>
+          </noscript>
+          <div class="static card" data-static>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Score</th>
+                  {families.map((f) => <th>{f.title.split(" ")[0]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr>
+                    <td><a href={`/methods/${slugOf(r)}`}>{r.method_name}</a></td>
+                    <td class="mono">{pct(r.score)}</td>
+                    {families.map((f) => <td class="mono">{pct(r.by_family[f.key], 0)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <script type="application/json" id="compare-data" set:html={JSON.stringify({ rows: payload, families: familyList })} />
+        </>
+      )
+    }
+  </section>
+</Base>
+
+<script>
+  type Entry = { id: string; name: string; score: number; by_family: Record<string, number>; by_cycle: number[] };
+  const node = document.getElementById("compare-data");
+  const form = document.querySelector<HTMLFormElement>("[data-compare]");
+  const out = document.querySelector<HTMLElement>("[data-result]");
+  if (node && form && out) {
+    const data = JSON.parse(node.textContent ?? "{}") as { rows: Entry[]; families: { key: string; title: string }[] };
+    const byId = new Map(data.rows.map((r) => [r.id, r]));
+    const pct = (v: number | undefined) => (v === undefined ? "—" : (v * 100).toFixed(0));
+    const params = new URLSearchParams(location.search);
+    for (const name of ["a", "b"] as const) {
+      const want = params.get(name);
+      const select = form.elements.namedItem(name) as HTMLSelectElement;
+      if (want && byId.has(want)) select.value = want;
+    }
+    const render = () => {
+      const a = byId.get((form.elements.namedItem("a") as HTMLSelectElement).value);
+      const b = byId.get((form.elements.namedItem("b") as HTMLSelectElement).value);
+      if (!a || !b) return;
+      history.replaceState(null, "", `?a=${a.id}&b=${b.id}`);
+      const rows = [
+        ["Overall", a.score, b.score],
+        ...data.families.map((f) => [f.title, a.by_family[f.key], b.by_family[f.key]] as const),
+      ];
+      const cycles = Math.max(a.by_cycle.length, b.by_cycle.length);
+      out.hidden = false;
+      out.replaceChildren();
+      const table = document.createElement("table");
+      table.className = "table";
+      const head = table.createTHead().insertRow();
+      for (const text of ["", a.name, b.name]) head.appendChild(document.createElement("th")).textContent = text;
+      const body = table.createTBody();
+      for (const [label, x, y] of rows) {
+        const tr = body.insertRow();
+        tr.insertCell().textContent = String(label);
+        for (const [v, other] of [[x, y], [y, x]] as const) {
+          const td = tr.insertCell();
+          td.className = "mono";
+          td.textContent = pct(v as number | undefined);
+          if ((v ?? 0) > (other ?? 0)) td.classList.add("win");
+        }
+      }
+      for (let i = 0; i < cycles; i++) {
+        const tr = body.insertRow();
+        tr.insertCell().textContent = `After compaction ${i + 1}`;
+        for (const v of [a.by_cycle[i], b.by_cycle[i]]) {
+          const td = tr.insertCell();
+          td.className = "mono muted";
+          td.textContent = pct(v);
+        }
+      }
+      out.appendChild(table);
+      document.querySelector<HTMLElement>("[data-static]")?.setAttribute("hidden", "");
+    };
+    form.addEventListener("change", render);
+    render();
+  }
+</script>
+
+<style>
+  .pick {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 1.5rem 0;
+  }
+  .pick label {
+    display: grid;
+    gap: 6px;
+    min-width: min(100%, 320px);
+  }
+  select {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 0.55em 0.7em;
+    font: inherit;
+  }
+  .static,
+  [data-result] {
+    overflow-x: auto;
+  }
+  :global(td.win) {
+    color: var(--cyan);
+    font-weight: 700;
+  }
+  :global([data-result] th) {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+</style>

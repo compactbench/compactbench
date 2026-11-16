@@ -1,0 +1,50 @@
+---
+import Base from "../../layouts/Base.astro";
+import { docs } from "../../lib/docs";
+
+const reference = [
+  { href: "/methodology", title: "Methodology", description: "How cases are built, how the compaction loop runs and how answers are scored." },
+  { href: "/families", title: "Failure families", description: "The eight kinds of compaction failure every case mixes together." },
+  { href: "/failures", title: "Failure gallery", description: "Real failures from public Practice runs, with what the conversation said." },
+  { href: "/submitting", title: "Submitting", description: "Get a ranked score: sign in with GitHub, upload your method, bring your keys." },
+  { href: "/datasheet", title: "Datasheet", description: "What the benchmark contains, how it was made, and its known limits." },
+  { href: "/data", title: "Data & API", description: "JSON, CSV, OpenAPI, llms.txt and the MCP server." },
+];
+---
+
+<Base title="Docs" description="CompactBench documentation: install, write and benchmark a compaction method, integrations, the Elite program and FAQ." path="/docs">
+  <section class="container section">
+    <p class="eyebrow">Docs</p>
+    <h1>Documentation</h1>
+    <p class="lede">Everything you need to benchmark a compaction method locally, then get it ranked.</p>
+    <h2 class="group">Guides</h2>
+    <ul class="cards">
+      {docs.map((d) => (
+        <li class="card"><a href={`/docs/${d.slug}`}><strong>{d.title}</strong></a><p class="muted">{d.description}</p></li>
+      ))}
+    </ul>
+    <h2 class="group">Reference</h2>
+    <ul class="cards">
+      {reference.map((d) => (
+        <li class="card"><a href={d.href}><strong>{d.title}</strong></a><p class="muted">{d.description}</p></li>
+      ))}
+    </ul>
+  </section>
+</Base>
+
+<style>
+  .group {
+    margin-top: 2rem;
+  }
+  .cards {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+    gap: 14px;
+  }
+  .cards p {
+    margin: 6px 0 0;
+    font-size: 0.92rem;
+  }
+</style>

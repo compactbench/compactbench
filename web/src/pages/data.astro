@@ -1,0 +1,77 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="Data & API"
+  description="CompactBench's public data: leaderboard JSON, families and season settings, Markdown pages, llms.txt and a remote MCP server for AI assistants."
+  path="/data"
+>
+  <section class="container section prose">
+    <p class="eyebrow">Data & API</p>
+    <h1>Use the data</h1>
+    <p class="lede">
+      Everything on the leaderboard is available as plain files. No key, no sign-up, no rate limit
+      beyond fair use. Licensed Apache 2.0.
+    </p>
+
+    <h2>JSON</h2>
+    <ul>
+      <li><a href="/api/leaderboard.json"><code>/api/leaderboard.json</code></a> — every published row: scores, intervals, per-family and per-compaction scores, settings.</li>
+      <li><a href="/api/families.json"><code>/api/families.json</code></a> — the failure families.</li>
+      <li><a href="/api/season.json"><code>/api/season.json</code></a> — the current season's pinned settings.</li>
+      <li><code>/api/methods/&lt;slug&gt;.json</code> — one row, the same slug as its <code>/methods/&lt;slug&gt;</code> page.</li>
+      <li><a href="/api/leaderboard.csv"><code>/api/leaderboard.csv</code></a> — the leaderboard as CSV, one column per family.</li>
+      <li><a href="/api/openapi.json"><code>/api/openapi.json</code></a> — an OpenAPI 3.1 description of all of the above.</li>
+    </ul>
+
+    <h2>For AI assistants</h2>
+    <ul>
+      <li><a href="/llms.txt"><code>/llms.txt</code></a> and <a href="/llms-full.txt"><code>/llms-full.txt</code></a> — a map of the site, and every page in one file.</li>
+      <li>Every content page has a Markdown twin: <a href="/methodology.md"><code>/methodology.md</code></a>, <a href="/leaderboard.md"><code>/leaderboard.md</code></a>, …</li>
+      <li>
+        A remote MCP server at <code>https://compactbench.com/mcp</code> (Streamable HTTP, read-only) with tools
+        <code>get_leaderboard</code>, <code>get_method</code>, <code>compare_methods</code>,
+        <code>list_families</code> and <code>explain_metric</code>.
+      </li>
+      <li>
+        <strong>A self-test for AIs</strong>, on the same server: <code>selftest_list</code>,
+        <code>selftest_turns</code>, <code>selftest_questions</code> and <code>selftest_score</code>. An
+        assistant compacts a public CompactBench conversation with its own model, cycle by cycle, answers
+        multiple-choice questions from its memory, and gets a score overall, after each compaction and per
+        failure family, with what it missed. Scoring is mechanical, so nothing runs on our side. It's
+        self-reported practice, not a leaderboard result.
+      </li>
+    </ul>
+    <pre><code>{`# Add it to Claude Code
+claude mcp add --transport http compactbench https://compactbench.com/mcp
+
+# Then ask, for example:
+#   Take the CompactBench self-test quick-decision-override, compacting the way you
+#   normally would, and tell me what you forgot.`}</code></pre>
+
+    <h2>Run it yourself</h2>
+    <p>
+      The benchmark is a Python package. Results files hold scores and settings only, so they're safe
+      to share; traces hold everything and stay wherever you write them.
+    </p>
+    <pre><code>{`pip install compactbench
+compactbench run --method built-in:hierarchical-summary --suite practice \\
+  --provider anthropic --model claude-haiku-5-5 --reader-effort high --controls`}</code></pre>
+    <ul>
+      <li>
+        The public suites as a dataset on Hugging Face:
+        <a href="https://huggingface.co/datasets/compactbench/compactbench">compactbench/compactbench</a>
+        (<code>load_dataset("compactbench/compactbench", "practice")</code>).
+      </li>
+      <li>
+        A Claude Code plugin with skills to write compact instructions and to benchmark a compaction
+        method: <code>/plugin install compactbench --marketplace compactbench/compactbench</code>.
+      </li>
+      <li>
+        <code>compactbench check</code> and a GitHub Action that fail a pull request when your method
+        starts forgetting more, on your own keys.
+      </li>
+    </ul>
+  </section>
+</Base>

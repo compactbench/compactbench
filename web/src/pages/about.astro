@@ -1,0 +1,39 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="About"
+  description="CompactBench is an open, mechanically scored benchmark for AI context compaction, run in the open with a hidden ranked set."
+  path="/about"
+>
+  <section class="container section prose">
+    <p class="eyebrow">About</p>
+    <h1>Why CompactBench exists</h1>
+    <p class="lede">
+      Every long-running AI agent eventually runs out of context and compacts: it replaces its history
+      with a summary and keeps going. Whatever the summary drops is gone for good — a rule, a decision,
+      who owns what, the exact number that mattered.
+    </p>
+    <p>
+      CompactBench measures that loss directly. It generates long working sessions, has a method
+      compact them again and again under a fixed budget, and asks a fixed reader model what survived.
+      Answers are checked mechanically, every score sits between its own ceiling and floor, and ranked
+      runs use a hidden generator sampled fresh each time.
+    </p>
+    <h2>Principles</h2>
+    <ul>
+      <li><strong>Measure the loop.</strong> Compaction happens repeatedly; so does the test.</li>
+      <li><strong>No judge.</strong> Every answer is an option or an exact value.</li>
+      <li><strong>Hard but fair.</strong> Every question is answerable from the full conversation and not guessable from nothing.</li>
+      <li><strong>Open by default.</strong> The code, the public suites and the scoring are open source; only the ranked generator is private, so it can't be memorized.</li>
+    </ul>
+    <h2>Get involved</h2>
+    <p>
+      Benchmark your method with the public <code>practice</code> suite, <a href="/submit">submit it</a>
+      for a ranked run, or contribute on <a href="https://github.com/compactbench/compactbench">GitHub</a>.
+      Questions and press: <a href="https://github.com/compactbench/compactbench/issues">open an issue</a>, or
+      for anything private, <a href="https://github.com/compactbench/compactbench/security/advisories/new">send a private report</a>.
+    </p>
+  </section>
+</Base>

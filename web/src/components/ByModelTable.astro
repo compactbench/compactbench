@@ -1,0 +1,144 @@
+---
+import { byModel, pct, referenceMethods, slugOf, type Row } from "../lib/data";
+
+interface Props {
+  rows: Row[];
+}
+
+const lines = byModel(Astro.props.rows);
+// Only the reference methods someone has run get a column.
+const methods = referenceMethods.filter((m) => lines.some((line) => line.cells[m.key]));
+---
+
+<div class="wrap">
+  <table class="board">
+    <caption class="sr-only">
+      Models compared on the same published compaction methods. Each cell is the score with its 95%
+      interval and the model's rank among models on that method.
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col" class="left">Model</th>
+        {methods.map((m) => <th scope="col">{m.title}</th>)}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        lines.map((line) => (
+          <tr>
+            <th scope="row" class="left model">
+              <span class="name">{line.model}</span>
+              {line.custom && <span class="badge">custom endpoint</span>}
+              <span class="sub muted mono">
+                {line.provider}
+                {line.by ? ` · ${line.by}` : ""}
+              </span>
+            </th>
+            {methods.map((m) => {
+              const row = line.cells[m.key];
+              return row ? (
+                <td class="mono score">
+                  <a href={`/methods/${slugOf(row)}`}>
+                    <strong>{pct(row.score)}</strong>
+                    {row.model_rank && <span class="rank">#{row.model_rank}</span>}
+                  </a>
+                  <span class="ci muted">
+                    {pct(row.score_ci_low)}–{pct(row.score_ci_high)}
+                  </span>
+                </td>
+              ) : (
+                <td class="mono muted">—</td>
+              );
+            })}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .board {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  th,
+  td {
+    padding: 0.7em 0.75em;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+    white-space: nowrap;
+  }
+  thead th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--surface-2);
+  }
+  .left {
+    text-align: left;
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  tbody tr:hover {
+    background: rgb(59 130 246 / 0.05);
+  }
+  .model .name {
+    font-weight: 600;
+    margin-right: 0.5em;
+  }
+  .model .sub {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    margin-top: 2px;
+  }
+  .score a {
+    color: var(--text);
+  }
+  .score strong {
+    font-size: 1.05rem;
+  }
+  .rank {
+    margin-left: 0.4em;
+    font-size: 0.72rem;
+    color: var(--cyan);
+  }
+  .ci {
+    display: block;
+    font-size: 0.72rem;
+  }
+  /* Phones: keep the model column pinned while the method columns scroll sideways. */
+  @media (max-width: 640px) {
+    th,
+    td {
+      padding: 0.6em 0.5em;
+    }
+    .model {
+      white-space: normal;
+      min-width: 8em;
+      max-width: 10em;
+      overflow-wrap: anywhere;
+    }
+    tbody th.left,
+    thead th.left {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: var(--surface);
+    }
+    thead th.left {
+      background: var(--surface-2);
+    }
+  }
+</style>

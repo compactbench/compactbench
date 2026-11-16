@@ -130,3 +130,23 @@ jobs:
         with:
           name: dist
           path: dist/
+
+  workers:
+    name: Workers (MCP server, owner dashboard)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      # Both test suites use only Node's built-in test runner; no install needed.
+      - name: MCP server tests
+        run: node --test web/worker/*.test.ts
+
+      - name: Owner dashboard tests
+        run: node --test admin/test/*.test.ts

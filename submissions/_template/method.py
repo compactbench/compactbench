@@ -17,7 +17,7 @@ through Ollama, a hosted one, or your own OpenAI-compatible server:
         --provider ollama --model qwen2.5:7b-instruct --controls --output results.jsonl
     compactbench qualify --results results.jsonl
 
-Ranked submissions are paused while the v2 evaluation pipeline is finished.
+Then submit it on https://compactbench.com/submit for a ranked run.
 
 Full API docs: docs/writing-a-compactor.md in https://github.com/compactbench/compactbench
 """

@@ -1,0 +1,207 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="My runs"
+  description="Your ranked CompactBench runs: status, score and details, after signing in with GitHub."
+  path="/runs"
+>
+  <meta slot="head" name="robots" content="noindex" />
+  <section class="container section">
+    <p class="eyebrow">Ranked runs</p>
+    <h1>My runs</h1>
+
+    <div class="card signin" data-signed-out hidden>
+      <p>Sign in with GitHub to see the runs you've submitted. We only read your public profile.</p>
+      <a class="button primary" href="/auth/github?next=/runs">Sign in with GitHub</a>
+    </div>
+
+    <div data-signed-in hidden>
+      <p class="muted who">
+        Signed in as <strong data-login></strong> · <a href="/submit">Start a new run</a> ·
+        <button type="button" class="link" data-logout>sign out</button>
+      </p>
+      <p class="card muted" data-empty hidden>
+        No runs yet. <a href="/submit">Submit a method</a>, or run a reference method on a model of your choice.
+      </p>
+      <div class="wrap" data-table hidden>
+        <table class="runs">
+          <caption class="sr-only">Your ranked runs, newest first.</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="left">Method</th>
+              <th scope="col" class="left">Model</th>
+              <th scope="col" class="left">Status</th>
+              <th scope="col">Score</th>
+              <th scope="col">Submitted</th>
+            </tr>
+          </thead>
+          <tbody data-rows></tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="error" data-error role="alert" hidden></p>
+    <noscript><p>This page needs JavaScript to load your runs.</p></noscript>
+  </section>
+</Base>
+
+<script>
+  type Run = {
+    id: string;
+    method_name: string;
+    method_version: string;
+    model: string;
+    model_label: string | null;
+    status: string;
+    score: number | null;
+    created_at: string;
+    status_url: string;
+  };
+  const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
+  const words: Record<string, string> = {
+    queued: "Queued",
+    building: "Building",
+    running: "Running",
+    published: "Published",
+    failed: "Failed",
+    rejected: "Didn't qualify",
+  };
+  const active = new Set(["queued", "building", "running"]);
+
+  function cell(text: string, className = ""): HTMLTableCellElement {
+    const td = document.createElement("td");
+    td.textContent = text;
+    if (className) td.className = className;
+    return td;
+  }
+
+  function render(runs: Run[]) {
+    const rows = $("[data-rows]");
+    rows.replaceChildren();
+    $("[data-empty]").hidden = runs.length > 0;
+    $("[data-table]").hidden = runs.length === 0;
+    for (const run of runs) {
+      const tr = document.createElement("tr");
+      const method = document.createElement("td");
+      method.className = "left";
+      const link = document.createElement("a");
+      link.href = run.status_url;
+      link.textContent = run.method_name;
+      method.append(link, ` ${run.method_version}`);
+      tr.append(method);
+      tr.append(cell(run.model_label ? `${run.model_label} (${run.model})` : run.model, "left mono"));
+      const status = cell(words[run.status] ?? run.status, `left status ${run.status}`);
+      tr.append(status);
+      tr.append(cell(run.score === null ? "—" : (run.score * 100).toFixed(1), "mono"));
+      tr.append(cell(run.created_at.slice(0, 16).replace("T", " "), "mono muted"));
+      rows.append(tr);
+    }
+  }
+
+  async function load(): Promise<boolean> {
+    const response = await fetch("/api/me/submissions");
+    if (response.status === 401) {
+      $("[data-signed-out]").hidden = false;
+      $("[data-signed-in]").hidden = true;
+      return false;
+    }
+    if (!response.ok) {
+      $("[data-error]").textContent = "Couldn't load your runs. Please try again.";
+      $("[data-error]").hidden = false;
+      return false;
+    }
+    const body = (await response.json()) as { login: string; submissions: Run[] };
+    $("[data-login]").textContent = body.login;
+    $("[data-signed-in]").hidden = false;
+    render(body.submissions);
+    return body.submissions.some((r) => active.has(r.status));
+  }
+
+  async function loop() {
+    // Keep the table current while a run is still in progress.
+    if (await load()) setTimeout(loop, 30000);
+  }
+  loop();
+
+  $("[data-logout]").addEventListener("click", async () => {
+    await fetch("/auth/logout", { method: "POST" });
+    location.reload();
+  });
+</script>
+
+<style>
+  .signin {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-top: 1.5rem;
+  }
+  .signin p {
+    margin: 0;
+  }
+  .who {
+    margin: 1rem 0 1.25rem;
+  }
+  .link {
+    background: none;
+    border: 0;
+    color: var(--cyan);
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+  }
+  .wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .runs {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .runs th,
+  .runs td {
+    padding: 0.7em 0.75em;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .runs th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--surface-2);
+  }
+  .runs .left {
+    text-align: left;
+  }
+  .runs tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .runs a {
+    font-weight: 600;
+  }
+  .status.published {
+    color: var(--good);
+  }
+  .status.failed,
+  .status.rejected {
+    color: var(--bad);
+  }
+  .status.queued,
+  .status.building,
+  .status.running {
+    color: var(--cyan);
+  }
+  .error {
+    color: var(--bad);
+  }
+</style>

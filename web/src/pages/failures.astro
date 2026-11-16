@@ -1,0 +1,234 @@
+---
+import Base from "../layouts/Base.astro";
+import gallery from "../generated/failure-gallery.json";
+
+interface Excerpt {
+  before: string;
+  match: string;
+  after: string;
+}
+interface Example {
+  family: string;
+  family_title: string;
+  kind: "stale" | "trap" | "dropped" | "wrong";
+  kind_text: string;
+  method: string;
+  compaction: number;
+  said_at: number;
+  question: string;
+  expected: string[];
+  answered: string[];
+  source: Excerpt & { compaction: number; role: string };
+  artifact: Excerpt | null;
+  artifact_tokens: number;
+}
+
+const examples = gallery as Example[];
+const kinds = [...new Set(examples.map((e) => e.kind))];
+---
+
+<Base
+  title="Failure gallery"
+  description="Real compaction failures from public Practice runs: what the conversation said, what the compacted memory kept, and what the agent answered."
+  path="/failures"
+>
+  <section class="container section">
+    <p class="eyebrow">Failure gallery</p>
+    <h1>What compaction loses</h1>
+    <p class="lede">
+      Real failures from the public Practice suite, run with the built-in methods on Claude Haiku 5.5 under the
+      Season 1 settings (1,024-token budget, five compactions). Each one is a fact the conversation stated plainly,
+      that the compacted memory no longer held when the question was asked. None of these comes from the hidden set.
+    </p>
+    {
+      examples.length === 0 ? (
+        <p class="muted">The gallery is filled from the Season 1 Practice runs and will appear here shortly.</p>
+      ) : (
+        <ul class="legend muted">
+          {kinds.map((k) => (
+            <li>
+              <span class={`kind ${k}`}>{examples.find((e) => e.kind === k)?.kind_text}</span>
+              {
+                {
+                  stale: "the memory kept a value the conversation later replaced",
+                  trap: "the agent picked a look-alike or a value from a source that didn't count",
+                  dropped: "the fact was simply gone",
+                  wrong: "the memory kept something else",
+                }[k]
+              }
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    <div class="grid">
+      {
+        examples.map((e) => (
+          <article class="example">
+            <p class="meta">
+              <a href={`/families#${e.family}`}>{e.family_title}</a>
+              <span class={`kind ${e.kind}`}>{e.kind_text}</span>
+            </p>
+            <p class="question">{e.question}</p>
+            <dl class="answers">
+              <div>
+                <dt>Expected</dt>
+                <dd class="good">{e.expected.join(" · ")}</dd>
+              </div>
+              <div>
+                <dt>Answered</dt>
+                <dd class="bad">{e.answered.join(" · ")}</dd>
+              </div>
+            </dl>
+            <p class="label">The conversation, compaction {e.source.compaction}</p>
+            <blockquote class="quote">
+              {e.source.before}
+              <mark>{e.source.match}</mark>
+              {e.source.after}
+            </blockquote>
+            {e.artifact && (
+              <>
+                <p class="label">What the memory still said</p>
+                <blockquote class="quote stale">
+                  {e.artifact.before}
+                  <mark>{e.artifact.match}</mark>
+                  {e.artifact.after}
+                </blockquote>
+              </>
+            )}
+            <p class="foot mono">
+              {e.method} · asked after compaction {e.compaction} · memory {e.artifact_tokens} tokens
+            </p>
+          </article>
+        ))
+      }
+    </div>
+    <p class="muted more">
+      Want to see where your own method fails? Run the Practice suite with <code>--traces</code>: every artifact,
+      question and answer is saved. See <a href="/docs/getting-started">Getting started</a>.
+    </p>
+  </section>
+</Base>
+
+<style>
+  .legend {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+    font-size: 0.92rem;
+  }
+  .legend .kind {
+    margin-right: 8px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr));
+    gap: 18px;
+    margin-top: 1.5rem;
+  }
+  .example {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+  .meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0;
+    font-size: 0.85rem;
+  }
+  .kind {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    white-space: nowrap;
+  }
+  .kind.stale {
+    color: var(--warn);
+    border-color: rgb(251 191 36 / 0.4);
+  }
+  .kind.trap {
+    color: var(--violet);
+    border-color: rgb(139 92 246 / 0.5);
+  }
+  .kind.dropped,
+  .kind.wrong {
+    color: var(--bad);
+    border-color: rgb(248 113 113 / 0.4);
+  }
+  .question {
+    font-weight: 600;
+    margin: 0;
+  }
+  .answers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 0;
+  }
+  .answers dt {
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .answers dd {
+    margin: 2px 0 0;
+    font-family: var(--mono);
+    font-size: 0.88rem;
+    overflow-wrap: anywhere;
+  }
+  .good {
+    color: var(--good);
+  }
+  .bad {
+    color: var(--bad);
+  }
+  .label {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .quote {
+    margin: 0;
+    padding: 10px 12px;
+    background: var(--bg);
+    border-left: 3px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 11em;
+    overflow: auto;
+  }
+  .quote.stale {
+    border-left-color: var(--warn);
+  }
+  .quote mark {
+    background: rgb(59 130 246 / 0.3);
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+  .foot {
+    margin: auto 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+  .more {
+    margin-top: 2rem;
+  }
+</style>

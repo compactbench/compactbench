@@ -1,0 +1,5 @@
+Contact: https://github.com/compactbench/compactbench/security/advisories/new
+Expires: 2027-11-15T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://compactbench.com/.well-known/security.txt
+Policy: https://github.com/compactbench/compactbench/blob/main/SECURITY.md

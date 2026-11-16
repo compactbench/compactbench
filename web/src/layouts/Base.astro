@@ -1,0 +1,183 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+  /** Path of this page's Markdown twin, if it has one. */
+  markdown?: string;
+  /** Path of this page's own share image (1200x630), if it has one. */
+  image?: string;
+}
+
+const { title, description, path, markdown, image } = Astro.props;
+const canonical = new URL(path, Astro.site).toString();
+const fullTitle = path === "/" ? title : `${title} · CompactBench`;
+// Share image: the site-wide one, or a page's own (scripts/og_images.py).
+const ogImage = new URL(image ?? "/og.png", Astro.site).toString();
+const nav = [
+  { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/methodology", label: "Methodology" },
+  { href: "/families", label: "Families" },
+  { href: "/docs", label: "Docs" },
+  { href: "/submit", label: "Submit" },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#05060B" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="CompactBench" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="CompactBench: how much does your agent forget when it compacts?" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={ogImage} />
+    {markdown && <link rel="alternate" type="text/markdown" href={markdown} />}
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="sr-only" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="container bar">
+        <a class="brand" href="/" aria-label="CompactBench home">
+          <img src="/favicon.svg" alt="" width="26" height="26" />
+          <span>Compact<span class="gradient-text">Bench</span></span>
+        </a>
+        <nav aria-label="Main">
+          {
+            nav.map((item) => (
+              <a href={item.href} aria-current={path.startsWith(item.href) ? "page" : undefined}>
+                {item.label}
+              </a>
+            ))
+          }
+          <a href="https://github.com/compactbench/compactbench" class="gh">GitHub</a>
+          <a href="/donate" class="donate" aria-current={path === "/donate" ? "page" : undefined}>Donate</a>
+        </nav>
+      </div>
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="container foot">
+        <div>
+          <strong>CompactBench</strong>
+          <p class="muted">The open benchmark for context compaction. Apache 2.0.</p>
+        </div>
+        <nav aria-label="Footer">
+          <a href="/leaderboard">Leaderboard</a>
+          <a href="/methodology">Methodology</a>
+          <a href="/families">Families</a>
+          <a href="/docs">Docs</a>
+          <a href="/failures">Failure gallery</a>
+          <a href="/compare">Compare</a>
+          <a href="/seasons">Seasons</a>
+          <a href="/data">Data & API</a>
+          <a href="/datasheet">Datasheet</a>
+          <a href="/submit">Submit</a>
+          <a href="/runs">My runs</a>
+          <a href="/about">About</a>
+          <a href="/contact">Contact</a>
+          <a href="/donate">Donate</a>
+          <a href="/submission-terms">Submission terms</a>
+          <a href="/privacy">Privacy</a>
+          <a href="https://github.com/compactbench/compactbench">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(10px);
+    background: rgb(5 6 11 / 0.72);
+    border-bottom: 1px solid var(--border);
+  }
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 60px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+  }
+  .brand:hover {
+    text-decoration: none;
+  }
+  nav {
+    display: flex;
+    gap: 4px 18px;
+    flex-wrap: wrap;
+  }
+  .bar nav a {
+    color: var(--muted);
+    font-size: 0.93rem;
+    font-weight: 500;
+  }
+  .bar nav a:hover,
+  .bar nav a[aria-current="page"] {
+    color: var(--text);
+    text-decoration: none;
+  }
+  .bar nav a.donate {
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 0 12px;
+  }
+  .bar nav a.donate:hover {
+    border-color: var(--violet);
+  }
+  .site-footer {
+    border-top: 1px solid var(--border);
+    margin-top: 64px;
+    padding-block: 40px;
+  }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .foot nav {
+    display: flex;
+    gap: 8px 20px;
+    flex-wrap: wrap;
+    max-width: 520px;
+  }
+  .foot nav a {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+</style>

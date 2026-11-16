@@ -1,7 +1,9 @@
 name: Update leaderboard
 
-# Rebuilds docs/data/leaderboard.json when something it depends on changes on main:
-# baseline results, a submission, a season file or the ranking code.
+# Rebuilds docs/data/leaderboard.json when something it depends on changes on main
+# outside the publish job (which rebuilds it itself): baseline results, a submission
+# removed by a maintainer, a season file or the ranking code. Pushes made with this
+# job's token don't trigger other workflows, so it starts the site deploy itself.
 
 on:
   push:
@@ -16,6 +18,7 @@ on:
 
 permissions:
   contents: write  # to commit the rebuilt leaderboard.json
+  actions: write  # to start the site deploy
 
 concurrency:
   group: leaderboard
@@ -24,6 +27,8 @@ concurrency:
 jobs:
   rebuild:
     runs-on: ubuntu-latest
+    # PUBLISH_DEPLOY_KEY lives here: the main-branch ruleset blocks pushes with the job token.
+    environment: publish
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
@@ -44,6 +49,8 @@ jobs:
         run: uv run python scripts/rebuild_leaderboard.py
 
       - name: Commit updated leaderboard
+        env:
+          PUBLISH_DEPLOY_KEY: ${{ secrets.PUBLISH_DEPLOY_KEY }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -53,4 +60,14 @@ jobs:
           fi
           git add docs/data/leaderboard.json
           git commit -m "chore(leaderboard): rebuild [skip ci]"
-          git push
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PUBLISH_DEPLOY_KEY" > ~/.ssh/publish
+          chmod 600 ~/.ssh/publish
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/publish -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git push git@github.com:${{ github.repository }}.git HEAD:main
+          rm -f ~/.ssh/publish
+
+      - name: Deploy the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml --ref main

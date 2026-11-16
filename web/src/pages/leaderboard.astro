@@ -1,0 +1,139 @@
+---
+import ByModelTable from "../components/ByModelTable.astro";
+import CostChart from "../components/CostChart.astro";
+import LeaderboardTable from "../components/LeaderboardTable.astro";
+import Base from "../layouts/Base.astro";
+import { families, isModelRow, ordered, rows, season, seasonLabel, updatedAt } from "../lib/data";
+
+const seasonRows = ordered(rows.filter((r) => r.season === season.key || r.row_kind !== "submission"));
+// Methods are ranked on the main board; models run on a reference method get their own.
+const methodRows = seasonRows.filter((r) => !isModelRow(r));
+const modelRows = seasonRows.filter((r) => r.reference_method);
+const familyKeys = families.map((f) => f.key);
+// Dataset metadata for search engines and AI crawlers (schema.org, Google Dataset Search).
+const dataset = {
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  name: `CompactBench leaderboard — ${seasonLabel(season.key)}`,
+  description:
+    "Scores of AI context-compaction methods on CompactBench's hidden Elite set: share of questions answered correctly from the compacted memory after each of five compactions, family-balanced, with 95% intervals and per-family scores.",
+  url: "https://compactbench.com/leaderboard",
+  license: "https://www.apache.org/licenses/LICENSE-2.0",
+  isAccessibleForFree: true,
+  creator: { "@type": "Organization", name: "CompactBench", url: "https://compactbench.com" },
+  dateModified: updatedAt,
+  keywords: ["context compaction", "LLM memory", "AI agents", "benchmark", "summarization", "long context"],
+  variableMeasured: ["score", "95% interval", "score after each compaction", "drift resistance", "per-family score"],
+  distribution: [
+    { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: "https://compactbench.com/api/leaderboard.json" },
+    { "@type": "DataDownload", encodingFormat: "text/csv", contentUrl: "https://compactbench.com/api/leaderboard.csv" },
+  ],
+};
+---
+
+<Base
+  title="Leaderboard"
+  description="Context compaction methods ranked by how much state they keep across repeated compactions, with confidence intervals and per-family scores."
+  path="/leaderboard"
+  markdown="/leaderboard.md"
+>
+  <link slot="head" rel="alternate" type="application/json" href="/api/leaderboard.json" title="Leaderboard as JSON" />
+  <link slot="head" rel="alternate" type="text/csv" href="/api/leaderboard.csv" title="Leaderboard as CSV" />
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(dataset)} />
+  <section class="container section">
+    <p class="eyebrow">{seasonLabel(season.key)} · {season.suite} {season.suite_version}</p>
+    <h1>Leaderboard</h1>
+    <p class="lede">
+      Score is the share of questions a fixed reader answers correctly from the method's artifact
+      after each compaction, averaged so every failure family counts equally. Shown as a percentage
+      with its 95% interval. Ranks only separate when intervals do.
+    </p>
+    <dl class="pins mono">
+      <div><dt>Budget</dt><dd>{season.budget_tokens} tokens</dd></div>
+      <div><dt>Compactions</dt><dd>{season.drift_cycles + 1}</dd></div>
+      <div><dt>Reader</dt><dd>{season.reader.model} ({season.reader.effort ?? "default"})</dd></div>
+      <div><dt>Cases</dt><dd>fresh sample per run</dd></div>
+    </dl>
+    {
+      seasonRows.length ? (
+        <>
+          <LeaderboardTable rows={methodRows} familyKeys={familyKeys} />
+          <CostChart rows={methodRows} />
+          <p class="muted small">
+            Updated {new Date(updatedAt).toUTCString()}. Baselines and controls are reference rows
+            and are never ranked. Download: <a href="/api/leaderboard.json">JSON</a>.
+          </p>
+          {modelRows.length > 0 && (
+            <section class="by-model" id="by-model" aria-labelledby="by-model-title">
+              <h2 id="by-model-title">By model</h2>
+              <p class="muted">
+                Which model compacts best? The same published methods, run unchanged on different
+                models, so the only difference in a column is the model. <span class="mono">#</span> ranks
+                a model among the others on that method; models share a rank until their intervals separate.
+              </p>
+              <ByModelTable rows={modelRows} />
+              <p class="muted small">
+                Put your model on the board: <a href="/submit?reference=sectioned-summary">run a
+                reference method on it</a> with your own API keys. No code needed.
+              </p>
+            </section>
+          )}
+        </>
+      ) : (
+        <div class="card empty">
+          <h2>Season 1 is being calibrated</h2>
+          <p class="muted">
+            Before a season opens, every question is checked to be answerable from the full
+            conversation and not guessable from nothing, and difficulty is balanced across
+            families. Reference baselines publish first; ranked submissions open after.
+          </p>
+          <p class="muted">
+            You can already run the public <code>practice</code> suite, which matches the ranked
+            set's difficulty:
+          </p>
+          <pre><code>compactbench run --method built-in:naive-summary --suite practice \
+  --provider anthropic --model claude-haiku-5-5 \
+  --reader-model claude-haiku-5-5 --reader-effort high --controls</code></pre>
+        </div>
+      )
+    }
+  </section>
+</Base>
+
+<style>
+  .pins {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin: 1.5rem 0 1.75rem;
+    font-size: 0.85rem;
+  }
+  .pins div {
+    display: flex;
+    gap: 8px;
+  }
+  .pins dt {
+    color: var(--muted);
+  }
+  .pins dd {
+    margin: 0;
+  }
+  .small {
+    font-size: 0.85rem;
+    margin-top: 0.8rem;
+  }
+  .empty h2 {
+    font-size: 1.3rem;
+  }
+  .by-model {
+    margin-top: 3rem;
+    scroll-margin-top: 130px;
+  }
+  .by-model h2 {
+    margin-bottom: 0.4rem;
+  }
+  .by-model > p:first-of-type {
+    max-width: 70ch;
+    margin-bottom: 1.25rem;
+  }
+</style>

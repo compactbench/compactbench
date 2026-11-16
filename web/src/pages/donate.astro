@@ -1,0 +1,181 @@
+---
+import Base from "../layouts/Base.astro";
+
+// Donations are handled entirely on Ko-fi's site; we never see payment details.
+const KOFI = "https://ko-fi.com/shpdeve";
+
+const uses: [string, string][] = [
+  [
+    "Keeping it running and independent",
+    "The domain, hosting as traffic grows, and the time it takes to fix problems, keep the benchmark current and answer the people who submit to it.",
+  ],
+  [
+    "Seasons you can trust",
+    "Each season is calibrated before it opens: every question checked to be answerable from the full conversation and not guessable from nothing. Those checks, and the reference results published with each season, cost real model time.",
+  ],
+  [
+    "Results for the models and agents people use",
+    "Running the reference methods and agents' default compaction on widely used models, so the By model board and the agent results cover what you actually run, not only what someone happened to pay for.",
+  ],
+  [
+    "Season 2",
+    "A coding-agent family (renamed files, changed signatures, reverted commits, project instructions that have to survive compaction, tasks done versus claimed done) and a long-context track with 128k-token sessions.",
+  ],
+  [
+    "Independent review",
+    "Paying outside reviewers to try to break or game the benchmark, and people to check question quality by hand: the work that makes a benchmark worth citing.",
+  ],
+  [
+    "Open research and free tools",
+    "A technical report on the methodology and results, the public dataset, and keeping the CI check, the Claude Code plugin and the MCP self-test free and maintained.",
+  ],
+];
+
+// The long view: what CompactBench could become if money weren't the limit.
+const vision: [string, string][] = [
+  [
+    "Every model and agent, measured within days of release",
+    "When a new model or a new version of a coding agent ships, its compaction is on the board that week, run the same way as everything else, so nobody has to take a launch post's word for how well it remembers.",
+  ],
+  [
+    "Agents judged by what they do, not only what they recall",
+    "Sandboxed tasks (fix this repository, finish this migration, follow this team's rules) where an agent compacts mid-task and has to carry on. The question becomes: does it still do the job right after it forgets?",
+  ],
+  [
+    "Real sessions, not only synthetic ones",
+    "A consented, anonymized collection of real long working sessions donated by developers and teams, so results reflect the messy conversations people actually have.",
+  ],
+  [
+    "Every way of keeping memory, on one board",
+    "Summaries, retrieval stores, structured notes, memory layers and cache compression measured side by side, with cost and speed next to what they keep.",
+  ],
+  [
+    "Longer, harder and in more languages",
+    "Sessions of a million tokens and dozens of compactions, hand-offs between agents, and the benchmark in many languages, with every question checked by people who speak them.",
+  ],
+  [
+    "A free, open compaction model",
+    "A small model trained to write memories that keep what matters, released openly so every developer can use it, and measured in public like everything else.",
+  ],
+  [
+    "A standard others can cite",
+    "Peer-reviewed papers, an annual report on what agents forget, grants for students and independent researchers studying memory, and a simple way for model cards to report compaction quality.",
+  ],
+  [
+    "Free evaluation for open-source projects",
+    "Paying the model costs so open-source agents and frameworks can be measured and improved without spending their own money.",
+  ],
+];
+---
+
+<Base
+  title="Support CompactBench"
+  description="CompactBench is an independent, open benchmark for context compaction. Donations keep it free, independent and improving."
+  path="/donate"
+>
+  <section class="container section narrow">
+    <p class="eyebrow">Support</p>
+    <h1>Support CompactBench</h1>
+    <p class="lede">
+      CompactBench is built and run by one independent developer. It's free and open source, with no
+      ads, no paywall and no tracking, and it will stay that way. If it's useful to you or your team,
+      please give what you can: every donation, big or small, keeps it going.
+    </p>
+
+    <div class="card give">
+      <h2>Make a donation</h2>
+      <a class="button primary" href={KOFI} rel="noopener">Donate with Ko-fi</a>
+      <p class="muted small">
+        The button opens Ko-fi's own website; CompactBench never sees your payment details. You can
+        give once or every month.
+      </p>
+    </div>
+
+    <h2>Where your donation goes</h2>
+    <ul class="uses">
+      {
+        uses.map(([title, text]) => (
+          <li>
+            <strong>{title}.</strong> {text}
+          </li>
+        ))
+      }
+    </ul>
+
+    <h2>Where it could go</h2>
+    <p>
+      Donations today keep CompactBench running and growing step by step. If money weren't the limit,
+      this is what it could become: the reference for whether AI agents remember what they're told.
+    </p>
+    <ul class="vision">
+      {
+        vision.map(([title, text]) => (
+          <li>
+            <strong>{title}.</strong> {text}
+          </li>
+        ))
+      }
+    </ul>
+    <p class="muted small">
+      This is a vision, not a promise: we'll say plainly what each piece costs and what donations
+      made possible as it happens.
+    </p>
+
+    <h2>Donations never affect results</h2>
+    <p>
+      A donation doesn't buy anything. Rankings, scores and submissions work exactly the same for
+      everyone, and giving never changes how a method or a model is evaluated, including for teams
+      whose work is on the leaderboard. Donations aren't tax-deductible.
+    </p>
+
+    <h2>Other ways to help</h2>
+    <ul>
+      <li><a href="/submit">Submit</a> your compaction method, or put a model on the <a href="/leaderboard#by-model">By model</a> board.</li>
+      <li>Share results you find useful, and cite CompactBench when you use it.</li>
+      <li>Tell us what's missing or broken through the <a href="/contact">contact form</a>.</li>
+      <li>Star the project on <a href="https://github.com/compactbench/compactbench">GitHub</a>.</li>
+    </ul>
+
+    <p class="thanks">Thank you. It means a lot.</p>
+  </section>
+</Base>
+
+<style>
+  .narrow {
+    max-width: 820px;
+  }
+  .give {
+    margin: 1.5rem 0 2rem;
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+  }
+  .give h2 {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .small {
+    font-size: 0.88rem;
+    margin: 0;
+  }
+  h2 {
+    margin-top: 2rem;
+  }
+  .uses,
+  .vision {
+    display: grid;
+    gap: 10px;
+  }
+  .vision {
+    padding-left: 0;
+    list-style: none;
+  }
+  .vision li {
+    border-left: 2px solid var(--violet);
+    padding: 2px 0 2px 14px;
+  }
+  .thanks {
+    margin-top: 2rem;
+    font-weight: 600;
+  }
+</style>

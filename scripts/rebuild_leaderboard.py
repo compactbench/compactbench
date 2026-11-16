@@ -26,7 +26,14 @@ from typing import Any, cast
 from ruamel.yaml import YAML
 
 from compactbench.compactors import CONTROL_KEYS
-from compactbench.leaderboard import LeaderboardRow, load_season, project_row, qualify, rank_rows
+from compactbench.leaderboard import (
+    REFERENCE_METHODS,
+    LeaderboardRow,
+    load_season,
+    project_row,
+    qualify,
+    rank_rows,
+)
 from compactbench.runner import to_run_result
 
 SUBMISSIONS_DIR = Path("submissions")
@@ -79,15 +86,20 @@ def _submission_rows(warnings: list[str]) -> list[LeaderboardRow]:
                 continue
             handle = fields.get("handle")
             label = fields.get("model_label")
-            rows.append(
-                project_row(
+            reference = fields.get("reference_method")
+            try:
+                row = project_row(
                     run,
                     handle=str(handle) if handle else None,
                     org=None,
                     published_at=run.completed_at,
                     model_label=str(label) if label else None,
+                    reference_method=str(reference) if reference else None,
                 )
-            )
+            except ValueError as exc:
+                warnings.append(f"skipped {method_dir}: {exc}")
+                continue
+            rows.append(row)
     return rows
 
 
@@ -111,6 +123,12 @@ def _baseline_rows(warnings: list[str], yaml: YAML) -> list[LeaderboardRow]:
                 warnings.append(f"skipped {results_path}: {exc}")
                 continue
             kind = "control" if run.method_name in CONTROL_KEYS else "baseline"
+            # A baseline of a reference method is also that method's row for its model.
+            reference = (
+                run.method_name
+                if REFERENCE_METHODS.get(run.method_name) == run.method_version
+                else None
+            )
             rows.append(
                 project_row(
                     run,
@@ -118,6 +136,7 @@ def _baseline_rows(warnings: list[str], yaml: YAML) -> list[LeaderboardRow]:
                     org=publisher,
                     published_at=run.completed_at,
                     row_kind=kind,
+                    reference_method=reference,
                 )
             )
     return rows
