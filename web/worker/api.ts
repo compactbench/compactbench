@@ -1,5 +1,5 @@
 // The site's dynamic routes: GitHub sign-in, ranked submissions and their status, and
-// the two internal endpoints the evaluation workflow calls.
+// the internal endpoints the evaluation workflow calls.
 import { contact, ContactError, type ContactInput, type ContactLog, type SendMail } from "./contact.ts";
 import { authorizeUrl, isEvaluationWorkflow, userFromCode } from "./github.ts";
 import { cookie, readCookie, signValue, verifyValue } from "./session.ts";
@@ -35,6 +35,12 @@ export interface Deps {
 }
 
 const SESSION = "cb_session";
+/** A finished run's files the evaluation keeps privately; nothing else is accepted. */
+export const ARCHIVE_FILES = new Set([
+  "results.sealed", "traces.sealed", "calls.sealed", "commitment.json", "submission.json", "results.jsonl",
+]);
+/** Under the Workers request-body limit. */
+const MAX_ARCHIVE_BYTES = 95_000_000;
 const STATE = "cb_oauth_state";
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -195,6 +201,24 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
       });
       return json({ ok: true });
     }
+  }
+
+  const archive = path.match(/^\/api\/internal\/archive\/([a-z0-9]{12,32})\/([A-Za-z0-9._-]{1,64})$/);
+  if (archive && request.method === "PUT") {
+    const token = (request.headers.get("Authorization") ?? "").replace(/^Bearer /, "") || null;
+    if (!(await isEvaluationWorkflow(token, env.GITHUB_REPO, env.OIDC_AUDIENCE, fetcher))) {
+      return json({ error: "forbidden" }, 403);
+    }
+    const id = archive[1] as string;
+    const name = archive[2] as string;
+    if (!ARCHIVE_FILES.has(name)) return json({ error: "not an archived file" }, 400);
+    if (!(await deps.store.get(id))) return json({ error: "not found" }, 404);
+    if (Number(request.headers.get("Content-Length") ?? 0) > MAX_ARCHIVE_BYTES) return json({ error: "too large" }, 413);
+    const body = await request.arrayBuffer();
+    if (body.byteLength === 0) return json({ error: "empty" }, 400);
+    if (body.byteLength > MAX_ARCHIVE_BYTES) return json({ error: "too large" }, 413);
+    await deps.store.archive(env.SEASON_KEY, id, name, body);
+    return json({ ok: true, bytes: body.byteLength });
   }
   return null;
 }

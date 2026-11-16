@@ -220,6 +220,30 @@ test("internal endpoints accept only the evaluate workflow on main", async () =>
   assert.equal(view.score, 0.42);
 });
 
+test("a finished run's sealed files go to the private archive, only from the evaluate workflow", async () => {
+  const { call, signIn, workflowToken, store } = await setup();
+  const session = await signIn();
+  const { id } = (await (await call("/api/submissions", post(session, form))).json()) as { id: string };
+  const put = async (name: string, body: BodyInit, token: string | null, target = id) =>
+    call(`/api/internal/archive/${target}/${name}`, {
+      method: "PUT",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+    });
+  const sealed = new Uint8Array([1, 2, 3, 4]);
+
+  assert.equal((await put("traces.sealed", sealed, null)).status, 403);
+  assert.equal((await put("traces.sealed", sealed, await workflowToken({ ref: "refs/heads/feature" }))).status, 403);
+  assert.equal((await put("traces.sealed", sealed, await workflowToken(), "aaaaaaaaaaaaaaaa")).status, 404);
+  assert.equal((await put("bundle.json", sealed, await workflowToken())).status, 400);
+  assert.equal((await put("traces.sealed", new Uint8Array(), await workflowToken())).status, 400);
+  assert.equal(store.archived.size, 0);
+
+  const ok = await put("traces.sealed", sealed, await workflowToken());
+  assert.equal(ok.status, 200);
+  assert.deepEqual(new Uint8Array(store.archived.get(`runs/s1/${id}/traces.sealed`)!), sealed);
+});
+
 test("a reference-method submission runs a built-in on the submitter's model, with no code", async () => {
   const { call, signIn, store } = await setup();
   const session = await signIn();

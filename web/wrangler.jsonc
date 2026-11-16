@@ -26,7 +26,11 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "compactbench", "database_id": "b624f5e0-f5ab-42d5-8247-4c514d4c19ea", "migrations_dir": "migrations" }
   ],
-  "r2_buckets": [{ "binding": "BUNDLES", "bucket_name": "compactbench-submissions" }],
+  "r2_buckets": [
+    { "binding": "BUNDLES", "bucket_name": "compactbench-submissions" },
+    // Private, never public: each finished ranked run's sealed traces and results.
+    { "binding": "ARCHIVE", "bucket_name": "compactbench-archive" }
+  ],
   // Contact form email, enabled at launch once Email Routing is on and the maintainer's
   // address is verified there (LAUNCH.md). The address itself is the CONTACT_TO secret.
   "send_email": [{ "name": "SEND_EMAIL" }],

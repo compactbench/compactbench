@@ -1,4 +1,5 @@
-// Where submissions live: a D1 table for status and rate limits, R2 for bundles.
+// Where submissions live: a D1 table for status and rate limits, R2 for bundles, and a
+// separate private R2 bucket for each finished run's sealed files.
 // The interface keeps the logic testable without Cloudflare.
 
 export type Status = "queued" | "building" | "running" | "published" | "failed" | "rejected";
@@ -32,6 +33,8 @@ export interface Store {
   remove(id: string): Promise<void>;
   /** One account's submissions, newest first. */
   listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]>;
+  /** Keep one of a finished run's files (sealed traces and results, commitment) privately. */
+  archive(season: string, id: string, name: string, body: ArrayBuffer): Promise<void>;
 }
 
 // Minimal shapes of the Cloudflare bindings we use.
@@ -45,7 +48,7 @@ export interface D1 {
   prepare(sql: string): D1Statement;
 }
 export interface R2 {
-  put(key: string, value: string): Promise<unknown>;
+  put(key: string, value: string | ArrayBuffer): Promise<unknown>;
   get(key: string): Promise<{ text(): Promise<string> } | null>;
   delete(key: string): Promise<unknown>;
 }
@@ -53,10 +56,12 @@ export interface R2 {
 export class CloudflareStore implements Store {
   db: D1;
   bucket: R2;
+  archiveBucket: R2 | undefined;
 
-  constructor(db: D1, bucket: R2) {
+  constructor(db: D1, bucket: R2, archiveBucket?: R2) {
     this.db = db;
     this.bucket = bucket;
+    this.archiveBucket = archiveBucket;
   }
 
   async insert(r: SubmissionRecord, bundle: string): Promise<void> {
@@ -120,6 +125,11 @@ export class CloudflareStore implements Store {
     await this.bucket.delete(`bundles/${id}.json`);
   }
 
+  async archive(season: string, id: string, name: string, body: ArrayBuffer): Promise<void> {
+    if (!this.archiveBucket) throw new Error("no archive bucket is bound");
+    await this.archiveBucket.put(archiveKey(season, id, name), body);
+  }
+
   async listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]> {
     const rows = await this.db
       .prepare("SELECT * FROM submissions WHERE github_id = ? ORDER BY created_at DESC LIMIT ?")
@@ -129,10 +139,14 @@ export class CloudflareStore implements Store {
   }
 }
 
+/** Where a run's file sits in the archive bucket. */
+export const archiveKey = (season: string, id: string, name: string) => `runs/${season}/${id}/${name}`;
+
 /** In-memory store for tests and local development. */
 export class MemoryStore implements Store {
   records = new Map<string, SubmissionRecord>();
   bundles = new Map<string, string>();
+  archived = new Map<string, ArrayBuffer>();
 
   async insert(record: SubmissionRecord, bundle: string): Promise<void> {
     this.records.set(record.id, { ...record });
@@ -160,6 +174,9 @@ export class MemoryStore implements Store {
   async remove(id: string): Promise<void> {
     this.records.delete(id);
     this.bundles.delete(id);
+  }
+  async archive(season: string, id: string, name: string, body: ArrayBuffer): Promise<void> {
+    this.archived.set(archiveKey(season, id, name), body);
   }
   async listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]> {
     return [...this.records.values()]
