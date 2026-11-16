@@ -1,6 +1,7 @@
 ---
 // Score against what the method spent: model tokens per case, log scale.
 // Methods that make no model calls sit at the left edge.
+import { frontier, hoverPlacement, placeLabels, type Bounds } from "../lib/chart-labels";
 import { pct, slugOf, type Row } from "../lib/data";
 
 interface Props {
@@ -24,15 +25,33 @@ const x = (t: number) =>
     : pad.l + 30 + ((Math.log10(t) - lo) / Math.max(hi - lo, 0.1)) * (w - pad.l - pad.r - 40);
 const y = (v: number) => pad.t + (1 - v) * (h - pad.t - pad.b);
 const fmt = (t: number) => (t >= 1e6 ? `${(t / 1e6).toFixed(1)}M` : `${Math.round(t / 1000)}k`);
-// Nudge labels apart when two points sit close together.
-const labelY = new Map<Row, number>();
-const placed: { x: number; y: number }[] = [];
-for (const { row, tokens } of [...points].sort((a, b) => b.row.score - a.row.score)) {
-  let ly = y(row.score) + 4;
-  while (placed.some((p) => Math.abs(p.x - x(tokens)) < 120 && Math.abs(p.y - ly) < 14)) ly += 14;
-  placed.push({ x: x(tokens), y: ly });
-  labelY.set(row, ly);
-}
+// Name the dots that matter (the top three ranked, then the best value for the cost, then
+// baselines) where a name fits without covering another; the rest show their name on hover.
+const best = frontier(points.map((p) => ({ cost: p.tokens, score: p.row.score })));
+const priority = (row: Row, i: number) =>
+  (row.rank !== null && row.rank <= 3
+    ? row.rank
+    : best[i]
+      ? 10
+      : row.row_kind === "baseline"
+        ? 20
+        : 30) +
+  (1 - row.score);
+const bounds: Bounds = { left: pad.l + 2, right: w - 4, top: 2, bottom: h - pad.b + 10 };
+const spots = points.map(({ row, tokens }, i) => ({
+  x: x(tokens),
+  y: y(row.score),
+  text: row.method_name,
+  priority: priority(row, i),
+}));
+const placements = placeLabels(spots, bounds);
+// Named dots first, so a hover name (drawn later) sits on top of the printed ones.
+const drawn = points
+  .map((point, i) => ({ ...point, spot: spots[i], label: placements[i] ?? hoverPlacement(spots[i], bounds), hover: !placements[i] }))
+  .sort((a, b) => Number(a.hover) - Number(b.hover));
+const unnamed = drawn.some((d) => d.hover);
+const kinds = (["submission", "baseline", "control"] as const).filter((k) => rows.some((r) => r.row_kind === k));
+const kindName = { submission: "Ranked", baseline: "Baseline", control: "Control" } as const;
 // 1-2-5 ticks inside the plotted range, so a range under one decade still gets a scale.
 const ticks = paid.length
   ? Array.from({ length: Math.ceil(hi) - Math.floor(lo) + 1 }, (_, i) => Math.floor(lo) + i)
@@ -44,7 +63,14 @@ const ticks = paid.length
 <figure class="chart card">
   <figcaption>
     <h2>Score vs. cost</h2>
-    <p class="muted">Model tokens the method spent per case (log scale). Up and to the left is better.</p>
+    <p class="muted">
+      Model tokens the method spent per case (log scale). Up and to the left is better.{
+        unnamed && " Hover a dot for its name."
+      }
+    </p>
+    <ul class="legend">
+      {kinds.map((k) => <li><span class={`key ${k}`} />{kindName[k]}</li>)}
+    </ul>
   </figcaption>
   <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Score against model tokens spent per case">
     {
@@ -58,12 +84,14 @@ const ticks = paid.length
     {ticks.map((t) => <text x={x(t)} y={h - 14} class="tick" text-anchor="middle">{fmt(t)}</text>)}
     <text x={pad.l + 6} y={h - 14} class="tick">free</text>
     {
-      points.map(({ row, tokens }) => (
+      drawn.map(({ row, tokens, spot, label, hover }) => (
         <a href={`/methods/${slugOf(row)}`}>
-          <circle cx={x(tokens)} cy={y(row.score)} r="6" class={`pt ${row.row_kind}`}>
+          <circle cx={spot.x} cy={spot.y} r="6" class={`pt ${row.row_kind}`}>
             <title>{`${row.method_name}: ${pct(row.score)} at ${tokens ? fmt(tokens) : "no"} tokens per case`}</title>
           </circle>
-          <text x={x(tokens) + 9} y={labelY.get(row)} class="label">{row.method_name}</text>
+          <text x={label.x} y={label.y} text-anchor={label.anchor} class:list={["label", { hover }]}>
+            {row.method_name}
+          </text>
         </a>
       ))
     }
@@ -96,6 +124,51 @@ const ticks = paid.length
   .label {
     fill: var(--text);
     font: 11px var(--font);
+    /* An outline in the card's colour keeps a name legible over grid lines. */
+    stroke: var(--surface);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    paint-order: stroke;
+  }
+  .label.hover {
+    opacity: 0;
+    transition: opacity 0.12s;
+    pointer-events: none;
+  }
+  a:hover .label.hover,
+  a:focus-visible .label.hover {
+    opacity: 1;
+  }
+  a:hover .pt,
+  a:focus-visible .pt {
+    stroke: var(--cyan);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .legend li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .key {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--blue);
+  }
+  .key.submission {
+    background: var(--violet);
+  }
+  .key.control {
+    background: var(--muted);
   }
   .pt {
     fill: var(--blue);
