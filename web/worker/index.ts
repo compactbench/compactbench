@@ -13,6 +13,8 @@ interface Env extends ApiEnv, ReportEnv {
   ASSETS: { fetch: (request: Request | string) => Promise<Response> };
   DB: D1;
   BUNDLES: R2;
+  /** Private: each finished ranked run's sealed traces and results. */
+  ARCHIVE?: R2;
   /** Cloudflare Email Routing binding, added at launch (see LAUNCH.md). */
   SEND_EMAIL?: { send(message: EmailMessage): Promise<void> };
   REPORT_FROM?: string;
@@ -78,7 +80,7 @@ export default {
     }
     const mail = env.SEND_EMAIL;
     const api = await handleApi(request, env, {
-      store: new CloudflareStore(env.DB, env.BUNDLES),
+      store: new CloudflareStore(env.DB, env.BUNDLES, env.ARCHIVE),
       contactLog: new D1ContactLog(env.DB),
       sendMail: mail ? (raw, from, to) => mail.send(new EmailMessage(from, to, raw)) : undefined,
     });

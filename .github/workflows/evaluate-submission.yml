@@ -13,6 +13,8 @@ name: Evaluate submission
 #   answers this workflow on main in this repository.
 # - `build` holds no secrets. `evaluate` holds them in the `ranked-evaluation`
 #   environment. `publish` only writes data the evaluation produced, validated first.
+# - Sealed traces and raw results never become artifacts: `evaluate` sends them to the
+#   site's private archive and only redacted results and the commitment move on.
 
 on:
   workflow_dispatch:
@@ -158,11 +160,24 @@ jobs:
             --out out
           rm -rf "$RUNNER_TEMP/hidden" bundle.json
 
+      # The sealed traces, raw results and call log go to the site's private archive and
+      # are deleted here, whether or not the upload worked: artifacts of a public
+      # repository can be downloaded, so only what publish needs is uploaded below.
+      - name: Archive the run privately
+        run: |
+          uv run --project harness python harness/scripts/ranked/site.py archive "$SUBMISSION_ID" out \
+            || echo "::warning::some of the run's files weren't archived"
+          rm -f out/*.sealed
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: evaluation
-          path: out/
-          retention-days: 30
+          path: |
+            out/results.jsonl
+            out/commitment.json
+            out/submission.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Report a failed run
         if: failure()
