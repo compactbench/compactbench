@@ -33,6 +33,14 @@ DOCS = {
         "writing-a-compactor.md",
         "Write your own compaction method: one class, one async method, any model.",
     ),
+    "forget-less": (
+        "forget-less.md",
+        "What Season 1 says about compaction instructions, as copy-paste prompts for Claude Code, Codex, LangChain and LlamaIndex.",
+    ),
+    "ci": (
+        "ci.md",
+        "Fail a pull request when your agent starts forgetting more: compactbench check and the GitHub Action.",
+    ),
     "integrations": (
         "integrations.md",
         "Benchmark the LangChain or LlamaIndex compaction you already have, with thin adapters.",
@@ -75,6 +83,16 @@ def _markdown(path: Path) -> str:
 
     text = _ADMONITION.sub(quote, text)
     text = _MERMAID.sub("", text)
+    # Links to the published data: the leaderboard is served by the site, the rest from the repo.
+    text = re.sub(
+        r"\]\(data/([a-z-]+\.json)\)",
+        lambda m: (
+            f"](/api/{m.group(1)})"
+            if m.group(1) == "leaderboard.json"
+            else f"]({_REPO_DOCS}data/{m.group(1)})"
+        ),
+        text,
+    )
     # Links between docs pages become site routes (anchors kept).
     return re.sub(
         r"\]\(((?:\.\./)?(?:[a-z-]+/)?[a-z-]+\.md)(#[a-z0-9-]+)?\)",
