@@ -4,7 +4,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/compactbench.svg)](https://pypi.org/project/compactbench/)
 [![Python](https://img.shields.io/pypi/pyversions/compactbench.svg)](https://pypi.org/project/compactbench/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/compactbench/compactbench/blob/main/LICENSE)
 [![CI](https://github.com/compactbench/compactbench/actions/workflows/ci.yml/badge.svg)](https://github.com/compactbench/compactbench/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-compactbench.com-black)](https://compactbench.com/docs)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/compactbench/compactbench/blob/main/notebooks/try_compactbench.ipynb)
@@ -85,11 +85,11 @@ compactbench run --method path/to/my_compactor.py:MyCompactor --suite practice \
 compactbench qualify --results results.jsonl
 ```
 
-Already running LangChain or LlamaIndex? Wrap it with `compactbench.integrations` (`pip install 'compactbench[langchain]'` or `[llamaindex]`). See [writing a compactor](docs/writing-a-compactor.md) and [integrations](docs/integrations.md).
+Already running LangChain or LlamaIndex? Wrap it with `compactbench.integrations` (`pip install 'compactbench[langchain]'` or `[llamaindex]`). See [writing a compactor](https://compactbench.com/docs/writing-a-compactor) and [integrations](https://compactbench.com/docs/integrations).
 
 ## Forget less
 
-Season 1 shows what makes a compaction summary hold up: fixed sections, replacing changed facts instead of keeping both, and tracking tasks with their status. [Forget less](docs/forget-less.md) turns that into instructions you can paste into Claude Code, Codex, LangChain or LlamaIndex, and shows how to measure them on your own setup.
+Season 1 shows what makes a compaction summary hold up: fixed sections, replacing changed facts instead of keeping both, and tracking tasks with their status. [Forget less](https://compactbench.com/docs/forget-less) turns that into instructions you can paste into Claude Code, Codex, LangChain or LlamaIndex, and shows how to measure them on your own setup.
 
 ## Claude Code plugin
 
@@ -115,22 +115,22 @@ The `compactbench` plugin brings this into Claude Code: a `forget-less` skill th
     COMPACTBENCH_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-See [checking in CI](docs/ci.md).
+See [checking in CI](https://compactbench.com/docs/ci).
 
 ## Leaderboard
 
-Season 1's reference baselines are on the **[leaderboard](https://compactbench.com/leaderboard)** (data: [`docs/data/leaderboard.json`](docs/data/leaderboard.json)).
+Season 1's reference baselines are on the **[leaderboard](https://compactbench.com/leaderboard)** (data: [`docs/data/leaderboard.json`](https://github.com/compactbench/compactbench/blob/main/docs/data/leaderboard.json)).
 
-**Ranked submissions are open** at [compactbench.com/submit](https://compactbench.com/submit): sign in with GitHub, upload your method (or pick a reference method and benchmark your model), and bring your own API keys; it runs sandboxed on a fresh sample of the hidden Elite set and publishes itself when it qualifies. Develop against the public `practice` suite — it's the same difficulty — and check your run with `compactbench qualify` first. See [submitting](docs/submitting.md).
+**Ranked submissions are open** at [compactbench.com/submit](https://compactbench.com/submit): sign in with GitHub, upload your method (or pick a reference method and benchmark your model), and bring your own API keys; it runs sandboxed on a fresh sample of the hidden Elite set and publishes itself when it qualifies. Develop against the public `practice` suite — it's the same difficulty — and check your run with `compactbench qualify` first. See [submitting](https://compactbench.com/submit).
 
 ## Project status
 
-**0.3 (not yet on PyPI)** is benchmark v2 — a rewrite of case generation, scoring and the compaction loop. It replaces 0.2's templates and scorer, and scores are not comparable across the two. See [CHANGELOG.md](CHANGELOG.md) and the [methodology](docs/methodology.md).
+**0.3** is benchmark v2 — a rewrite of case generation, scoring and the compaction loop. It replaces 0.2's templates and scorer, and scores are not comparable across the two. See [CHANGELOG.md](https://github.com/compactbench/compactbench/blob/main/CHANGELOG.md) and the [methodology](https://compactbench.com/methodology).
 
 ## Contributing
 
-Bug reports, new scenario families, and new compactors are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md).
+Bug reports, new scenario families, and new compactors are welcome. See [CONTRIBUTING.md](https://github.com/compactbench/compactbench/blob/main/CONTRIBUTING.md) and our [Code of Conduct](https://github.com/compactbench/compactbench/blob/main/CODE_OF_CONDUCT.md).
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](https://github.com/compactbench/compactbench/blob/main/LICENSE).

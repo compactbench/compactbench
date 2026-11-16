@@ -151,7 +151,7 @@ failure families so each counts equally.
 The easiest way to run it is the package, which does the loop, the reader and the scoring:
 
 ```bash
-pip install "compactbench[providers] @ git+https://github.com/compactbench/compactbench"
+pip install 'compactbench[providers]>=0.3'
 compactbench run --method built-in:sectioned-summary --suite practice \\
     --provider anthropic --model claude-haiku-5-5 --budget 1024
 ```
