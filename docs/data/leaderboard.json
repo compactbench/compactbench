@@ -3,6 +3,60 @@
     {
       "budget_tokens": 1024,
       "by_cycle": [
+        0.8385867864377939,
+        0.7137807451942056,
+        0.6074018533208126,
+        0.5214785632134481,
+        0.43488962297928946
+      ],
+      "by_family": {
+        "buried_constraint": 0.7401210962396431,
+        "conditional_scope": 0.7694049499736704,
+        "decision_override": 0.7588652482269503,
+        "entity_confusion": 0.35276967930029157,
+        "numeric_precision": 0.7627906976744186,
+        "provenance_authority": 0.8571428571428571,
+        "reference_resolution": 0.5391304347826087,
+        "task_continuity": 0.2079048246439551
+      },
+      "cases": 48,
+      "compactor_endpoint_kind": "default",
+      "compactor_model": "claude-haiku-5-5",
+      "compactor_provider": "anthropic",
+      "compression_ratio": 46.914777895288886,
+      "decay": 0.41576743532636634,
+      "drift_resistance": 0.5047362765269808,
+      "hallucination_rate": 0.0,
+      "handle": "UsernameLoad",
+      "mean_artifact_tokens": 1013.4916666666667,
+      "method_name": "starter-template",
+      "method_tokens": 6067433,
+      "method_version": "0.1.0",
+      "model_label": null,
+      "model_rank": null,
+      "normalized_score": null,
+      "org": null,
+      "published_at": "2026-11-16T03:43:18.910404+00:00",
+      "rank": 1,
+      "reader_effort": "high",
+      "reader_endpoint_kind": "default",
+      "reader_model": "claude-haiku-5-5",
+      "reader_provider": "anthropic",
+      "reference_method": null,
+      "row_kind": "submission",
+      "score": 0.6235162234980494,
+      "score_ci_high": 0.6457728922473555,
+      "score_ci_low": 0.5996571449510109,
+      "scorer_version": "3.0.0",
+      "season": "s1",
+      "stale_rate": 0.19110854503464203,
+      "suite": "elite@2.0.1",
+      "tier": "Tight",
+      "trap_rate": 0.012594458438287154
+    },
+    {
+      "budget_tokens": 1024,
+      "by_cycle": [
         0.7349050791215429,
         0.5811852522198337,
         0.4626793524412029,
@@ -434,5 +488,5 @@
     }
   ],
   "schema_version": "2.0.0",
-  "updated_at": "2026-11-15T22:10:00.904173+00:00"
+  "updated_at": "2026-11-16T03:43:53.263396+00:00"
 }

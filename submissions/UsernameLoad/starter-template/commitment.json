@@ -1,0 +1,9 @@
+{
+  "results_sha256": "sha256:4b1ae7df3f7658c5e591ac667c2323ba6e88c34159b108d90a66caceefe2abb8",
+  "raw_results_sha256": "sha256:573f31d3001cba1379bb593f83ee6e3d1f5d38f7803897624daefbd5e355bbe0",
+  "traces_sha256": "sha256:ec37d3042f77e8e2d554fb442784c20e9303e36154423e6235344f416f61771d",
+  "calls_sha256": "sha256:d6ef6eaf25d81c9e430ddffeb91c48f2bfb5252ace36fe51b3b2a4c4f6b6ba03",
+  "seal_context_tag": "9e3d2212",
+  "submission_id": "50lv516pfexjrzch",
+  "submission": "UsernameLoad/starter-template"
+}
