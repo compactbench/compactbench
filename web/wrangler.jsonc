@@ -32,7 +32,7 @@
   "send_email": [{ "name": "SEND_EMAIL" }],
   "vars": {
     "GITHUB_REPO": "compactbench/compactbench",
-    "GITHUB_CLIENT_ID": "REPLACE_WITH_OAUTH_APP_CLIENT_ID",
+    "GITHUB_CLIENT_ID": "Ov23limChpVKgyqdo5ZS",
     "SEASON_KEY": "s1",
     "SEASON_PUBLIC_KEY": "NskQUCXvaDfd2p3MGdAjEeCkS8m_AjDTvS8HWNG2SgY",
     "OIDC_AUDIENCE": "https://compactbench.com",
