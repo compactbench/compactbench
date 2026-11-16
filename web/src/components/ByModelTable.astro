@@ -8,6 +8,7 @@ interface Props {
 const lines = byModel(Astro.props.rows);
 // Only the reference methods someone has run get a column.
 const methods = referenceMethods.filter((m) => lines.some((line) => line.cells[m.key]));
+import Submitter from "./Submitter.astro";
 ---
 
 <div class="wrap">
@@ -29,9 +30,11 @@ const methods = referenceMethods.filter((m) => lines.some((line) => line.cells[m
             <th scope="row" class="left model">
               <span class="name">{line.model}</span>
               {line.custom && <span class="badge">custom endpoint</span>}
-              <span class="sub muted mono">
-                {line.provider}
-                {line.by ? ` · ${line.by}` : ""}
+              <span class="sub">
+                {line.handle && <Submitter handle={line.handle} />}
+                {line.handle && <span class="muted"> · </span>}
+                {!line.handle && line.by && <span class="muted">{line.by} · </span>}
+                <span class="muted mono">{line.provider}</span>
               </span>
             </th>
             {methods.map((m) => {

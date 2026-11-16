@@ -16,6 +16,7 @@ interface Row {
   method_name: string;
   method_version: string;
   handle?: string | null;
+  org?: string | null;
   compactor_model: string;
   model_label?: string | null;
   season: string | null;
@@ -131,9 +132,9 @@ function callTool(data: Data, name: string, args: Json): string {
       if (!rows.length) return `No rows published yet for season ${data.season.key}.`;
       const lines = rows.map(
         (r) =>
-          `${r.rank ?? "-"}\t${r.method_name} ${r.method_version}\t${r.row_kind}\t${r.model_label || r.compactor_model}\t${pct(r.score)} (${pct(r.score_ci_low)}-${pct(r.score_ci_high)})\tdrift ${pct(r.drift_resistance)}`,
+          `${r.rank ?? "-"}\t${r.method_name} ${r.method_version}\t${r.handle ? `@${r.handle}` : (r.org ?? "-")}\t${r.row_kind}\t${r.model_label || r.compactor_model}\t${pct(r.score)} (${pct(r.score_ci_low)}-${pct(r.score_ci_high)})\tdrift ${pct(r.drift_resistance)}`,
       );
-      return [`Season ${data.season.key}, budget ${data.season.budget_tokens} tokens.`, "rank\tmethod\tkind\tmodel\tscore (95% CI)\tdrift", ...lines].join("\n");
+      return [`Season ${data.season.key}, budget ${data.season.budget_tokens} tokens.`, "rank\tmethod\tsubmitted by\tkind\tmodel\tscore (95% CI)\tdrift", ...lines].join("\n");
     }
     case "get_method": {
       const row = find(data, args.name);

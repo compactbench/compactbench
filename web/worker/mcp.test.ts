@@ -59,6 +59,10 @@ test("get_method takes handle/method to tell submitters apart", () => {
   assert.match(get("ledger"), /"handle": "alice"/);
   assert.match(get("bob/ledger"), /"handle": "bob"/);
   assert.match(get("@Bob/ledger"), /"handle": "bob"/);
+  const board = (handleMessage(both, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_leaderboard", arguments: {} } }) as Record<string, any>)
+    .result.content[0].text as string;
+  assert.match(board, /\tsubmitted by\t/);
+  assert.match(board, /ledger [0-9.]+\t@alice\t/);
 });
 
 test("unknown methods and tools are JSON-RPC errors", () => {

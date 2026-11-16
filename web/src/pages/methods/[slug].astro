@@ -1,5 +1,6 @@
 ---
 import CycleChart from "../../components/CycleChart.astro";
+import Submitter from "../../components/Submitter.astro";
 import Base from "../../layouts/Base.astro";
 import { familyTitle, isCustomEndpoint, modelName, normalizedScore, pct, rows, seasonLabel, slugOf, type Row } from "../../lib/data";
 
@@ -10,7 +11,8 @@ export function getStaticPaths() {
 const { row } = Astro.props as { row: Row };
 const kind = { submission: "Ranked submission", baseline: "Baseline", control: "Control" }[row.row_kind];
 const families = Object.entries(row.by_family).sort((a, b) => b[1] - a[1]);
-const facts: [string, string][] = [
+// [label, value, optional link]
+const facts: [string, string, string?][] = [
   ["Kind", kind],
   ["Version", row.method_version],
   [
@@ -19,7 +21,11 @@ const facts: [string, string][] = [
       ? `${modelName(row)} (custom endpoint, model id ${row.compactor_model})`
       : `${row.compactor_provider} / ${row.compactor_model}`,
   ],
-  ["Submitted by", row.handle ? `@${row.handle}${row.org ? ` (${row.org})` : ""}` : (row.org ?? "—")],
+  [
+    "Submitted by",
+    row.handle ? `@${row.handle}${row.org ? ` (${row.org})` : ""}` : (row.org ?? "—"),
+    row.handle ? `https://github.com/${encodeURIComponent(row.handle)}` : undefined,
+  ],
   ["Season", seasonLabel(row.season)],
   ["Suite", row.suite],
   ["Budget", row.budget_tokens ? `${row.budget_tokens} tokens` : "none"],
@@ -43,7 +49,14 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
   <section class="container section">
     <p class="eyebrow"><a href="/leaderboard">Leaderboard</a> / {kind}</p>
     <h1>{row.method_name}</h1>
-    <p class="lede">{modelName(row)} · {seasonLabel(row.season)} · {row.cases} cases</p>
+    <p class="lede">
+      {row.handle && (
+        <>
+          by <Submitter handle={row.handle} /> ·{" "}
+        </>
+      )}
+      {modelName(row)} · {seasonLabel(row.season)} · {row.cases} cases
+    </p>
     {
       row.budget_tokens && row.mean_artifact_tokens > row.budget_tokens && (
         <p class="card note">
@@ -104,10 +117,10 @@ const description = `${row.method_name} scored ${pct(row.score)}% on CompactBenc
       <h2>Run details</h2>
       <dl class="facts">
         {
-          facts.map(([k, v]) => (
+          facts.map(([k, v, href]) => (
             <div>
               <dt class="muted">{k}</dt>
-              <dd class="mono">{v}</dd>
+              <dd class="mono">{href ? <a href={href}>{v}</a> : v}</dd>
             </div>
           ))
         }

@@ -1,6 +1,7 @@
 ---
 import { familyTitle, isCustomEndpoint, modelName, pct, slugOf, type Row } from "../lib/data";
 import Sparkline from "./Sparkline.astro";
+import Submitter from "./Submitter.astro";
 
 interface Props {
   rows: Row[];
@@ -60,9 +61,10 @@ const heat = (v: number | undefined) =>
               <span class="badge {row.row_kind}">{kindLabel[row.row_kind]}</span>
               {native(row) && <span class="badge native">provider-native</span>}
               {isCustomEndpoint(row) && <span class="badge">custom endpoint</span>}
-              <span class="sub muted mono">
-                {modelName(row)}
-                {row.handle ? ` · @${row.handle}` : ""}
+              <span class="sub">
+                {row.handle && <Submitter handle={row.handle} />}
+                {row.handle && <span class="muted"> · </span>}
+                <span class="muted mono">{modelName(row)}</span>
               </span>
             </td>
             <td class="mono score">
@@ -186,7 +188,7 @@ const heat = (v: number | undefined) =>
   }
   .method .sub {
     display: block;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     margin-top: 2px;
   }
   .score strong {
