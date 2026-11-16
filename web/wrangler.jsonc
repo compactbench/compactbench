@@ -29,7 +29,7 @@
   "r2_buckets": [{ "binding": "BUNDLES", "bucket_name": "compactbench-submissions" }],
   // Contact form email, enabled at launch once Email Routing is on and the maintainer's
   // address is verified there (LAUNCH.md). The address itself is the CONTACT_TO secret.
-  // "send_email": [{ "name": "SEND_EMAIL" }],
+  "send_email": [{ "name": "SEND_EMAIL" }],
   "vars": {
     "GITHUB_REPO": "compactbench/compactbench",
     "GITHUB_CLIENT_ID": "REPLACE_WITH_OAUTH_APP_CLIENT_ID",
