@@ -214,6 +214,29 @@ main > .section:last-child {
   box-shadow: 0 0 24px rgb(59 130 246 / 0.25);
 }
 
+.button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+  box-shadow: none;
+}
+
+/* Working on it: a small spinner before the label. */
+.button[aria-busy="true"]::before {
+  content: "";
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .prose {
   max-width: 72ch;
 }

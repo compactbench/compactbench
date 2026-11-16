@@ -84,9 +84,9 @@ You get a status link. A run takes about an hour:
 
 ## Limits
 
-To keep runs fair and the queue moving: one run in progress per account, at most two ranked
-runs per account per week, and a daily cap across everyone. Resubmitting a method replaces
-its leaderboard row.
+To keep runs fair and the queue moving: one run in progress per account, at most five ranked
+runs per account per week, and a daily cap across everyone. A run that never starts doesn't
+count. Resubmitting a method replaces its leaderboard row.
 
 ## Rules
 

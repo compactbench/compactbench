@@ -153,8 +153,8 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
         store: deps.store,
         limits: {
           open: env.SUBMISSIONS_OPEN !== "false" || earlyAccess(env.SUBMISSIONS_EARLY_ACCESS, user.login),
-          perUserPerWeek: Number(env.LIMIT_PER_WEEK ?? 2),
-          globalPerDay: Number(env.LIMIT_PER_DAY ?? 20),
+          perUserPerWeek: Number(env.LIMIT_PER_WEEK ?? 5),
+          globalPerDay: Number(env.LIMIT_PER_DAY ?? 50),
         },
         season: env.SEASON_KEY,
         seasonPublicKey: env.SEASON_PUBLIC_KEY,
@@ -219,7 +219,10 @@ async function dispatch(env: ApiEnv, id: string, fetcher: typeof fetch): Promise
       body: JSON.stringify({ ref: "main", inputs: { submission_id: id } }),
     },
   );
-  return response.status === 204;
+  if (response.status === 204) return true;
+  // The status only (never the body or the token): enough to tell an expired token from an outage.
+  console.error(`workflow dispatch failed: HTTP ${response.status}`);
+  return false;
 }
 
 async function turnstileOk(secret: string, token: unknown, request: Request, fetcher: typeof fetch): Promise<boolean> {

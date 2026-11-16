@@ -96,6 +96,8 @@ def sandbox_setup(
 ) -> tuple[str, str, dict[str, str], str]:
     """``(compactbench provider, proxy route, sandbox env, endpoint kind)`` for a method.
 
+    ``proxy`` is the host the sandbox uses to reach the proxy (its IP address).
+
     A ``custom`` endpoint goes through the proxy's ``custom`` route with the OpenAI
     client, and is recorded as a custom endpoint.
     """
@@ -122,6 +124,22 @@ def _wait_for_proxy(name: str, timeout: float = 60.0) -> None:
             return
         time.sleep(1)
     raise RuntimeError("proxy did not start")
+
+
+def _proxy_address(name: str, network: str) -> str:
+    """The proxy container's IP address on the sandbox network.
+
+    The sandbox is pointed at this address, not the container's name: under gVisor,
+    Docker's embedded DNS (127.0.0.11) doesn't answer inside the container.
+    """
+    inspected = _run(
+        ["docker", "inspect", "-f", "{{json .NetworkSettings.Networks}}", name],
+        capture_output=True,
+    )
+    address = json.loads(inspected.stdout).get(network, {}).get("IPAddress", "")
+    if not address:
+        raise RuntimeError("the proxy has no address on the sandbox network")
+    return str(address)
 
 
 def _seal(public_key: str, source: Path, target: Path, context: str) -> str:
@@ -185,7 +203,7 @@ def main() -> int:
 
     tag = secrets.token_hex(4)
     network, proxy = f"cb-sandbox-{tag}", f"cb-proxy-{tag}"
-    provider, route, sdk_env, endpoint_kind = sandbox_setup(bundle.provider, bundle.base_url, proxy)
+    provider, route, _, endpoint_kind = sandbox_setup(bundle.provider, bundle.base_url, proxy)
     args.out.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="cb-eval-"))
     # Plaintext traces, raw results and the sealed key live here: gone however we exit.
@@ -246,6 +264,9 @@ def main() -> int:
         del proxy_env
         _run(["docker", "network", "connect", network, proxy], capture_output=True)
         _wait_for_proxy(proxy)
+        _, _, sdk_env, _ = sandbox_setup(
+            bundle.provider, bundle.base_url, _proxy_address(proxy, network)
+        )
 
         argv = [
             sys.executable,

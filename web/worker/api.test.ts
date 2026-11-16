@@ -34,11 +34,13 @@ async function setup(overrides: Partial<ApiEnv> = {}) {
   const store = new MemoryStore();
   const { jwk, sign } = await oidc();
   const dispatched: string[] = [];
+  const github = { dispatchStatus: 204 };
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("login/oauth/access_token")) return Response.json({ access_token: "gho_x" });
     if (url === "https://api.github.com/user") return Response.json({ login: "alice", id: 42 });
     if (url.endsWith("/dispatches")) {
+      if (github.dispatchStatus !== 204) return new Response(null, { status: github.dispatchStatus });
       dispatched.push(JSON.parse(String(init?.body)).inputs.submission_id);
       return new Response(null, { status: 204 });
     }
@@ -80,7 +82,7 @@ async function setup(overrides: Partial<ApiEnv> = {}) {
       exp: Math.floor(Date.now() / 1000) + 300,
       ...extra,
     });
-  return { store, env, call, signIn, dispatched, workflowToken };
+  return { store, env, call, signIn, dispatched, workflowToken, github };
 }
 
 const form = {
@@ -139,6 +141,22 @@ test("a submission is sealed, stored, rate-limited and dispatched", async () => 
   const view = (await status.json()) as Record<string, unknown>;
   assert.equal(view.status, "queued");
   assert.equal(view.github_id, undefined);
+});
+
+test("a submission that can't be started is forgotten and doesn't count", async () => {
+  const { call, signIn, store, dispatched, github } = await setup({ LIMIT_PER_WEEK: "1" });
+  const session = await signIn();
+  github.dispatchStatus = 401;
+  const failed = await call("/api/submissions", post(session, form));
+  assert.equal(failed.status, 503);
+  assert.match(((await failed.json()) as { error: string }).error, /doesn't count/);
+  assert.equal(store.records.size, 0, "no record");
+  assert.equal(store.bundles.size, 0, "no sealed keys left behind");
+
+  github.dispatchStatus = 204;
+  const retried = await call("/api/submissions", post(session, form));
+  assert.equal(retried.status, 201, "neither in progress nor counted toward the week");
+  assert.equal(dispatched.length, 1);
 });
 
 test("validation and the kill switch", async () => {
