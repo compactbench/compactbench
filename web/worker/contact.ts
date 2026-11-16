@@ -77,7 +77,7 @@ export function validateContact(input: ContactInput): ContactFields | null {
 }
 
 /** Base64 of UTF-8 text in 76-character lines, so any message is safe in an email body. */
-function base64Lines(text: string): string {
+export function base64Lines(text: string): string {
   const bytes = new TextEncoder().encode(text);
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);

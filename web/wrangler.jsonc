@@ -37,6 +37,13 @@
     "LIMIT_PER_DAY": "20",
     // The contact form sends from this address on our domain; where it goes is the
     // CONTACT_TO secret (wrangler secret put CONTACT_TO), never written here.
-    "CONTACT_FROM": "contact@compactbench.com"
-  }
+    "CONTACT_FROM": "contact@compactbench.com",
+    // The daily report: sent to the CONTACT_TO secret. Optional secrets add traffic
+    // (CF_ANALYTICS_TOKEN + CF_ZONE_TAG) and GitHub traffic (GITHUB_STATS_TOKEN).
+    "REPORT_FROM": "reports@compactbench.com",
+    "HF_DATASET": "compactbench/compactbench",
+    "PYPI_PACKAGE": "compactbench"
+  },
+  // Daily report at 14:00 UTC (8am Central).
+  "triggers": { "crons": ["0 14 * * *"] }
 }

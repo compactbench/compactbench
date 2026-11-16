@@ -4,3 +4,4 @@ dist/
 .wrangler/
 src/generated/
 public/og/methods/
+wrangler.local-test.jsonc

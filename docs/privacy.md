@@ -17,6 +17,10 @@
   to the maintainer. The site doesn't keep a copy. To stop one sender flooding the inbox it
   keeps a keyed hash of your IP address and the time for 24 hours, then deletes it.
 - Donations go through Ko-fi, on Ko-fi's own website. We never see your payment details.
+- For a daily summary, the site counts a few events in total (sign-ins, new runs, contact
+  messages, MCP sessions and tool calls) per day, and reads aggregate traffic figures
+  (visitors, page views, countries) from our hosting provider. No visitor, IP address or
+  account is recorded for these counts.
 
 ## Running CompactBench yourself
 

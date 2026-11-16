@@ -179,3 +179,68 @@ export class D1ContactLog {
     await this.db.prepare("DELETE FROM contact_log WHERE at < ?").bind(before).run();
   }
 }
+
+const REFERENCE_NAMES = ["sectioned-summary", "hierarchical-summary", "naive-summary", "structured-state"];
+
+/** Report counters and snapshots in D1 (migration 0003). Totals only. */
+export class D1StatsStore {
+  private db: D1;
+
+  constructor(db: D1) {
+    this.db = db;
+  }
+
+  async bump(day: string, event: string, by = 1): Promise<void> {
+    await this.db
+      .prepare("INSERT INTO daily_events (day, event, n) VALUES (?, ?, ?) ON CONFLICT(day, event) DO UPDATE SET n = n + excluded.n")
+      .bind(day, event, by)
+      .run();
+  }
+  async events(day: string): Promise<Record<string, number>> {
+    const rows = await this.db.prepare("SELECT event, n FROM daily_events WHERE day = ?").bind(day).all<{ event: string; n: number }>();
+    return Object.fromEntries(rows.results.map((r) => [r.event, r.n]));
+  }
+  async eventTotal(prefix: string): Promise<number> {
+    const row = await this.db
+      .prepare("SELECT COALESCE(SUM(n), 0) AS n FROM daily_events WHERE substr(event, 1, ?) = ?")
+      .bind(prefix.length, prefix)
+      .first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+  async saveSnapshot(day: string, values: Record<string, number>): Promise<void> {
+    for (const [key, value] of Object.entries(values)) {
+      await this.db.prepare("INSERT OR REPLACE INTO daily_snapshots (day, key, value) VALUES (?, ?, ?)").bind(day, key, value).run();
+    }
+  }
+  async snapshot(day: string): Promise<Record<string, number>> {
+    const rows = await this.db.prepare("SELECT key, value FROM daily_snapshots WHERE day = ?").bind(day).all<{ key: string; value: number }>();
+    return Object.fromEntries(rows.results.map((r) => [r.key, r.value]));
+  }
+  async milestones(): Promise<Set<string>> {
+    const rows = await this.db.prepare("SELECT key FROM milestones").all<{ key: string }>();
+    return new Set(rows.results.map((r) => r.key));
+  }
+  async recordMilestone(key: string, day: string): Promise<void> {
+    await this.db.prepare("INSERT OR IGNORE INTO milestones (key, day) VALUES (?, ?)").bind(key, day).run();
+  }
+  async submissions(from: string, to: string) {
+    const fresh = await this.db
+      .prepare("SELECT status, COUNT(*) AS n FROM submissions WHERE created_at >= ? AND created_at < ? GROUP BY status")
+      .bind(from, to)
+      .all<{ status: string; n: number }>();
+    const totals = await this.db
+      .prepare(
+        `SELECT COUNT(*) AS total, SUM(status = 'published') AS published, COUNT(DISTINCT github_id) AS people,
+         SUM(method_name IN (${REFERENCE_NAMES.map(() => "?").join(", ")})) AS reference_runs FROM submissions`,
+      )
+      .bind(...REFERENCE_NAMES)
+      .first<{ total: number; published: number | null; people: number; reference_runs: number | null }>();
+    return {
+      newByStatus: Object.fromEntries(fresh.results.map((r) => [r.status, r.n])),
+      total: totals?.total ?? 0,
+      published: totals?.published ?? 0,
+      people: totals?.people ?? 0,
+      referenceRuns: totals?.reference_runs ?? 0,
+    };
+  }
+}
