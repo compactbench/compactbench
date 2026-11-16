@@ -159,6 +159,12 @@ test("validation and the kill switch", async () => {
   const closed = await setup({ SUBMISSIONS_OPEN: "false" });
   const s2 = await closed.signIn();
   assert.equal((await closed.call("/api/submissions", post(s2, form))).status, 503);
+
+  // While closed, only logins on the early-access list may submit (the launch smoke test).
+  const others = await setup({ SUBMISSIONS_OPEN: "false", SUBMISSIONS_EARLY_ACCESS: "bob, carol" });
+  assert.equal((await others.call("/api/submissions", post(await others.signIn(), form))).status, 503);
+  const early = await setup({ SUBMISSIONS_OPEN: "false", SUBMISSIONS_EARLY_ACCESS: "bob, Alice" });
+  assert.equal((await early.call("/api/submissions", post(await early.signIn(), form))).status, 201);
 });
 
 test("with Turnstile on, a submission needs a valid token", async () => {

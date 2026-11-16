@@ -37,6 +37,8 @@
     "SEASON_PUBLIC_KEY": "NskQUCXvaDfd2p3MGdAjEeCkS8m_AjDTvS8HWNG2SgY",
     "OIDC_AUDIENCE": "https://compactbench.com",
     "SUBMISSIONS_OPEN": "false",
+    // GitHub logins that may submit while submissions are closed (the launch smoke test).
+    "SUBMISSIONS_EARLY_ACCESS": "UsernameLoad",
     "LIMIT_PER_WEEK": "2",
     "LIMIT_PER_DAY": "20",
     // The contact form sends from this address on our domain; where it goes is the

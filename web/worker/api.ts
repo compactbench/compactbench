@@ -16,6 +16,8 @@ export interface ApiEnv {
   GITHUB_DISPATCH_TOKEN: string;
   OIDC_AUDIENCE: string;
   SUBMISSIONS_OPEN?: string;
+  /** GitHub logins (comma-separated) that may submit while SUBMISSIONS_OPEN is "false", e.g. for a smoke test. */
+  SUBMISSIONS_EARLY_ACCESS?: string;
   LIMIT_PER_WEEK?: string;
   LIMIT_PER_DAY?: string;
   TURNSTILE_SECRET?: string;
@@ -150,7 +152,7 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
       const record = await submit(body, {
         store: deps.store,
         limits: {
-          open: env.SUBMISSIONS_OPEN !== "false",
+          open: env.SUBMISSIONS_OPEN !== "false" || earlyAccess(env.SUBMISSIONS_EARLY_ACCESS, user.login),
           perUserPerWeek: Number(env.LIMIT_PER_WEEK ?? 2),
           globalPerDay: Number(env.LIMIT_PER_DAY ?? 20),
         },
@@ -195,6 +197,12 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
     }
   }
   return null;
+}
+
+/** Whether a login is on the early-access list (GitHub logins are case-insensitive). */
+function earlyAccess(list: string | undefined, login: string): boolean {
+  const wanted = login.toLowerCase();
+  return (list ?? "").split(",").some((entry) => entry.trim().toLowerCase() === wanted && wanted !== "");
 }
 
 async function dispatch(env: ApiEnv, id: string, fetcher: typeof fetch): Promise<boolean> {
