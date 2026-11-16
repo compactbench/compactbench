@@ -141,6 +141,8 @@ export interface ModelLine {
   model: string;
   provider: string;
   custom: boolean;
+  /** The submitter's GitHub handle, or null for a maintainer line. */
+  handle: string | null;
   by: string;
   cells: Record<string, Row>;
 }
@@ -157,6 +159,7 @@ export function byModel(list: Row[]): ModelLine[] {
       model: modelName(row),
       provider: row.compactor_provider,
       custom: isCustomEndpoint(row),
+      handle: row.handle,
       by,
       cells: {},
     };

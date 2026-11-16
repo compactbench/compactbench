@@ -1,0 +1,25 @@
+---
+// Who submitted a row: their GitHub handle, linked to their profile. The handle is the
+// GitHub login they signed in with, so it can't be someone else's.
+interface Props {
+  handle: string;
+}
+
+const { handle } = Astro.props;
+---
+
+<a class="submitter" href={`https://github.com/${encodeURIComponent(handle)}`} title={`@${handle} on GitHub`}>@{handle}</a>
+
+<style>
+  .submitter {
+    color: var(--text);
+    font-weight: 600;
+    font-family: var(--font);
+    text-decoration: none;
+  }
+  .submitter:hover,
+  .submitter:focus-visible {
+    color: var(--cyan);
+    text-decoration: underline;
+  }
+</style>
