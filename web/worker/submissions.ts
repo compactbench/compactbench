@@ -234,8 +234,12 @@ export async function submit(input: SubmitInput, ctx: SubmitContext): Promise<Su
   };
   await ctx.store.insert(record, JSON.stringify(bundle));
   if (!(await ctx.dispatch(id))) {
-    await ctx.store.update(id, { status: "failed", message: "Couldn't start the evaluation; please try again later." });
-    record.status = "failed";
+    // Nothing ran: forget it (and its sealed keys) so it doesn't count toward any limit.
+    await ctx.store.remove(id);
+    throw new SubmitError(
+      "We couldn't start the evaluation. Nothing ran and it doesn't count toward your limit; please try again in a few minutes.",
+      503,
+    );
   }
   return record;
 }

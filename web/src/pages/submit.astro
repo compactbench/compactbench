@@ -214,7 +214,10 @@ const referenceMethods: [string, string][] = [
     error.hidden = true;
     const { "cf-turnstile-response": turnstile_token, source: _source, ...data } = Object.fromEntries(new FormData(form).entries());
     const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    const label = button.textContent;
     button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "Sealing your keys and starting the run…";
     try {
       const response = await fetch("/api/submissions", {
         method: "POST",
@@ -228,6 +231,8 @@ const referenceMethods: [string, string][] = [
       error.textContent = (e as Error).message;
       error.hidden = false;
       button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.textContent = label;
       (window as { turnstile?: { reset(): void } }).turnstile?.reset();
     }
   });

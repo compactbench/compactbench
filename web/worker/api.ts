@@ -219,7 +219,10 @@ async function dispatch(env: ApiEnv, id: string, fetcher: typeof fetch): Promise
       body: JSON.stringify({ ref: "main", inputs: { submission_id: id } }),
     },
   );
-  return response.status === 204;
+  if (response.status === 204) return true;
+  // The status only (never the body or the token): enough to tell an expired token from an outage.
+  console.error(`workflow dispatch failed: HTTP ${response.status}`);
+  return false;
 }
 
 async function turnstileOk(secret: string, token: unknown, request: Request, fetcher: typeof fetch): Promise<boolean> {

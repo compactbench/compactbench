@@ -28,6 +28,8 @@ export interface Store {
   activeForUser(githubId: number): Promise<number>;
   countSince(since: string): Promise<number>;
   getBundle(id: string): Promise<string | null>;
+  /** Forget a submission that never started: its record and its bundle (sealed keys). */
+  remove(id: string): Promise<void>;
   /** One account's submissions, newest first. */
   listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]>;
 }
@@ -45,6 +47,7 @@ export interface D1 {
 export interface R2 {
   put(key: string, value: string): Promise<unknown>;
   get(key: string): Promise<{ text(): Promise<string> } | null>;
+  delete(key: string): Promise<unknown>;
 }
 
 export class CloudflareStore implements Store {
@@ -112,6 +115,11 @@ export class CloudflareStore implements Store {
     return object ? object.text() : null;
   }
 
+  async remove(id: string): Promise<void> {
+    await this.db.prepare("DELETE FROM submissions WHERE id = ?").bind(id).run();
+    await this.bucket.delete(`bundles/${id}.json`);
+  }
+
   async listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]> {
     const rows = await this.db
       .prepare("SELECT * FROM submissions WHERE github_id = ? ORDER BY created_at DESC LIMIT ?")
@@ -148,6 +156,10 @@ export class MemoryStore implements Store {
   }
   async getBundle(id: string): Promise<string | null> {
     return this.bundles.get(id) ?? null;
+  }
+  async remove(id: string): Promise<void> {
+    this.records.delete(id);
+    this.bundles.delete(id);
   }
   async listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]> {
     return [...this.records.values()]
