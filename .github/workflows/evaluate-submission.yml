@@ -174,6 +174,9 @@ jobs:
     needs: evaluate
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Holds PUBLISH_DEPLOY_KEY, the write deploy key the main-branch ruleset lets through
+    # (pushes with the job token are blocked by the pull-request rule). Main only.
+    environment: publish
     permissions:
       actions: write  # to start the site deploy
       contents: write
@@ -207,6 +210,8 @@ jobs:
       # Pushes made with this job's token don't trigger other workflows, so the
       # leaderboard is rebuilt here and the site deploy is started explicitly.
       - name: Rebuild the leaderboard and commit
+        env:
+          PUBLISH_DEPLOY_KEY: ${{ secrets.PUBLISH_DEPLOY_KEY }}
         run: |
           uv run python scripts/rebuild_leaderboard.py
           git config user.name "compactbench-bot"
@@ -215,7 +220,12 @@ jobs:
           if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
           git commit -m "chore(leaderboard): publish ranked submission $SUBMISSION_ID"
           git pull --rebase origin main
-          git push origin HEAD:main
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PUBLISH_DEPLOY_KEY" > ~/.ssh/publish
+          chmod 600 ~/.ssh/publish
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/publish -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git push git@github.com:${{ github.repository }}.git HEAD:main
+          rm -f ~/.ssh/publish
 
       - name: Deploy the site
         env:
