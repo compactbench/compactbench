@@ -9,6 +9,10 @@
 //   (optional) wrangler secret put TURNSTILE_SECRET
 {
   "name": "compactbench-web",
+  // Served on the domain only; the workers.dev address and preview URLs stay off.
+  "routes": [{ "pattern": "compactbench.com", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   "assets": {
@@ -20,7 +24,7 @@
     "run_worker_first": ["/mcp", "/auth/*", "/api/me", "/api/me/*", "/api/contact", "/api/submissions", "/api/submissions/*", "/api/internal/*"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "compactbench", "database_id": "REPLACE_AFTER_wrangler_d1_create", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "compactbench", "database_id": "b624f5e0-f5ab-42d5-8247-4c514d4c19ea", "migrations_dir": "migrations" }
   ],
   "r2_buckets": [{ "binding": "BUNDLES", "bucket_name": "compactbench-submissions" }],
   // Contact form email, enabled at launch once Email Routing is on and the maintainer's
@@ -30,9 +34,9 @@
     "GITHUB_REPO": "compactbench/compactbench",
     "GITHUB_CLIENT_ID": "REPLACE_WITH_OAUTH_APP_CLIENT_ID",
     "SEASON_KEY": "s1",
-    "SEASON_PUBLIC_KEY": "REPLACE_WITH_SEASON_PUBLIC_KEY",
+    "SEASON_PUBLIC_KEY": "NskQUCXvaDfd2p3MGdAjEeCkS8m_AjDTvS8HWNG2SgY",
     "OIDC_AUDIENCE": "https://compactbench.com",
-    "SUBMISSIONS_OPEN": "true",
+    "SUBMISSIONS_OPEN": "false",
     "LIMIT_PER_WEEK": "2",
     "LIMIT_PER_DAY": "20",
     // The contact form sends from this address on our domain; where it goes is the

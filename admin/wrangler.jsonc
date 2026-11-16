@@ -12,7 +12,7 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "routes": [{ "pattern": "admin.compactbench.com", "custom_domain": true }],
-  "d1_databases": [{ "binding": "DB", "database_name": "compactbench", "database_id": "REPLACE_AFTER_wrangler_d1_create" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "compactbench", "database_id": "b624f5e0-f5ab-42d5-8247-4c514d4c19ea" }],
   "vars": {
     "ACCESS_TEAM_DOMAIN": "compactbench.cloudflareaccess.com",
     "GITHUB_REPO": "compactbench/compactbench",

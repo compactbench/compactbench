@@ -25,3 +25,6 @@ reader:
 controls: false
 sampling: fresh
 seed_group: s1
+
+# Submitters' API keys are sealed to this key; only the evaluation holds the private half.
+public_key: "NskQUCXvaDfd2p3MGdAjEeCkS8m_AjDTvS8HWNG2SgY"
