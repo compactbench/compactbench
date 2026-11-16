@@ -1,16 +1,19 @@
 // Worker for compactbench.com. Static pages are served straight from assets; only
 // the dynamic routes listed in wrangler.jsonc ("run_worker_first") reach this code.
 import { type ApiEnv, handleApi } from "./api.ts";
+import { EmailMessage } from "cloudflare:email";
 import selftest from "../src/generated/selftest.json" with { type: "json" };
 import { type Data, handleHttp } from "./mcp.ts";
 import type { SelfTestData } from "./selftest.ts";
 import { secured } from "./security.ts";
-import { CloudflareStore, type D1, type R2 } from "./store.ts";
+import { CloudflareStore, D1ContactLog, type D1, type R2 } from "./store.ts";
 
 interface Env extends ApiEnv {
   ASSETS: { fetch: (request: Request | string) => Promise<Response> };
   DB: D1;
   BUNDLES: R2;
+  /** Cloudflare Email Routing binding, added at launch (see LAUNCH.md). */
+  SEND_EMAIL?: { send(message: EmailMessage): Promise<void> };
 }
 
 export default {
@@ -34,7 +37,12 @@ export default {
       });
       return secured(response);
     }
-    const api = await handleApi(request, env, { store: new CloudflareStore(env.DB, env.BUNDLES) });
+    const mail = env.SEND_EMAIL;
+    const api = await handleApi(request, env, {
+      store: new CloudflareStore(env.DB, env.BUNDLES),
+      contactLog: new D1ContactLog(env.DB),
+      sendMail: mail ? (raw, from, to) => mail.send(new EmailMessage(from, to, raw)) : undefined,
+    });
     // Assets keep their own Content-Security-Policy from public/_headers.
     return api ? secured(api) : secured(await env.ASSETS.fetch(request), false);
   },

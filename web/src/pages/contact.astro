@@ -1,0 +1,231 @@
+---
+import Base from "../layouts/Base.astro";
+
+// Optional bot check: set PUBLIC_TURNSTILE_SITE_KEY at build time (and TURNSTILE_SECRET on the Worker).
+const turnstileKey: string | undefined = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+const kinds: [string, string, string][] = [
+  ["problem", "Report a problem", "Something on the site or in the benchmark isn't working as it should"],
+  ["idea", "Suggest an idea", "A failure mode we're missing, a feature, an integration"],
+  ["question", "Ask a question", "About the methodology, a run, or using CompactBench"],
+  ["partnership", "Partnerships and press", "Labs, vendors and frameworks submitting rows; sponsorship; articles"],
+  ["other", "Something else", ""],
+];
+---
+
+<Base
+  title="Contact"
+  description="Report a problem, suggest an idea or get in touch with the people behind CompactBench."
+  path="/contact"
+>
+  <section class="container section narrow">
+    <p class="eyebrow">Contact</p>
+    <h1>Get in touch</h1>
+    <p class="lede">
+      Found a bug, have an idea, or want your method or model on the board? Send a message: it goes
+      straight to the maintainer.
+    </p>
+
+    <form class="card form" data-contact novalidate>
+      <fieldset>
+        <legend>What would you like to do?</legend>
+        {
+          kinds.map(([value, label, hint], i) => (
+            <label class="kind">
+              <input type="radio" name="kind" value={value} checked={i === 0} />
+              <span>
+                <strong>{label}</strong>
+                {hint && <span class="muted hint">{hint}</span>}
+              </span>
+            </label>
+          ))
+        }
+      </fieldset>
+
+      <label>
+        <span data-message-label>What went wrong?</span>
+        <span class="muted small" data-message-hint>What were you doing, and what did you expect? The more detail, the easier it is to fix.</span>
+        <textarea name="message" rows="8" maxlength="4000" required data-message></textarea>
+        <span class="muted small count"><span data-count>0</span> of 4,000 characters</span>
+      </label>
+
+      <label>
+        Your email <span class="muted">(optional)</span>
+        <span class="muted small">Only if you'd like a reply. It's used for nothing else.</span>
+        <input name="email" type="email" autocomplete="email" maxlength="254" />
+      </label>
+
+      <!-- Honeypot: hidden from people; bots that fill it are ignored. -->
+      <label class="trap" aria-hidden="true">
+        Website <input name="website" tabindex="-1" autocomplete="off" />
+      </label>
+
+      {turnstileKey && <div class="cf-turnstile" data-sitekey={turnstileKey} data-theme="dark"></div>}
+
+      <p class="muted small">
+        Your message goes by email to the maintainer. The site doesn't keep a copy; see
+        <a href="/privacy">privacy</a>.
+      </p>
+      <div class="actions">
+        <button class="button primary" type="submit">Send</button>
+      </div>
+      <p class="error" data-error role="alert" hidden></p>
+    </form>
+
+    <div class="card sent" data-sent hidden role="status">
+      <h2>Thank you</h2>
+      <p>Your message is on its way. If you left an email address, you'll hear back there.</p>
+    </div>
+
+    <h2>Other ways to reach us</h2>
+    <ul>
+      <li>
+        <strong>Security issues:</strong> please report them privately through
+        <a href="https://github.com/compactbench/compactbench/security/advisories/new">GitHub's private reporting form</a>,
+        not here.
+      </li>
+      <li>
+        <strong>Public bug reports and feature requests:</strong>
+        <a href="https://github.com/compactbench/compactbench/issues">GitHub issues</a>, where others can follow along.
+      </li>
+      <li><strong>A ranked run you submitted:</strong> its status is on <a href="/runs">My runs</a>.</li>
+      <li><strong>Supporting the project:</strong> see <a href="/donate">Support CompactBench</a>.</li>
+    </ul>
+  </section>
+
+  {turnstileKey && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</Base>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-contact]")!;
+  const error = form.querySelector<HTMLElement>("[data-error]")!;
+  const message = form.querySelector<HTMLTextAreaElement>("[data-message]")!;
+  const prompts: Record<string, [string, string]> = {
+    problem: ["What went wrong?", "What were you doing, and what did you expect? The more detail, the easier it is to fix."],
+    idea: ["What's your idea?", "What would you like CompactBench to do or measure, and why?"],
+    question: ["Your question", "Link the page or run it's about, if there is one."],
+    partnership: ["Tell us about it", "Who you are and what you have in mind."],
+    other: ["Your message", ""],
+  };
+
+  const sync = () => {
+    const kind = form.querySelector<HTMLInputElement>("input[name=kind]:checked")?.value ?? "other";
+    const [label, hint] = prompts[kind] ?? prompts.other!;
+    form.querySelector("[data-message-label]")!.textContent = label;
+    form.querySelector("[data-message-hint]")!.textContent = hint;
+  };
+  form.querySelectorAll("input[name=kind]").forEach((el) => el.addEventListener("change", sync));
+  // ?kind=idea etc. preselects a choice, so other pages can link straight to it.
+  const preset = new URLSearchParams(location.search).get("kind");
+  const presetInput = preset ? form.querySelector<HTMLInputElement>(`input[name=kind][value="${CSS.escape(preset)}"]`) : null;
+  if (presetInput) presetInput.checked = true;
+  sync();
+
+  message.addEventListener("input", () => {
+    form.querySelector("[data-count]")!.textContent = message.value.length.toLocaleString("en-US");
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    error.hidden = true;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const { "cf-turnstile-response": turnstile_token, ...fields } = data;
+    const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...fields, turnstile_token, page: document.referrer ? new URL(document.referrer).pathname : "" }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error ?? "Couldn't send your message. Please try again.");
+      form.hidden = true;
+      document.querySelector<HTMLElement>("[data-sent]")!.hidden = false;
+    } catch (e) {
+      error.textContent = (e as Error).message;
+      error.hidden = false;
+      button.disabled = false;
+      (window as { turnstile?: { reset(): void } }).turnstile?.reset();
+    }
+  });
+</script>
+
+<style>
+  .narrow {
+    max-width: 820px;
+  }
+  .form {
+    margin-top: 1.5rem;
+    display: grid;
+    gap: 18px;
+  }
+  fieldset {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: grid;
+    gap: 10px;
+    margin: 0;
+  }
+  legend {
+    padding: 0 6px;
+    font-weight: 600;
+  }
+  label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.92rem;
+  }
+  .kind {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .kind input {
+    margin-top: 0.3em;
+  }
+  .kind span {
+    display: grid;
+    gap: 2px;
+  }
+  .hint,
+  .small {
+    font-size: 0.84rem;
+  }
+  .count {
+    justify-self: end;
+  }
+  input:not([type="radio"]),
+  textarea {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 0.55em 0.7em;
+    font: inherit;
+  }
+  .trap {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .error {
+    color: var(--bad);
+    margin: 0;
+  }
+  .sent {
+    margin-top: 1.5rem;
+  }
+  .sent h2 {
+    margin-top: 0;
+  }
+  h2 {
+    margin-top: 2rem;
+  }
+</style>

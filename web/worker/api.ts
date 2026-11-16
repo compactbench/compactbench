@@ -1,5 +1,6 @@
 // The site's dynamic routes: GitHub sign-in, ranked submissions and their status, and
 // the two internal endpoints the evaluation workflow calls.
+import { contact, ContactError, type ContactInput, type ContactLog, type SendMail } from "./contact.ts";
 import { authorizeUrl, isEvaluationWorkflow, userFromCode } from "./github.ts";
 import { cookie, readCookie, signValue, verifyValue } from "./session.ts";
 import type { Status, Store } from "./store.ts";
@@ -18,11 +19,17 @@ export interface ApiEnv {
   LIMIT_PER_WEEK?: string;
   LIMIT_PER_DAY?: string;
   TURNSTILE_SECRET?: string;
+  /** Contact form: the maintainer's address (a secret) and the sending address on our domain. */
+  CONTACT_TO?: string;
+  CONTACT_FROM?: string;
 }
 
 export interface Deps {
   store: Store;
   fetcher?: typeof fetch;
+  /** Present once email sending is configured; without it the contact form says so. */
+  sendMail?: SendMail;
+  contactLog?: ContactLog;
 }
 
 const SESSION = "cb_session";
@@ -82,6 +89,37 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
   if (path === "/api/me" && request.method === "GET") {
     const user = await sessionUser(request, env);
     return user ? json({ login: user.login }) : json({ error: "signed out" }, 401);
+  }
+
+  if (path === "/api/contact" && request.method === "POST") {
+    if (request.headers.get("Origin") !== url.origin) return json({ error: "cross-site request refused" }, 403);
+    if (!deps.sendMail || !deps.contactLog || !env.CONTACT_TO || !env.CONTACT_FROM || !env.SESSION_SECRET) {
+      return json({ error: "The contact form isn't set up yet. Please open an issue on GitHub instead." }, 503);
+    }
+    let body: ContactInput;
+    try {
+      body = (await request.json()) as ContactInput;
+    } catch {
+      return json({ error: "expected a JSON body" }, 400);
+    }
+    if (env.TURNSTILE_SECRET && !(await turnstileOk(env.TURNSTILE_SECRET, body.turnstile_token, request, fetcher))) {
+      return json({ error: "Bot check failed; please retry." }, 403);
+    }
+    try {
+      await contact(body, {
+        log: deps.contactLog,
+        send: deps.sendMail,
+        from: env.CONTACT_FROM,
+        to: env.CONTACT_TO,
+        secret: env.SESSION_SECRET,
+        ip: request.headers.get("CF-Connecting-IP") ?? "unknown",
+        host: url.hostname,
+      });
+      return json({ ok: true });
+    } catch (error) {
+      if (error instanceof ContactError) return json({ error: error.message }, error.status);
+      throw error;
+    }
   }
 
   if (path === "/api/me/submissions" && request.method === "GET") {

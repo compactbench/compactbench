@@ -13,6 +13,10 @@
   your handle with your submission, for attribution and rate limits.
 - Our hosting provider keeps standard request logs (IP address, user agent, time, page)
   for security and abuse prevention. We use them only in aggregate.
+- The contact form sends your message, and your email address if you give one, by email
+  to the maintainer. The site doesn't keep a copy. To stop one sender flooding the inbox it
+  keeps a keyed hash of your IP address and the time for 24 hours, then deletes it.
+- Donations go through Ko-fi, on Ko-fi's own website. We never see your payment details.
 
 ## Running CompactBench yourself
 
@@ -32,5 +36,6 @@
 
 ## Contact
 
-To ask what we hold about you or to have it removed, send the maintainers a private report
-through [GitHub's private reporting form](https://github.com/compactbench/compactbench/security/advisories/new).
+To ask what we hold about you or to have it removed, use the [contact form](https://compactbench.com/contact),
+or send the maintainers a private report through
+[GitHub's private reporting form](https://github.com/compactbench/compactbench/security/advisories/new).

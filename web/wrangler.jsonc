@@ -17,12 +17,15 @@
     "not_found_handling": "404-page",
     "html_handling": "drop-trailing-slash",
     // Only these paths run code; every page and file is served straight from assets.
-    "run_worker_first": ["/mcp", "/auth/*", "/api/me", "/api/me/*", "/api/submissions", "/api/submissions/*", "/api/internal/*"]
+    "run_worker_first": ["/mcp", "/auth/*", "/api/me", "/api/me/*", "/api/contact", "/api/submissions", "/api/submissions/*", "/api/internal/*"]
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "compactbench", "database_id": "REPLACE_AFTER_wrangler_d1_create", "migrations_dir": "migrations" }
   ],
   "r2_buckets": [{ "binding": "BUNDLES", "bucket_name": "compactbench-submissions" }],
+  // Contact form email, enabled at launch once Email Routing is on and the maintainer's
+  // address is verified there (LAUNCH.md). The address itself is the CONTACT_TO secret.
+  // "send_email": [{ "name": "SEND_EMAIL" }],
   "vars": {
     "GITHUB_REPO": "compactbench/compactbench",
     "GITHUB_CLIENT_ID": "REPLACE_WITH_OAUTH_APP_CLIENT_ID",
@@ -31,6 +34,9 @@
     "OIDC_AUDIENCE": "https://compactbench.com",
     "SUBMISSIONS_OPEN": "true",
     "LIMIT_PER_WEEK": "2",
-    "LIMIT_PER_DAY": "20"
+    "LIMIT_PER_DAY": "20",
+    // The contact form sends from this address on our domain; where it goes is the
+    // CONTACT_TO secret (wrangler secret put CONTACT_TO), never written here.
+    "CONTACT_FROM": "contact@compactbench.com"
   }
 }

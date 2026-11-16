@@ -69,6 +69,7 @@ const nav = [
             ))
           }
           <a href="https://github.com/compactbench/compactbench" class="gh">GitHub</a>
+          <a href="/donate" class="donate" aria-current={path === "/donate" ? "page" : undefined}>Donate</a>
         </nav>
       </div>
     </header>
@@ -94,6 +95,8 @@ const nav = [
           <a href="/submit">Submit</a>
           <a href="/runs">My runs</a>
           <a href="/about">About</a>
+          <a href="/contact">Contact</a>
+          <a href="/donate">Donate</a>
           <a href="/submission-terms">Submission terms</a>
           <a href="/privacy">Privacy</a>
           <a href="https://github.com/compactbench/compactbench">GitHub</a>
@@ -146,6 +149,15 @@ const nav = [
   .bar nav a[aria-current="page"] {
     color: var(--text);
     text-decoration: none;
+  }
+  .bar nav a.donate {
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 0 12px;
+  }
+  .bar nav a.donate:hover {
+    border-color: var(--violet);
   }
   .site-footer {
     border-top: 1px solid var(--border);

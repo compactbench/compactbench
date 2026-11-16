@@ -157,3 +157,25 @@ export class MemoryStore implements Store {
       .map((r) => ({ ...r }));
   }
 }
+
+/** Contact-form rate limits in D1: keyed IP hashes and times, pruned after a day. */
+export class D1ContactLog {
+  private db: D1;
+
+  constructor(db: D1) {
+    this.db = db;
+  }
+
+  async countSince(ipHash: string | null, since: string): Promise<number> {
+    const row = ipHash === null
+      ? await this.db.prepare("SELECT COUNT(*) AS n FROM contact_log WHERE at >= ?").bind(since).first<{ n: number }>()
+      : await this.db.prepare("SELECT COUNT(*) AS n FROM contact_log WHERE ip_hash = ? AND at >= ?").bind(ipHash, since).first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+  async record(ipHash: string, at: string): Promise<void> {
+    await this.db.prepare("INSERT INTO contact_log (ip_hash, at) VALUES (?, ?)").bind(ipHash, at).run();
+  }
+  async prune(before: string): Promise<void> {
+    await this.db.prepare("DELETE FROM contact_log WHERE at < ?").bind(before).run();
+  }
+}
