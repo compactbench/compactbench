@@ -4,6 +4,8 @@
 export interface GitHubUser {
   login: string;
   id: number;
+  /** When the account was created (ISO 8601), or null if GitHub didn't say. */
+  created_at: string | null;
 }
 
 export function authorizeUrl(clientId: string, redirectUri: string, state: string): string {
@@ -34,9 +36,10 @@ export async function userFromCode(
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "compactbench" },
   });
   if (!userResponse.ok) return null;
-  const user = (await userResponse.json()) as { login?: unknown; id?: unknown };
+  const user = (await userResponse.json()) as { login?: unknown; id?: unknown; created_at?: unknown };
   if (typeof user.login !== "string" || typeof user.id !== "number") return null;
-  return { login: user.login, id: user.id };
+  // When the account was made: ranked runs require a minimum account age.
+  return { login: user.login, id: user.id, created_at: typeof user.created_at === "string" ? user.created_at : null };
 }
 
 const b64urlBytes = (text: string): Uint8Array<ArrayBuffer> => {

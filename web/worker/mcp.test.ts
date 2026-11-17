@@ -1,7 +1,7 @@
 // node --test worker/mcp.test.ts  (Node 24 strips the types)
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Data, handleHttp, handleMessage } from "./mcp.ts";
+import { type Data, handleHttp, handleMessage, MAX_BATCH, mcpEvents } from "./mcp.ts";
 
 const data: Data = {
   season: { key: "s1", budget_tokens: 1024, drift_cycles: 4 },
@@ -81,4 +81,35 @@ test("HTTP: POST answers, notifications get 202, GET is refused", async () => {
   assert.equal((await handleHttp(new Request("https://x/mcp"), load)).status, 405);
   const bad = await handleHttp(new Request("https://x/mcp", { method: "POST", body: "{" }), load);
   assert.equal(bad.status, 400);
+});
+
+test("MCP usage counters: at most one session and one known tool per request", async () => {
+  const req = (body: unknown) => new Request("https://x.test/mcp", { method: "POST", body: JSON.stringify(body) });
+  assert.deepEqual(await mcpEvents(req({ jsonrpc: "2.0", id: 1, method: "initialize" })), ["mcp_session"]);
+  assert.deepEqual(
+    await mcpEvents(req({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_leaderboard" } })),
+    ["mcp_tool:get_leaderboard"],
+  );
+  const flood = Array.from({ length: 1000 }, (_, i) => ({ jsonrpc: "2.0", id: i, method: "tools/call", params: { name: `made_up_${i}` } }));
+  assert.deepEqual(await mcpEvents(req(flood)), [], "unknown tools aren't counted");
+  const notes = Array.from({ length: 50 }, () => ({ jsonrpc: "2.0", method: "initialize" }));
+  assert.deepEqual(await mcpEvents(req(notes)), [], "notifications (no id) aren't counted");
+  const mixed = [
+    { jsonrpc: "2.0", id: 1, method: "initialize" },
+    { jsonrpc: "2.0", id: 2, method: "initialize" },
+    { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "selftest_score" } },
+    { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "get_leaderboard" } },
+  ];
+  assert.deepEqual(await mcpEvents(req(mixed)), ["mcp_session", "mcp_tool:selftest_score", "selftest_score"]);
+});
+
+test("oversized JSON-RPC batches are refused before any work", async () => {
+  let loaded = false;
+  const batch = Array.from({ length: MAX_BATCH + 1 }, (_, i) => ({ jsonrpc: "2.0", id: i, method: "tools/list" }));
+  const response = await handleHttp(new Request("https://x.test/mcp", { method: "POST", body: JSON.stringify(batch) }), async () => {
+    loaded = true;
+    return data;
+  });
+  assert.equal(response.status, 400);
+  assert.equal(loaded, false);
 });

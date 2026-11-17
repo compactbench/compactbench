@@ -3,7 +3,7 @@
 import { type ApiEnv, handleApi } from "./api.ts";
 import { EmailMessage } from "cloudflare:email";
 import selftest from "../src/generated/selftest.json" with { type: "json" };
-import { type Data, handleHttp } from "./mcp.ts";
+import { type Data, handleHttp, mcpEvents } from "./mcp.ts";
 import { buildDailyReport, dayOf, rawReport, type ReportEnv } from "./report.ts";
 import type { SelfTestData } from "./selftest.ts";
 import { secured } from "./security.ts";
@@ -34,23 +34,6 @@ function eventFor(request: Request, path: string, status: number): string | null
   if (path === "/auth/callback" && status === 302) return "signin";
   if (path === "/api/me/submissions" && status === 200) return "my_runs";
   return null;
-}
-
-/** MCP counters: sessions and each tool called, read from the JSON-RPC body. */
-async function mcpEvents(request: Request): Promise<string[]> {
-  try {
-    const body = (await request.clone().json()) as unknown;
-    const messages = (Array.isArray(body) ? body : [body]) as { method?: string; params?: { name?: string } }[];
-    return messages.flatMap((m) => {
-      if (m?.method === "initialize") return ["mcp_session"];
-      if (m?.method === "tools/call" && typeof m.params?.name === "string" && /^[a-z_]{1,40}$/.test(m.params.name)) {
-        return [`mcp_tool:${m.params.name}`, ...(m.params.name === "selftest_score" ? ["selftest_score"] : [])];
-      }
-      return [];
-    });
-  } catch {
-    return [];
-  }
 }
 
 export default {

@@ -43,6 +43,8 @@
     "SUBMISSIONS_OPEN": "true",
     "LIMIT_PER_WEEK": "5",
     "LIMIT_PER_DAY": "50",
+    // Ranked submissions need a GitHub account at least this many days old ("0" turns it off).
+    "MIN_ACCOUNT_AGE_DAYS": "14",
     // The contact form sends from this address on our domain; where it goes is the
     // CONTACT_TO secret (wrangler secret put CONTACT_TO), never written here.
     "CONTACT_FROM": "contact@compactbench.com",

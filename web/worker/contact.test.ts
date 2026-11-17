@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { handleApi, type ApiEnv } from "./api.ts";
-import { buildMessage, contact, ContactError, MemoryContactLog, PER_SENDER_PER_HOUR, validateContact } from "./contact.ts";
+import { buildMessage, contact, ContactError, MemoryContactLog, PER_SENDER_PER_HOUR, senderNetwork, validateContact } from "./contact.ts";
 import { MemoryStore } from "./store.ts";
 
 const ORIGIN = "https://compactbench.test";
@@ -93,4 +93,26 @@ test("old rate-limit rows are pruned after a day", async () => {
     now: new Date("2026-01-03T00:00:00Z"),
   });
   assert.deepEqual(log.rows.map((r) => r.at), ["2026-01-03T00:00:00.000Z"]);
+});
+
+test("parallel posts can't send more than the per-sender limit", async () => {
+  const { sent, post } = setup();
+  const replies = await Promise.all(Array.from({ length: 40 }, () => post(message)));
+  assert.equal(replies.filter((r) => r.status === 200).length, PER_SENDER_PER_HOUR);
+  assert.equal(sent.length, PER_SENDER_PER_HOUR);
+});
+
+test("a message that fails to send gives its place in the limit back", async () => {
+  const log = new MemoryContactLog();
+  const ctx = { log, from: "a@x.test", to: "b@x.test", secret: "s", ip: "198.51.100.1", host: "x.test" };
+  await assert.rejects(contact(message, { ...ctx, send: async () => { throw new Error("mail down"); } }));
+  assert.equal(log.rows.length, 0);
+});
+
+test("IPv6 senders are counted per /64", () => {
+  assert.equal(senderNetwork("2001:db8:1:2:aaaa::1"), "2001:db8:1:2::/64");
+  assert.equal(senderNetwork("2001:db8:1:2:ffff:ffff:ffff:ffff"), "2001:db8:1:2::/64");
+  assert.equal(senderNetwork("2001:db8::7"), "2001:db8:0:0::/64");
+  assert.equal(senderNetwork("::ffff:203.0.113.7"), "203.0.113.7");
+  assert.equal(senderNetwork("203.0.113.7"), "203.0.113.7");
 });

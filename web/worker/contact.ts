@@ -34,9 +34,21 @@ export interface ContactFields {
 }
 
 /** Rate-limit memory: keyed IP hashes and times only. */
+export interface ContactWindow {
+  hourSince: string;
+  perSender: number;
+  daySince: string;
+  perDay: number;
+}
+
 export interface ContactLog {
   countSince(ipHash: string | null, since: string): Promise<number>;
   record(ipHash: string, at: string): Promise<void>;
+  /** Record a message only if the sender and the day both have room, checked and recorded in
+   *  one step so a burst of parallel posts can't all pass. */
+  reserve(ipHash: string, at: string, limits: ContactWindow): Promise<"ok" | "sender" | "global">;
+  /** Give back a reservation whose message couldn't be sent. */
+  release(ipHash: string, at: string): Promise<void>;
   prune(before: string): Promise<void>;
 }
 
@@ -112,10 +124,22 @@ export function buildMessage(
   return `${headers.join("\r\n")}\r\n\r\n${base64Lines(body)}\r\n`;
 }
 
-/** Keyed hash of the sender's IP: enough to count, useless for finding anyone. */
+/** Who counts as one sender: an IPv4 address, or an IPv6 /64 (one host can use its whole /64,
+ *  so per-address counting would let it rotate past the limit). */
+export function senderNetwork(ip: string): string {
+  if (ip.includes(".")) return ip.slice(ip.lastIndexOf(":") + 1);
+  if (!ip.includes(":")) return ip;
+  const [head = "", tail = ""] = ip.split("::");
+  const h = head ? head.split(":") : [];
+  const t = ip.includes("::") && tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+  return `${groups.slice(0, 4).map((g) => (Number.parseInt(g, 16) || 0).toString(16)).join(":")}::/64`;
+}
+
+/** Keyed hash of the sender's network: enough to count, useless for finding anyone. */
 export async function hashIp(secret: string, ip: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(`contact:${secret}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip));
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(senderNetwork(ip)));
   return Array.from(new Uint8Array(mac).slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -138,15 +162,28 @@ export async function contact(input: ContactInput, ctx: ContactContext): Promise
   const ipHash = await hashIp(ctx.secret, ctx.ip);
   const hourAgo = new Date(now.getTime() - 3_600_000).toISOString();
   const dayAgo = new Date(now.getTime() - 86_400_000).toISOString();
-  if ((await ctx.log.countSince(ipHash, hourAgo)) >= PER_SENDER_PER_HOUR) {
-    throw new ContactError("You've sent several messages in the last hour. Please try again later.", 429);
-  }
-  if ((await ctx.log.countSince(null, dayAgo)) >= ALL_PER_DAY) {
-    throw new ContactError("The contact form is busy today. Please try again tomorrow, or open an issue on GitHub.", 429);
-  }
+  const busySender = () => new ContactError("You've sent several messages in the last hour. Please try again later.", 429);
+  const busyDay = () =>
+    new ContactError("The contact form is busy today. Please try again tomorrow, or open an issue on GitHub.", 429);
+  if ((await ctx.log.countSince(ipHash, hourAgo)) >= PER_SENDER_PER_HOUR) throw busySender();
+  if ((await ctx.log.countSince(null, dayAgo)) >= ALL_PER_DAY) throw busyDay();
+  // Take this message's place in the limits before sending, so parallel posts can't all send.
+  const at = now.toISOString();
+  const slot = await ctx.log.reserve(ipHash, at, {
+    hourSince: hourAgo,
+    perSender: PER_SENDER_PER_HOUR,
+    daySince: dayAgo,
+    perDay: ALL_PER_DAY,
+  });
+  if (slot === "sender") throw busySender();
+  if (slot === "global") throw busyDay();
   const id = crypto.randomUUID();
-  await ctx.send(buildMessage(fields, { from: ctx.from, to: ctx.to, id, now, host: ctx.host }), ctx.from, ctx.to);
-  await ctx.log.record(ipHash, now.toISOString());
+  try {
+    await ctx.send(buildMessage(fields, { from: ctx.from, to: ctx.to, id, now, host: ctx.host }), ctx.from, ctx.to);
+  } catch (error) {
+    await ctx.log.release(ipHash, at);
+    throw error;
+  }
   await ctx.log.prune(dayAgo);
   return "sent";
 }
@@ -160,6 +197,17 @@ export class MemoryContactLog implements ContactLog {
   }
   async record(ipHash: string, at: string): Promise<void> {
     this.rows.push({ ipHash, at });
+  }
+  async reserve(ipHash: string, at: string, l: ContactWindow): Promise<"ok" | "sender" | "global"> {
+    // No await between the checks and the push, so parallel calls can't interleave.
+    if (this.rows.filter((r) => r.ipHash === ipHash && r.at >= l.hourSince).length >= l.perSender) return "sender";
+    if (this.rows.filter((r) => r.at >= l.daySince).length >= l.perDay) return "global";
+    this.rows.push({ ipHash, at });
+    return "ok";
+  }
+  async release(ipHash: string, at: string): Promise<void> {
+    const i = this.rows.findIndex((r) => r.ipHash === ipHash && r.at === at);
+    if (i >= 0) this.rows.splice(i, 1);
   }
   async prune(before: string): Promise<void> {
     this.rows = this.rows.filter((r) => r.at >= before);

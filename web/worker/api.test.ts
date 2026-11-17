@@ -34,11 +34,11 @@ async function setup(overrides: Partial<ApiEnv> = {}) {
   const store = new MemoryStore();
   const { jwk, sign } = await oidc();
   const dispatched: string[] = [];
-  const github = { dispatchStatus: 204 };
+  const github = { dispatchStatus: 204, createdAt: "2015-01-01T00:00:00Z" as string | undefined };
   const fetcher = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("login/oauth/access_token")) return Response.json({ access_token: "gho_x" });
-    if (url === "https://api.github.com/user") return Response.json({ login: "alice", id: 42 });
+    if (url === "https://api.github.com/user") return Response.json({ login: "alice", id: 42, created_at: github.createdAt });
     if (url.endsWith("/dispatches")) {
       if (github.dispatchStatus !== 204) return new Response(null, { status: github.dispatchStatus });
       dispatched.push(JSON.parse(String(init?.body)).inputs.submission_id);
@@ -338,4 +338,35 @@ test("a run that stops reporting is closed after the stale window, so its submit
   assert.equal((await store.get("stuck"))?.message, STALE_MESSAGE);
   assert.equal((await store.get("busy"))?.status, "running", "a run inside the window is left alone");
   assert.equal((await store.get("done"))?.status, "published", "finished runs are never touched");
+});
+
+test("parallel submissions from one account can't get past the limits together", async () => {
+  const { call, signIn, store, dispatched } = await setup();
+  const session = await signIn();
+  const replies = await Promise.all(Array.from({ length: 12 }, () => call("/api/submissions", post(session, form))));
+  const statuses = replies.map((r) => r.status).sort();
+  assert.deepEqual(statuses, [201, ...Array(11).fill(429)], "one run in progress per account, however the requests race");
+  assert.equal(dispatched.length, 1);
+  assert.equal(await store.activeForUser(42), 1);
+});
+
+test("ranked submissions need a GitHub account of the minimum age", async () => {
+  const { call, signIn, github } = await setup({ MIN_ACCOUNT_AGE_DAYS: "14" });
+  github.createdAt = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  const young = await signIn();
+  const refused = await call("/api/submissions", post(young, form));
+  assert.equal(refused.status, 403);
+  assert.match(((await refused.json()) as { error: string }).error, /at least 14 days old/);
+  github.createdAt = undefined;
+  assert.equal((await call("/api/submissions", post(await signIn(), form))).status, 403, "an unknown age is refused too");
+  github.createdAt = "2020-05-01T00:00:00Z";
+  assert.equal((await call("/api/submissions", post(await signIn(), form))).status, 201);
+});
+
+test("the anonymous sign-in state cookie never works as a session", async () => {
+  const { call } = await setup();
+  const start = await call("/auth/github");
+  const state = start.headers.get("Set-Cookie")!.split(";")[0]!.split("=").slice(1).join("=");
+  assert.equal((await call("/api/me", { headers: { Cookie: `cb_session=${state}` } })).status, 401);
+  assert.equal((await call("/api/submissions", post(`cb_session=${state}`, form))).status, 401);
 });

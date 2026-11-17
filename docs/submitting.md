@@ -80,8 +80,9 @@ You get a status link. A run takes about an hour:
 ## Limits
 
 To keep runs fair and the queue moving: one run in progress per account, at most five ranked
-runs per account per week, and a daily cap across everyone. A run that never starts doesn't
-count. Resubmitting a method replaces its leaderboard row.
+runs per account per week, and a daily cap across everyone. Ranked runs need a GitHub account at
+least 14 days old. A run that never starts doesn't count, and a run that stops reporting for
+8 hours is closed so you can submit again. Resubmitting a method replaces its leaderboard row.
 
 ## Rules
 
