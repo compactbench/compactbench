@@ -7,6 +7,9 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[manifest]
+build-constraints = [{ name = "hatchling", specifier = "==1.33.0" }]
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"

@@ -143,14 +143,18 @@ jobs:
             --season harness/seasons/s1.yaml --id "$SUBMISSION_ID"
           rm submission-image.sealed
 
+      # The proxy installs from the lockfile (with hashes) and a wheel built here, so no
+      # dependency is resolved fresh from PyPI for the container that holds the run's key.
       - name: Load the method image and build the proxy
         run: |
           gunzip -c submission-image.tar.gz | docker load
           rm submission-image.tar.gz
-          mkdir -p proxy-ctx/compactbench
-          git -C harness archive HEAD | tar -x -C proxy-ctx/compactbench
+          mkdir -p proxy-ctx
+          (cd harness && uv export --frozen --no-dev --extra ranked --no-emit-project \
+            --format requirements.txt -o ../proxy-ctx/requirements.txt)
+          (cd harness && uv build --wheel -o ../proxy-ctx/dist)
           cp harness/docker/proxy.Dockerfile proxy-ctx/Dockerfile
-          docker build --pull -t cb-proxy proxy-ctx
+          docker build -t cb-proxy proxy-ctx
 
       - name: Fetch the hidden suite pack
         env:

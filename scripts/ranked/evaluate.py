@@ -11,8 +11,9 @@ never through a shell or an environment file.
 
 Keys:
 
-- The method's sealed key is opened inside the proxy container only, which gets the
-  season's private key for that purpose. The sandbox never sees a key.
+- The method's sealed key is opened here and handed to the proxy container, which
+  holds only that one key (never the season's private key, which opens every
+  submitter's key). The sandbox never sees a key.
 - The reader's sealed key (the submitter's Anthropic key) is opened here and given
   to the harness process only, which uses it to grade. A method on Anthropic without
   a separate reader key uses its own key for both.
@@ -272,6 +273,13 @@ def main() -> int:
         proxy,
         "--network",
         "bridge",
+        "--read-only",
+        "--tmpfs",
+        "/tmp",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
         "-v",
         f"{logs}:/log",
     ]
@@ -285,24 +293,21 @@ def main() -> int:
         "--log",
         "/log/calls.jsonl",
     ]
-    proxy_env = dict(os.environ)
+    proxy_env = {k: v for k, v in os.environ.items() if not k.startswith("COMPACTBENCH_")}
     if bundle.sealed_method_key:
-        sealed_file = work / "sealed-key"
-        sealed_file.write_text(bundle.sealed_method_key, encoding="ascii")
-        sealed_file.chmod(0o644)  # read by the proxy's unprivileged user
-        proxy_argv += [
-            "-e",
-            "COMPACTBENCH_SEASON_PRIVATE_KEY",
-            "-v",
-            f"{sealed_file}:/run/sealed-key:ro",
-        ]
-        proxy_args += [
-            "--sealed-key",
-            "/run/sealed-key",
-            "--context",
-            method_key_context(season.key, bundle.id),
-        ]
-        proxy_env["COMPACTBENCH_SEASON_PRIVATE_KEY"] = private_key
+        try:
+            method_key = open_sealed(
+                private_key,
+                bundle.sealed_method_key,
+                context=method_key_context(season.key, bundle.id),
+            )
+        except SealingError:
+            print("::error::the method key doesn't open for this submission")
+            return 1
+        # Passed by name, so the value never appears in a command line.
+        proxy_argv += ["-e", "COMPACTBENCH_PROXY_KEY"]
+        proxy_env["COMPACTBENCH_PROXY_KEY"] = method_key.decode("utf-8")
+        del method_key
     else:
         # A custom endpoint that needs no key.
         proxy_args.append("--no-key")

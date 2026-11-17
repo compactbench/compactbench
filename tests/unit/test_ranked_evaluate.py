@@ -88,3 +88,85 @@ def test_published_usage_comes_from_the_proxy_log(tmp_path: Path) -> None:
     usage = evaluate.measured_usage(log)
     assert (usage.prompt_tokens, usage.completion_tokens, usage.call_count) == (3000, 120, 2)
     assert evaluate.measured_usage(tmp_path / "missing.jsonl").total_tokens == 0
+
+
+class _ProxyStartedError(Exception):
+    pass
+
+
+def test_the_proxy_gets_only_this_runs_key_never_the_season_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from compactbench.sealing import generate_keypair, seal
+    from compactbench.submission import method_key_context, reader_key_context
+
+    season_private, season_public = generate_keypair()
+    _, trace_public = generate_keypair()
+    bundle = {
+        "id": "abc123def456",
+        "season": "s1",
+        "handle": "alice",
+        "github_id": 42,
+        "method_name": "ledger",
+        "method_version": "1.0.0",
+        "class_name": "Ledger",
+        "provider": "openrouter",
+        "model": "qwen/qwen3-235b",
+        "method_py": "class Ledger: ...\n",
+        "requirements": "",
+        "sealed_method_key": seal(
+            season_public, b"sk-or-method", context=method_key_context("s1", "abc123def456")
+        ),
+        "sealed_reader_key": seal(
+            season_public, b"sk-ant-reader", context=reader_key_context("s1", "abc123def456")
+        ),
+        "created_at": "2026-11-01T00:00:00Z",
+    }
+    (tmp_path / "bundle.json").write_text(json.dumps(bundle), encoding="utf-8")
+    seen: dict[str, Any] = {}
+
+    def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if argv[:3] == ["docker", "run", "-d"]:
+            seen["argv"], seen["env"] = argv, kwargs.get("env") or {}
+            raise _ProxyStartedError
+        return subprocess.CompletedProcess(argv, 0, stdout="")
+
+    def quiet_run(argv: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 0, stdout="")
+
+    monkeypatch.setattr(evaluate, "_run", fake_run)
+    monkeypatch.setattr(evaluate.subprocess, "run", quiet_run)
+    monkeypatch.setenv("COMPACTBENCH_SEASON_PRIVATE_KEY", season_private)
+    monkeypatch.setenv("COMPACTBENCH_TRACE_PUBLIC_KEY", trace_public)
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "evaluate.py",
+            "--bundle",
+            str(tmp_path / "bundle.json"),
+            "--image",
+            "cb-submission",
+            "--proxy-image",
+            "cb-proxy",
+            "--season",
+            str(root / "seasons" / "s1.yaml"),
+            "--suite-pack",
+            str(tmp_path / "pack.py"),
+            "--out",
+            str(tmp_path / "out"),
+        ],
+    )
+    with pytest.raises(_ProxyStartedError):
+        evaluate.main()
+    argv, env = seen["argv"], seen["env"]
+    assert env["COMPACTBENCH_PROXY_KEY"] == "sk-or-method"
+    assert not any(k.startswith("COMPACTBENCH_") and k != "COMPACTBENCH_PROXY_KEY" for k in env)
+    assert season_private not in " ".join(argv)
+    assert "sk-or-method" not in " ".join(argv), (
+        "the key is passed by name, not on the command line"
+    )
+    assert "--sealed-key" not in argv
+    for flag in ("--read-only", "no-new-privileges"):
+        assert flag in argv
+    assert argv[argv.index("--cap-drop") + 1] == "ALL"

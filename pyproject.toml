@@ -122,6 +122,11 @@ dev = [
     "pillow>=13",  # share images for the site (scripts/og_images.py)
 ]
 
+[tool.uv]
+# The build backend runs before secret-holding steps (uv sync, uv build); pin it rather
+# than resolving the newest release every time.
+build-constraint-dependencies = ["hatchling==1.33.0"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
