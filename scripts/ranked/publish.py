@@ -24,6 +24,22 @@ from compactbench.runner import to_run_result
 from compactbench.submission import SubmissionBundle
 
 
+def owned_by(target: Path, github_id: int) -> bool:
+    """True when ``target`` is free or was published by the same GitHub account.
+
+    Directories are named by GitHub username, and a username can be reused after its
+    owner renames or deletes the account; the numeric account id can't.
+    """
+    existing = target / "submission.json"
+    if not existing.exists():
+        return True
+    try:
+        published = json.loads(existing.read_text(encoding="utf-8"))
+    except ValueError:
+        return False
+    return isinstance(published, dict) and published.get("github_id") == github_id
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("evaluation", type=Path)
@@ -47,6 +63,14 @@ def main() -> int:
         return 1
 
     target = args.repo / "submissions" / bundle.submission
+    if not owned_by(target, bundle.github_id):
+        print("::error::this submission's directory belongs to a different GitHub account")
+        (args.evaluation / "rejection.txt").write_text(
+            "a published method with this name belongs to a different GitHub account "
+            "(GitHub usernames can be reused); rename the method and submit again",
+            encoding="utf-8",
+        )
+        return 1
     if target.exists():
         shutil.rmtree(target)
     target.mkdir(parents=True)
