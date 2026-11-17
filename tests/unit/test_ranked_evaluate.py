@@ -57,3 +57,34 @@ def test_the_proxy_address_is_read_from_the_sandbox_network(
     assert evaluate._proxy_address("cb-proxy-ab12", "cb-sandbox-ab12") == "172.18.0.2"
     with pytest.raises(RuntimeError, match="no address"):
         evaluate._proxy_address("cb-proxy-ab12", "cb-sandbox-other")
+
+
+def test_a_failed_run_is_described_by_a_fixed_reason_only() -> None:
+    reasons = {reason for _, reason in evaluate.FAILURE_REASONS}
+    log = "Traceback ...\nSandboxError: method failed: KeyError: 'Priya owns billing'\n"
+    assert evaluate.failure_reason(log) == "the method raised an error"
+    assert evaluate.failure_reason("sandbox timed out after 900s") in reasons
+    assert evaluate.failure_reason("anything else, including case text") == (
+        "the evaluation stopped with an error"
+    )
+    for reason in [*reasons, evaluate.failure_reason("")]:
+        assert "Priya" not in reason
+
+
+def test_published_usage_comes_from_the_proxy_log(tmp_path: Path) -> None:
+    log = tmp_path / "calls.jsonl"
+    log.write_text(
+        "\n".join(
+            [
+                json.dumps({"status": 200, "input_tokens": 1000, "output_tokens": 50}),
+                json.dumps({"status": 200, "input_tokens": 2000, "output_tokens": 70}),
+                json.dumps({"status": 429, "input_tokens": 0, "output_tokens": 0}),
+                json.dumps({"status": 403, "refused": "model not allowed"}),
+                "not json",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    usage = evaluate.measured_usage(log)
+    assert (usage.prompt_tokens, usage.completion_tokens, usage.call_count) == (3000, 120, 2)
+    assert evaluate.measured_usage(tmp_path / "missing.jsonl").total_tokens == 0

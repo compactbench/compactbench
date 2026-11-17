@@ -26,6 +26,7 @@ ARCHIVE_FILES = (
     "results.sealed",
     "traces.sealed",
     "calls.sealed",
+    "log.sealed",
     "commitment.json",
     "submission.json",
     "results.jsonl",

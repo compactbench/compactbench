@@ -23,10 +23,16 @@ Environment (secrets, set only on this step):
   process's environment once used.
 - ``COMPACTBENCH_TRACE_PUBLIC_KEY`` — maintainers' key the traces are sealed to.
 
-Writes ``results.jsonl`` (scores only, redacted — see ``compactbench.redaction`` — and
-safe to publish), ``results.sealed`` (the unredacted results), ``traces.sealed``,
-``calls.sealed`` and ``commitment.json`` to ``--out``. Nothing else from the run
+Writes ``results.jsonl`` (scores only, redacted — see ``compactbench.redaction`` — with
+the method's usage as the proxy measured it, and safe to publish), ``results.sealed``
+(the unredacted results), ``traces.sealed``, ``calls.sealed``, ``log.sealed`` (the
+harness's own output) and ``commitment.json`` to ``--out``. Nothing else from the run
 leaves its private working directory.
+
+The workflow log is public, and the harness's output can quote the method (its errors,
+its stderr, what it returned), which has seen hidden cases. So that output goes to
+``log.sealed`` only; the log gets fixed lines, and a failed run writes a fixed reason to
+``failure.txt`` for the submitter's status page.
 """
 
 from __future__ import annotations
@@ -43,7 +49,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 # Provider → (proxy route, environment the sandbox's SDK needs). The SDKs read these
@@ -142,6 +148,50 @@ def _proxy_address(name: str, network: str) -> str:
     return str(address)
 
 
+#: Fixed reasons a run can fail for, recognized in the harness's private output. Only
+#: these strings ever reach the public log or the status page.
+FAILURE_REASONS = (
+    ("sandbox timed out", "the method took too long on a compaction"),
+    ("sandbox message too large", "the method sent a reply that was too large"),
+    ("sandbox did not say hello", "the method didn't start"),
+    ("sandbox reported an invalid method name", "the method reported an invalid name or version"),
+    ("sandbox sent an invalid artifact", "the method returned an artifact that isn't valid"),
+    ("sandbox broke the protocol", "the method broke the sandbox protocol"),
+    ("method failed", "the method raised an error"),
+    ("sandbox exited", "the method's process exited"),
+)
+
+
+def failure_reason(log: str) -> str:
+    """A fixed description of why the harness failed, from its private output."""
+    for marker, reason in FAILURE_REASONS:
+        if marker in log:
+            return reason
+    return "the evaluation stopped with an error"
+
+
+def measured_usage(calls_log: Path) -> Any:
+    """The method's usage as the model proxy recorded it (``TokenUsage``)."""
+    from compactbench.contracts import TokenUsage
+
+    prompt = completion = calls = 0
+    if calls_log.exists():
+        for line in calls_log.read_text(encoding="utf-8").splitlines():
+            try:
+                parsed: object = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            record = cast(dict[str, Any], parsed)
+            if "refused" in record:
+                continue
+            prompt += int(record.get("input_tokens") or 0)
+            completion += int(record.get("output_tokens") or 0)
+            calls += 1 if 200 <= int(record.get("status") or 0) < 300 else 0
+    return TokenUsage(prompt_tokens=prompt, completion_tokens=completion, call_count=calls)
+
+
 def _seal(public_key: str, source: Path, target: Path, context: str) -> str:
     from compactbench.sealing import seal
 
@@ -211,6 +261,8 @@ def main() -> int:
     logs = work / "proxy-logs"
     logs.mkdir()
     logs.chmod(0o777)
+    harness_log = work / "harness.log"
+    harness: subprocess.CompletedProcess[bytes] | None = None
 
     proxy_argv = [
         "docker",
@@ -306,14 +358,29 @@ def main() -> int:
             argv += ["--sandbox-runtime", args.runtime]
         for key, value in sdk_env.items():
             argv += ["--sandbox-env", f"{key}={value}"]
-        _run(argv, env=harness_env)
+        with harness_log.open("w", encoding="utf-8") as log:
+            harness = subprocess.run(
+                argv, env=harness_env, stdout=log, stderr=subprocess.STDOUT, check=False
+            )
     finally:
         subprocess.run(["docker", "rm", "-f", proxy], capture_output=True, check=False)
         subprocess.run(["docker", "network", "rm", network], capture_output=True, check=False)
+        _seal(trace_key, harness_log, args.out / "log.sealed", "log:" + tag)
+
+    if harness.returncode != 0:
+        log_text = harness_log.read_text(encoding="utf-8", errors="replace")
+        reason = failure_reason(log_text)
+        (args.out / "failure.txt").write_text(reason, encoding="utf-8")
+        print(f"::error::the ranked run failed: {reason} (the full log is kept privately)")
+        return 1
 
     from compactbench.redaction import redact_results
 
-    redact_results(work / "results.raw.jsonl", args.out / "results.jsonl")
+    redact_results(
+        work / "results.raw.jsonl",
+        args.out / "results.jsonl",
+        compactor_usage=measured_usage(logs / "calls.jsonl"),
+    )
     commitment = {
         "results_sha256": "sha256:"
         + hashlib.sha256((args.out / "results.jsonl").read_bytes()).hexdigest(),

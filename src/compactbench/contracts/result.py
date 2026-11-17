@@ -31,10 +31,12 @@ class TokenUsage(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    prompt_tokens: int = Field(default=0, ge=0)
-    completion_tokens: int = Field(default=0, ge=0)
-    cached_prompt_tokens: int = Field(default=0, ge=0)
-    call_count: int = Field(default=0, ge=0)
+    # Far above any real run; the bound keeps a reported value from being an arbitrarily
+    # long number (it would carry data, or overflow a reader's JSON to Infinity).
+    prompt_tokens: int = Field(default=0, ge=0, le=10**12)
+    completion_tokens: int = Field(default=0, ge=0, le=10**12)
+    cached_prompt_tokens: int = Field(default=0, ge=0, le=10**12)
+    call_count: int = Field(default=0, ge=0, le=10**9)
 
     @property
     def total_tokens(self) -> int:

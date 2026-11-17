@@ -147,7 +147,10 @@ jobs:
         env:
           COMPACTBENCH_SEASON_PRIVATE_KEY: ${{ secrets.SEASON_S1_PRIVATE_KEY }}
           COMPACTBENCH_TRACE_PUBLIC_KEY: ${{ vars.TRACE_PUBLIC_KEY }}
+        # The harness's output stays private (evaluate.py seals it into out/log.sealed);
+        # this log gets fixed lines only.
         run: |
+          trap 'rm -rf "$RUNNER_TEMP/hidden" bundle.json' EXIT
           uv run --project harness python harness/scripts/ranked/site.py fetch "$SUBMISSION_ID" bundle.json
           uv run --project harness python harness/scripts/ranked/site.py status "$SUBMISSION_ID" running
           uv run --project harness python harness/scripts/ranked/evaluate.py \
@@ -158,12 +161,13 @@ jobs:
             --season harness/seasons/s1.yaml \
             --suite-pack "$RUNNER_TEMP/hidden/packs/elite_s1/pack.py" \
             --out out
-          rm -rf "$RUNNER_TEMP/hidden" bundle.json
 
-      # The sealed traces, raw results and call log go to the site's private archive and
-      # are deleted here, whether or not the upload worked: artifacts of a public
-      # repository can be downloaded, so only what publish needs is uploaded below.
+      # The sealed traces, raw results, call log and harness log go to the site's private
+      # archive and are deleted here, whether or not the upload worked (and whether or not
+      # the run succeeded): artifacts of a public repository can be downloaded, so only
+      # what publish needs is uploaded below.
       - name: Archive the run privately
+        if: always()
         run: |
           uv run --project harness python harness/scripts/ranked/site.py archive "$SUBMISSION_ID" out \
             || echo "::warning::some of the run's files weren't archived"
@@ -179,11 +183,15 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      # out/failure.txt holds one of evaluate.py's fixed reasons, never the method's text.
       - name: Report a failed run
         if: failure()
         run: |
-          uv run --project harness python harness/scripts/ranked/site.py status "$SUBMISSION_ID" failed \
-            "The ranked run failed. Common causes: a key without credit or access to the model, or the method raising errors." || true
+          message="The ranked run failed. Common causes: a key without credit or access to the model, or the method raising errors."
+          if [ -s out/failure.txt ]; then
+            message="The ranked run failed: $(head -c 200 out/failure.txt). Check that your key has credit and access to the model, and that the method runs locally with compactbench check."
+          fi
+          uv run --project harness python harness/scripts/ranked/site.py status "$SUBMISSION_ID" failed "$message" || true
 
   publish:
     needs: evaluate

@@ -39,7 +39,7 @@ export interface Deps {
 const SESSION = "cb_session";
 /** A finished run's files the evaluation keeps privately; nothing else is accepted. */
 export const ARCHIVE_FILES = new Set([
-  "results.sealed", "traces.sealed", "calls.sealed", "commitment.json", "submission.json", "results.jsonl",
+  "results.sealed", "traces.sealed", "calls.sealed", "log.sealed", "commitment.json", "submission.json", "results.jsonl",
 ]);
 /** Under the Workers request-body limit. */
 const MAX_ARCHIVE_BYTES = 95_000_000;

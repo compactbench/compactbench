@@ -203,6 +203,15 @@ def usage_counter() -> CountingProvider:
     return CountingProvider(_Unused())
 
 
+_SAFE_PART = re.compile(r"^[A-Za-z0-9_]{1,40}$")
+
+
+def _safe_part(part: object) -> str:
+    """A field location in an error message, or ``?`` if the method could have chosen it."""
+    text = str(part)
+    return text if _SAFE_PART.match(text) else "?"
+
+
 class SandboxedCompactor(Compactor):
     """A :class:`Compactor` whose work happens in a sandboxed process.
 
@@ -271,7 +280,13 @@ class SandboxedCompactor(Compactor):
             artifact = CompactionArtifact.model_validate(message.get("artifact"))
             usage = TokenUsage.model_validate(message.get("usage") or {})
         except ValidationError as exc:
-            raise SandboxError(f"sandbox sent an invalid artifact: {exc.errors()[:3]}") from exc
+            # Where and what kind of error only: the values themselves came from the method.
+            problems = exc.errors(include_input=False, include_url=False, include_context=False)
+            where = "; ".join(
+                f"{'.'.join(_safe_part(part) for part in error['loc'])}: {error['type']}"
+                for error in problems[:3]
+            )
+            raise SandboxError(f"sandbox sent an invalid artifact: {where}") from exc
         if self.usage is not None:
             await self.usage.record(usage)
         return artifact
