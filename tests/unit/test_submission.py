@@ -166,3 +166,14 @@ def test_reference_versions_match_the_built_ins() -> None:
 
     for key, version in REFERENCE_METHODS.items():
         assert get_built_in(key).version == version
+
+
+def test_a_custom_endpoints_url_is_not_published() -> None:
+    bundle = SubmissionBundle.model_validate(
+        _bundle(provider="custom", base_url="https://models.example.com/v1/tok-123")
+    )
+    public = bundle.public()
+    assert "base_url" not in public
+    assert "tok-123" not in str(public)
+    assert "method_py" not in public
+    assert public["provider"] == "custom"

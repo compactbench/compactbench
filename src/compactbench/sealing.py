@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import os
+from pathlib import Path
 
 PREFIX = "cbseal1:"
 _INFO = b"compactbench-seal-v1"
@@ -125,6 +126,76 @@ def open_sealed(private_key: str, sealed: str, *, context: str) -> bytes:
         return AESGCM(key).decrypt(nonce, ciphertext, None)
     except InvalidTag as exc:
         raise SealingError("sealed value doesn't open with this key and context") from exc
+
+
+FILE_MAGIC = b"cbsealfile1\n"
+_CHUNK = 1 << 20
+
+
+def seal_file(public_key: str, source: Path, target: Path, *, context: str) -> None:
+    """Encrypt a file of any size to ``public_key``, streaming it through AES-256-GCM.
+
+    A fresh file key and nonce are sealed with :func:`seal` (same ``context``) into a header
+    line, which is also authenticated with the body; the file's bytes follow, then the tag.
+    """
+    _require_crypto()
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    file_key, nonce = os.urandom(32), os.urandom(12)
+    header = seal(public_key, file_key + nonce, context=context).encode("ascii") + b"\n"
+    encryptor = Cipher(algorithms.AES(file_key), modes.GCM(nonce)).encryptor()
+    encryptor.authenticate_additional_data(header)
+    with source.open("rb") as src, target.open("wb") as out:
+        out.write(FILE_MAGIC + header)
+        while chunk := src.read(_CHUNK):
+            out.write(encryptor.update(chunk))
+        out.write(encryptor.finalize() + encryptor.tag)
+
+
+def open_sealed_file(private_key: str, source: Path, target: Path, *, context: str) -> None:
+    """Decrypt a file from :func:`seal_file` into ``target``.
+
+    Raises :class:`SealingError` (and leaves no ``target``) if the file was altered or
+    doesn't open with this key and context.
+    """
+    _require_crypto()
+    from cryptography.exceptions import InvalidTag
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    size = source.stat().st_size
+    with source.open("rb") as src:
+        if src.read(len(FILE_MAGIC)) != FILE_MAGIC:
+            raise SealingError("not a sealed file")
+        header = src.readline(4096)
+        if not header.endswith(b"\n"):
+            raise SealingError("sealed file header is malformed")
+        secret = open_sealed(private_key, header.decode("ascii"), context=context)
+        if len(secret) != 44:
+            raise SealingError("sealed file header is malformed")
+        body = size - src.tell() - 16
+        if body < 0:
+            raise SealingError("sealed file is too short")
+        start = src.tell()
+        src.seek(size - 16)
+        tag = src.read(16)
+        src.seek(start)
+        decryptor = Cipher(algorithms.AES(secret[:32]), modes.GCM(secret[32:], tag)).decryptor()
+        decryptor.authenticate_additional_data(header)
+        try:
+            with target.open("wb") as out:
+                remaining = body
+                while remaining:
+                    chunk = src.read(min(_CHUNK, remaining))
+                    if not chunk:
+                        raise SealingError("sealed file is truncated")
+                    remaining -= len(chunk)
+                    out.write(decryptor.update(chunk))
+                decryptor.finalize()
+        except (InvalidTag, SealingError) as exc:
+            target.unlink(missing_ok=True)
+            if isinstance(exc, SealingError):
+                raise
+            raise SealingError("sealed file was altered or doesn't open with this key") from exc
 
 
 def key_context(season: str, submission: str) -> str:

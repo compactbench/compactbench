@@ -172,8 +172,12 @@ class SubmissionBundle(BaseModel):
         return f"/opt/submission/method.py:{self.class_name}"
 
     def public(self) -> dict[str, Any]:
-        """What is published with the results: everything except the sealed keys."""
-        return self.model_dump(exclude={"sealed_method_key", "sealed_reader_key", "method_py"})
+        """What is published with the results: everything except the sealed keys, the code
+        (published separately, and only for a run that qualifies) and a custom endpoint's
+        URL (a private server's address; the row shows its display name instead)."""
+        return self.model_dump(
+            exclude={"sealed_method_key", "sealed_reader_key", "method_py", "base_url"}
+        )
 
 
 def load_bundle(path: Path) -> SubmissionBundle:
