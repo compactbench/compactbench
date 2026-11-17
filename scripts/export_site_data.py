@@ -10,6 +10,7 @@ The website build runs this first.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -110,6 +111,33 @@ def slug_of(row: dict[str, object]) -> str:
     return re.sub(r"[^a-z0-9.]+", "-", text).strip("-")
 
 
+def _fingerprint(row: dict[str, object]) -> str:
+    fields = ("handle", "method_name", "method_version", "compactor_provider", "compactor_model")
+    fields += ("model_label", "season", "reference_method")
+    text = "\x00".join(str(row.get(f) or "") for f in fields)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
+
+
+def assign_slugs(rows: list[dict[str, object]]) -> None:
+    """Give every row a unique ``slug``.
+
+    Hyphens in handles and method names look like the separators, so two different rows
+    can share :func:`slug_of` (``alice`` + ``smart-ledger`` and ``alice-smart`` +
+    ``ledger``). The row published first keeps the plain slug, so existing links and
+    badges keep working; a later one gets a short fingerprint of what makes it different.
+    """
+    groups: dict[str, list[dict[str, object]]] = {}
+    for row in rows:
+        groups.setdefault(slug_of(row), []).append(row)
+    for slug, group in groups.items():
+        group.sort(key=lambda r: (str(r.get("published_at") or ""), _fingerprint(r)))
+        for i, row in enumerate(group):
+            row["slug"] = slug if i == 0 else f"{slug}-{_fingerprint(row)}"
+    slugs = [row["slug"] for row in rows]
+    if len(set(slugs)) != len(slugs):
+        raise SystemExit("two leaderboard rows have the same page slug")
+
+
 def _method_images(rows: list[dict[str, object]]) -> None:
     """A share image per method, into web/public/og/methods/ (needs web/node_modules)."""
     sys.path.insert(0, str(Path(__file__).parent))
@@ -159,8 +187,7 @@ def main(argv: list[str]) -> int:
         encoding="utf-8",
     )
     board = json.loads((ROOT / "docs" / "data" / "leaderboard.json").read_text(encoding="utf-8"))
-    for row in board.get("entries", []):
-        row["slug"] = slug_of(row)
+    assign_slugs(board.get("entries", []))
     (out / "leaderboard.json").write_text(json.dumps(board, indent=2), encoding="utf-8")
     _method_images(board.get("entries", []))
     gallery = ROOT / "docs" / "data" / "failure-gallery.json"
