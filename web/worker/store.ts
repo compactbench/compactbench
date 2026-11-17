@@ -4,6 +4,11 @@
 
 export type Status = "queued" | "building" | "running" | "published" | "failed" | "rejected";
 export const ACTIVE: Status[] = ["queued", "building", "running"];
+/** A run still active with no update for this long has stopped reporting (the longest
+ *  legitimate gap is the evaluate job's 5-hour limit plus publishing and queueing). */
+export const STALE_AFTER_MS = 8 * 3600_000;
+export const STALE_MESSAGE =
+  "This run stopped without reporting back, so it was closed. Nothing was published; you can submit again.";
 
 export interface SubmissionRecord {
   id: string;
@@ -35,6 +40,9 @@ export interface Store {
   listForUser(githubId: number, limit: number): Promise<SubmissionRecord[]>;
   /** Keep one of a finished run's files (sealed traces and results, commitment) privately. */
   archive(season: string, id: string, name: string, body: ArrayBuffer): Promise<void>;
+  /** Close active runs not updated since `before` as failed, so their submitter isn't locked
+   *  out. Returns how many were closed. */
+  expireStale(before: string, message: string): Promise<number>;
 }
 
 // Minimal shapes of the Cloudflare bindings we use.
@@ -107,6 +115,17 @@ export class CloudflareStore implements Store {
     return row?.n ?? 0;
   }
 
+  async expireStale(before: string, message: string): Promise<number> {
+    const result = (await this.db
+      .prepare(
+        `UPDATE submissions SET status = 'failed', message = ?, updated_at = ?
+           WHERE status IN ('queued','building','running') AND updated_at < ?`,
+      )
+      .bind(message, new Date().toISOString(), before)
+      .run()) as { meta?: { changes?: number } } | null;
+    return result?.meta?.changes ?? 0;
+  }
+
   async countSince(since: string): Promise<number> {
     const row = await this.db
       .prepare("SELECT COUNT(*) AS n FROM submissions WHERE created_at >= ? AND status != 'rejected'")
@@ -167,6 +186,16 @@ export class MemoryStore implements Store {
   }
   async countSince(since: string): Promise<number> {
     return [...this.records.values()].filter((r) => r.created_at >= since && r.status !== "rejected").length;
+  }
+  async expireStale(before: string, message: string): Promise<number> {
+    let closed = 0;
+    for (const r of this.records.values()) {
+      if (ACTIVE.includes(r.status) && r.updated_at < before) {
+        Object.assign(r, { status: "failed", message, updated_at: new Date().toISOString() });
+        closed++;
+      }
+    }
+    return closed;
   }
   async getBundle(id: string): Promise<string | null> {
     return this.bundles.get(id) ?? null;

@@ -196,9 +196,9 @@ jobs:
       actions: write  # to start the site deploy
       contents: write
       id-token: write
-    concurrency:
-      group: publish-submissions
-      cancel-in-progress: false
+    # No concurrency group: GitHub keeps only one pending job per group and cancels it when
+    # another queues, which would drop a finished run. Publishes run side by side and the
+    # push below retries from the latest main instead.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
@@ -219,28 +219,36 @@ jobs:
         run: |
           uv run python scripts/ranked/site.py fetch "$SUBMISSION_ID" evaluation/bundle.json
           score="$(uv run python scripts/ranked/publish.py evaluation . --season seasons/s1.yaml)"
-          rm evaluation/bundle.json
           echo "score=$score" >> "$GITHUB_OUTPUT"
 
-      # Pushes made with this job's token don't trigger other workflows, so the
-      # leaderboard is rebuilt here and the site deploy is started explicitly.
+      # The leaderboard is rebuilt here and the site deploy started explicitly below. Another
+      # publish may push first, so each attempt starts again from the latest main, writes this
+      # submission and rebuilds the leaderboard; a push that loses the race tries again.
       - name: Rebuild the leaderboard and commit
         env:
           PUBLISH_DEPLOY_KEY: ${{ secrets.PUBLISH_DEPLOY_KEY }}
         run: |
-          uv run python scripts/rebuild_leaderboard.py
+          trap 'rm -f ~/.ssh/publish evaluation/bundle.json' EXIT
           git config user.name "compactbench-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add submissions/ docs/data/leaderboard.json
-          if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
-          git commit -m "chore(leaderboard): publish ranked submission $SUBMISSION_ID"
-          git pull --rebase origin main
           install -m 700 -d ~/.ssh
           printf '%s\n' "$PUBLISH_DEPLOY_KEY" > ~/.ssh/publish
           chmod 600 ~/.ssh/publish
-          GIT_SSH_COMMAND="ssh -i ~/.ssh/publish -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-            git push git@github.com:${{ github.repository }}.git HEAD:main
-          rm -f ~/.ssh/publish
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/publish -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          for attempt in 1 2 3 4 5 6; do
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            uv run python scripts/ranked/publish.py evaluation . --season seasons/s1.yaml > /dev/null
+            uv run python scripts/rebuild_leaderboard.py
+            git add submissions/ docs/data/leaderboard.json
+            if git diff --cached --quiet; then echo "nothing to publish"; exit 0; fi
+            git commit -q -m "chore(leaderboard): publish ranked submission $SUBMISSION_ID"
+            if git push git@github.com:${{ github.repository }}.git HEAD:main; then exit 0; fi
+            echo "main moved on; retrying ($attempt)"
+            sleep $((attempt * 10))
+          done
+          echo "::error::couldn't push the submission after 6 attempts"
+          exit 1
 
       - name: Deploy the site
         env:
