@@ -2,6 +2,8 @@
 // separate private R2 bucket for each finished run's sealed files.
 // The interface keeps the logic testable without Cloudflare.
 
+import type { ContactWindow } from "./contact.ts";
+
 export type Status = "queued" | "building" | "running" | "published" | "failed" | "rejected";
 export const ACTIVE: Status[] = ["queued", "building", "running"];
 /** A run still active with no update for this long has stopped reporting (the longest
@@ -9,6 +11,16 @@ export const ACTIVE: Status[] = ["queued", "building", "running"];
 export const STALE_AFTER_MS = 8 * 3600_000;
 export const STALE_MESSAGE =
   "This run stopped without reporting back, so it was closed. Nothing was published; you can submit again.";
+
+/** Why a submission wasn't stored: a run in progress, the weekly per-account cap, or the
+ *  global daily cap. */
+export type LimitOutcome = "ok" | "active" | "week" | "day";
+export interface LimitWindow {
+  weekSince: string;
+  perWeek: number;
+  daySince: string;
+  perDay: number;
+}
 
 export interface SubmissionRecord {
   id: string;
@@ -28,6 +40,9 @@ export interface SubmissionRecord {
 
 export interface Store {
   insert(record: SubmissionRecord, bundle: string): Promise<void>;
+  /** Store a new submission only if the account has no run in progress and both caps have
+   *  room, checked and inserted in one step so parallel requests can't all pass. */
+  insertWithinLimits(record: SubmissionRecord, bundle: string, limits: LimitWindow): Promise<LimitOutcome>;
   get(id: string): Promise<SubmissionRecord | null>;
   update(id: string, fields: Partial<Pick<SubmissionRecord, "status" | "message" | "score">>): Promise<void>;
   countForUserSince(githubId: number, since: string): Promise<number>;
@@ -83,6 +98,38 @@ export class CloudflareStore implements Store {
       .bind(r.id, r.github_id, r.handle, r.method_name, r.method_version, r.provider, r.model,
         r.model_label, r.status, r.message, r.score, r.created_at, r.updated_at)
       .run();
+  }
+
+  async insertWithinLimits(r: SubmissionRecord, bundle: string, l: LimitWindow): Promise<LimitOutcome> {
+    // One statement: D1 runs it atomically, so a burst of parallel requests is serialized here
+    // and only the ones that still fit are inserted.
+    const result = (await this.db
+      .prepare(
+        `INSERT INTO submissions (id, github_id, handle, method_name, method_version, provider, model,
+          model_label, status, message, score, created_at, updated_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE NOT EXISTS (SELECT 1 FROM submissions WHERE github_id = ? AND status IN ('queued','building','running'))
+           AND (SELECT COUNT(*) FROM submissions WHERE github_id = ? AND created_at >= ? AND status != 'rejected') < ?
+           AND (SELECT COUNT(*) FROM submissions WHERE created_at >= ? AND status != 'rejected') < ?`,
+      )
+      .bind(
+        r.id, r.github_id, r.handle, r.method_name, r.method_version, r.provider, r.model,
+        r.model_label, r.status, r.message, r.score, r.created_at, r.updated_at,
+        r.github_id, r.github_id, l.weekSince, l.perWeek, l.daySince, l.perDay,
+      )
+      .run()) as { meta?: { changes?: number } } | null;
+    if ((result?.meta?.changes ?? 0) !== 1) {
+      if ((await this.activeForUser(r.github_id)) > 0) return "active";
+      if ((await this.countForUserSince(r.github_id, l.weekSince)) >= l.perWeek) return "week";
+      return "day";
+    }
+    try {
+      await this.bucket.put(`bundles/${r.id}.json`, bundle);
+    } catch (error) {
+      await this.db.prepare("DELETE FROM submissions WHERE id = ?").bind(r.id).run();
+      throw error;
+    }
+    return "ok";
   }
 
   get(id: string): Promise<SubmissionRecord | null> {
@@ -171,6 +218,17 @@ export class MemoryStore implements Store {
     this.records.set(record.id, { ...record });
     this.bundles.set(record.id, bundle);
   }
+  async insertWithinLimits(r: SubmissionRecord, bundle: string, l: LimitWindow): Promise<LimitOutcome> {
+    // No await between the checks and the insert, so parallel calls can't interleave.
+    const all = [...this.records.values()];
+    if (all.some((x) => x.github_id === r.github_id && ACTIVE.includes(x.status))) return "active";
+    const week = all.filter((x) => x.github_id === r.github_id && x.created_at >= l.weekSince && x.status !== "rejected");
+    if (week.length >= l.perWeek) return "week";
+    if (all.filter((x) => x.created_at >= l.daySince && x.status !== "rejected").length >= l.perDay) return "day";
+    this.records.set(r.id, { ...r });
+    this.bundles.set(r.id, bundle);
+    return "ok";
+  }
   async get(id: string): Promise<SubmissionRecord | null> {
     return this.records.get(id) ?? null;
   }
@@ -232,6 +290,25 @@ export class D1ContactLog {
   }
   async record(ipHash: string, at: string): Promise<void> {
     await this.db.prepare("INSERT INTO contact_log (ip_hash, at) VALUES (?, ?)").bind(ipHash, at).run();
+  }
+  async reserve(ipHash: string, at: string, l: ContactWindow): Promise<"ok" | "sender" | "global"> {
+    // One statement, so D1 runs the checks and the insert atomically.
+    const result = (await this.db
+      .prepare(
+        `INSERT INTO contact_log (ip_hash, at) SELECT ?, ?
+           WHERE (SELECT COUNT(*) FROM contact_log WHERE ip_hash = ? AND at >= ?) < ?
+             AND (SELECT COUNT(*) FROM contact_log WHERE at >= ?) < ?`,
+      )
+      .bind(ipHash, at, ipHash, l.hourSince, l.perSender, l.daySince, l.perDay)
+      .run()) as { meta?: { changes?: number } } | null;
+    if ((result?.meta?.changes ?? 0) === 1) return "ok";
+    return (await this.countSince(ipHash, l.hourSince)) >= l.perSender ? "sender" : "global";
+  }
+  async release(ipHash: string, at: string): Promise<void> {
+    await this.db
+      .prepare("DELETE FROM contact_log WHERE rowid = (SELECT rowid FROM contact_log WHERE ip_hash = ? AND at = ? LIMIT 1)")
+      .bind(ipHash, at)
+      .run();
   }
   async prune(before: string): Promise<void> {
     await this.db.prepare("DELETE FROM contact_log WHERE at < ?").bind(before).run();

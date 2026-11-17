@@ -2,7 +2,7 @@
 // and start the evaluation workflow. The rules mirror compactbench.submission so
 // both sides accept exactly the same bundles.
 import { seal } from "./seal.ts";
-import type { Status, Store, SubmissionRecord } from "./store.ts";
+import type { LimitOutcome, LimitWindow, Status, Store, SubmissionRecord } from "./store.ts";
 
 export const PROVIDERS = [
   "anthropic", "openai", "groq", "openrouter", "deepseek", "mistral",
@@ -35,6 +35,8 @@ export interface Limits {
   perUserPerWeek: number;
   globalPerDay: number;
   open: boolean;
+  /** GitHub accounts younger than this can't submit ranked runs (0 turns the check off). */
+  minAccountAgeDays: number;
 }
 
 export interface SubmitInput {
@@ -174,9 +176,18 @@ export interface SubmitContext {
   limits: Limits;
   season: string;
   seasonPublicKey: string;
-  user: { login: string; id: number };
+  user: { login: string; id: number; created_at: string | null };
   dispatch: (id: string) => Promise<boolean>;
   now?: Date;
+}
+
+function limitError(outcome: Exclude<LimitOutcome, "ok">, limits: Limits): SubmitError {
+  const message = {
+    active: "You already have a run in progress; wait for it to finish.",
+    week: `At most ${limits.perUserPerWeek} ranked runs per week per account.`,
+    day: "Today's ranked run capacity is used up; try again tomorrow.",
+  }[outcome];
+  return new SubmitError(message, 429);
 }
 
 /** Accept a submission. Plain keys are sealed before anything is stored. */
@@ -193,17 +204,26 @@ export async function submit(input: SubmitInput, ctx: SubmitContext): Promise<Su
   if (readerKey && !PATTERNS.key.test(readerKey)) throw new SubmitError("reader_key doesn't look like an API key");
 
   const now = ctx.now ?? new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
-  const dayAgo = new Date(now.getTime() - 86_400_000).toISOString();
-  if ((await ctx.store.activeForUser(ctx.user.id)) > 0) {
-    throw new SubmitError("You already have a run in progress; wait for it to finish.", 429);
+  const minDays = ctx.limits.minAccountAgeDays;
+  if (minDays > 0) {
+    const created = ctx.user.created_at ? Date.parse(ctx.user.created_at) : Number.NaN;
+    if (!Number.isFinite(created) || now.getTime() - created < minDays * 86_400_000) {
+      throw new SubmitError(
+        `Ranked runs need a GitHub account at least ${minDays} days old. You can still run the public Practice suite with your own keys.`,
+        403,
+      );
+    }
   }
-  if ((await ctx.store.countForUserSince(ctx.user.id, weekAgo)) >= ctx.limits.perUserPerWeek) {
-    throw new SubmitError(`At most ${ctx.limits.perUserPerWeek} ranked runs per week per account.`, 429);
-  }
-  if ((await ctx.store.countSince(dayAgo)) >= ctx.limits.globalPerDay) {
-    throw new SubmitError("Today's ranked run capacity is used up; try again tomorrow.", 429);
-  }
+  const window: LimitWindow = {
+    weekSince: new Date(now.getTime() - 7 * 86_400_000).toISOString(),
+    perWeek: ctx.limits.perUserPerWeek,
+    daySince: new Date(now.getTime() - 86_400_000).toISOString(),
+    perDay: ctx.limits.globalPerDay,
+  };
+  // A quick check before sealing anything; insertWithinLimits below is the one that counts.
+  if ((await ctx.store.activeForUser(ctx.user.id)) > 0) throw limitError("active", ctx.limits);
+  if ((await ctx.store.countForUserSince(ctx.user.id, window.weekSince)) >= window.perWeek) throw limitError("week", ctx.limits);
+  if ((await ctx.store.countSince(window.daySince)) >= window.perDay) throw limitError("day", ctx.limits);
 
   const id = newId();
   const created = now.toISOString();
@@ -232,7 +252,8 @@ export async function submit(input: SubmitInput, ctx: SubmitContext): Promise<Su
     created_at: created,
     updated_at: created,
   };
-  await ctx.store.insert(record, JSON.stringify(bundle));
+  const outcome = await ctx.store.insertWithinLimits(record, JSON.stringify(bundle), window);
+  if (outcome !== "ok") throw limitError(outcome, ctx.limits);
   if (!(await ctx.dispatch(id))) {
     // Nothing ran: forget it (and its sealed keys) so it doesn't count toward any limit.
     await ctx.store.remove(id);

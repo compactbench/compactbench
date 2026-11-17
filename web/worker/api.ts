@@ -20,6 +20,8 @@ export interface ApiEnv {
   SUBMISSIONS_EARLY_ACCESS?: string;
   LIMIT_PER_WEEK?: string;
   LIMIT_PER_DAY?: string;
+  /** Minimum GitHub account age, in days, for ranked submissions (default 14; "0" turns it off). */
+  MIN_ACCOUNT_AGE_DAYS?: string;
   TURNSTILE_SECRET?: string;
   /** Contact form: the maintainer's address (a secret) and the sending address on our domain. */
   CONTACT_TO?: string;
@@ -48,8 +50,24 @@ const json = (body: unknown, status = 200) =>
 /** Pages a sign-in may return to. A fixed list, so the link can't redirect anywhere else. */
 const RETURN_TO = new Set(["/submit", "/runs"]);
 
-export async function sessionUser(request: Request, env: ApiEnv) {
-  return verifyValue<{ login: string; id: number }>(env.SESSION_SECRET, readCookie(request, SESSION));
+// Each signed cookie has its own key, so the anonymous sign-in state cookie can never pass as a
+// session (or the other way round).
+const sessionKey = (env: ApiEnv) => `session:${env.SESSION_SECRET}`;
+const stateKey = (env: ApiEnv) => `oauth-state:${env.SESSION_SECRET}`;
+
+export interface SessionUser {
+  login: string;
+  id: number;
+  created_at: string | null;
+}
+
+export async function sessionUser(request: Request, env: ApiEnv): Promise<SessionUser | null> {
+  if (!env.SESSION_SECRET) return null;
+  const value = await verifyValue<Record<string, unknown>>(sessionKey(env), readCookie(request, SESSION));
+  if (!value || typeof value.login !== "string" || typeof value.id !== "number" || !Number.isInteger(value.id) || value.id < 1) {
+    return null;
+  }
+  return { login: value.login, id: value.id, created_at: typeof value.created_at === "string" ? value.created_at : null };
 }
 
 /** Returns a response for the routes this module owns, or null to fall through. */
@@ -70,13 +88,13 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
       status: 302,
       headers: {
         Location: authorizeUrl(env.GITHUB_CLIENT_ID, redirect, state),
-        "Set-Cookie": cookie(STATE, await signValue(env.SESSION_SECRET, { state, returnTo }, 600), 600),
+        "Set-Cookie": cookie(STATE, await signValue(stateKey(env), { state, returnTo }, 600), 600),
       },
     });
   }
 
   if (path === "/auth/callback" && request.method === "GET") {
-    const expected = await verifyValue<{ state: string; returnTo?: string }>(env.SESSION_SECRET, readCookie(request, STATE));
+    const expected = await verifyValue<{ state: string; returnTo?: string }>(stateKey(env), readCookie(request, STATE));
     const code = url.searchParams.get("code");
     if (!expected || !code || url.searchParams.get("state") !== expected.state) {
       return new Response("Sign-in expired or was tampered with. Please try again.", { status: 400 });
@@ -85,7 +103,8 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
     if (!user) return new Response("GitHub sign-in failed. Please try again.", { status: 400 });
     const returnTo = expected?.returnTo && RETURN_TO.has(expected.returnTo) ? expected.returnTo : "/submit";
     const headers = new Headers({ Location: returnTo });
-    headers.append("Set-Cookie", cookie(SESSION, await signValue(env.SESSION_SECRET, { ...user }, 8 * 3600), 8 * 3600));
+    const session = { login: user.login, id: user.id, created_at: user.created_at };
+    headers.append("Set-Cookie", cookie(SESSION, await signValue(sessionKey(env), session, 8 * 3600), 8 * 3600));
     headers.append("Set-Cookie", cookie(STATE, "", 0));
     return new Response(null, { status: 302, headers });
   }
@@ -161,6 +180,7 @@ export async function handleApi(request: Request, env: ApiEnv, deps: Deps): Prom
           open: env.SUBMISSIONS_OPEN !== "false" || earlyAccess(env.SUBMISSIONS_EARLY_ACCESS, user.login),
           perUserPerWeek: Number(env.LIMIT_PER_WEEK ?? 5),
           globalPerDay: Number(env.LIMIT_PER_DAY ?? 50),
+          minAccountAgeDays: Number(env.MIN_ACCOUNT_AGE_DAYS ?? 14),
         },
         season: env.SEASON_KEY,
         seasonPublicKey: env.SEASON_PUBLIC_KEY,

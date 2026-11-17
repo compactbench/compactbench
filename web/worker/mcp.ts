@@ -213,6 +213,34 @@ export function handleMessage(data: Data, message: Json): Json | null {
 }
 
 /** HTTP entry: POST a JSON-RPC message or batch; GET is not offered (no server-sent stream). */
+/** Every tool this server answers, for counting calls to known tools only. */
+export const TOOL_NAMES: ReadonlySet<string> = new Set([...TOOLS, ...SELFTEST_TOOLS].map((t) => t.name));
+/** Longest JSON-RPC batch accepted; real clients send one message or a handful. */
+export const MAX_BATCH = 20;
+
+/** MCP counters, read from the JSON-RPC body: at most a session (when the client initializes)
+ *  and one call to a known tool per request. Notifications (no id) and unknown tool names aren't
+ *  counted, so a request can neither multiply counter writes nor create new counters. */
+export async function mcpEvents(request: Request): Promise<string[]> {
+  try {
+    const body = (await request.clone().json()) as unknown;
+    type Message = { id?: unknown; method?: unknown; params?: { name?: unknown } };
+    const messages = (Array.isArray(body) ? body.slice(0, MAX_BATCH) : [body]) as (Message | null)[];
+    const isRequest = (m: Message | null): m is Message => !!m && typeof m === "object" && m.id !== undefined && m.id !== null;
+    const events: string[] = [];
+    if (messages.some((m) => isRequest(m) && m.method === "initialize")) events.push("mcp_session");
+    const name = messages
+      .filter(isRequest)
+      .filter((m) => m.method === "tools/call")
+      .map((m) => m.params?.name)
+      .find((n): n is string => typeof n === "string" && TOOL_NAMES.has(n));
+    if (name) events.push(`mcp_tool:${name}`, ...(name === "selftest_score" ? ["selftest_score"] : []));
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 export async function handleHttp(request: Request, load: () => Promise<Data>): Promise<Response> {
   const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "content-type, mcp-protocol-version, mcp-session-id" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "Access-Control-Allow-Methods": "POST, OPTIONS" } });
@@ -222,6 +250,12 @@ export async function handleHttp(request: Request, load: () => Promise<Data>): P
     body = await request.json();
   } catch {
     return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, { status: 400, headers: cors });
+  }
+  if (Array.isArray(body) && body.length > MAX_BATCH) {
+    return Response.json(
+      { jsonrpc: "2.0", id: null, error: { code: -32600, message: `Batches are limited to ${MAX_BATCH} messages` } },
+      { status: 400, headers: cors },
+    );
   }
   const data = await load();
   const messages = Array.isArray(body) ? body : [body];
