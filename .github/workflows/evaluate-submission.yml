@@ -78,10 +78,20 @@ jobs:
           docker build --pull -t cb-submission ctx
           docker save cb-submission | gzip > submission-image.tar.gz
 
+      # The image holds the method's code and this repository's artifacts are downloadable,
+      # so it travels to the evaluate job sealed to the season's public key.
+      - name: Seal the method image
+        run: |
+          uv run --project harness python harness/scripts/ranked/image.py seal \
+            submission-image.tar.gz submission-image.sealed \
+            --season harness/seasons/s1.yaml --id "$SUBMISSION_ID"
+          rm submission-image.tar.gz
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: submission-image
-          path: submission-image.tar.gz
+          path: submission-image.sealed
+          if-no-files-found: error
           retention-days: 1
 
       - name: Report a failed build
@@ -124,9 +134,19 @@ jobs:
           sudo systemctl restart docker
           docker info --format '{{json .Runtimes}}' | grep -q runsc
 
+      - name: Open the method image
+        env:
+          COMPACTBENCH_SEASON_PRIVATE_KEY: ${{ secrets.SEASON_S1_PRIVATE_KEY }}
+        run: |
+          uv run --project harness python harness/scripts/ranked/image.py open \
+            submission-image.sealed submission-image.tar.gz \
+            --season harness/seasons/s1.yaml --id "$SUBMISSION_ID"
+          rm submission-image.sealed
+
       - name: Load the method image and build the proxy
         run: |
           gunzip -c submission-image.tar.gz | docker load
+          rm submission-image.tar.gz
           mkdir -p proxy-ctx/compactbench
           git -C harness archive HEAD | tar -x -C proxy-ctx/compactbench
           cp harness/docker/proxy.Dockerfile proxy-ctx/Dockerfile
