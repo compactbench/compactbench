@@ -788,8 +788,9 @@ def proxy_command(
 ) -> None:
     """Run the ranked evaluation's model proxy in the foreground (maintainers / CI).
 
-    The key comes from ``--sealed-key`` (opened with COMPACTBENCH_SEASON_PRIVATE_KEY)
-    or, for local testing, from COMPACTBENCH_PROXY_KEY.
+    The key comes from COMPACTBENCH_PROXY_KEY (the ranked pipeline opens the
+    submitter's sealed key on the host and passes only that), or from ``--sealed-key``
+    (opened with COMPACTBENCH_SEASON_PRIVATE_KEY).
     """
     import os
     import signal
