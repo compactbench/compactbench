@@ -52,6 +52,7 @@
     "HF_DATASET": "compactbench/compactbench",
     "PYPI_PACKAGE": "compactbench"
   },
-  // Daily report at 14:00 UTC (8am Central).
-  "triggers": { "crons": ["0 14 * * *"] }
+  // Hourly: close ranked runs that stopped reporting. Daily at 14:00 UTC (8am Central): the
+  // owner's report (worker/index.ts matches this exact string).
+  "triggers": { "crons": ["0 * * * *", "0 14 * * *"] }
 }

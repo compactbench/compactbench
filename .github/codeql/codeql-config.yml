@@ -1,0 +1,4 @@
+# Published ranked submissions are third-party code kept as an audit trail; scanning them
+# would raise alerts about code we don't maintain. (The template there is a short example.)
+paths-ignore:
+  - submissions

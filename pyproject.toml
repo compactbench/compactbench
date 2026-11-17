@@ -126,6 +126,9 @@ dev = [
 line-length = 100
 target-version = "py311"
 src = ["src"]
+# Published ranked submissions are third-party code kept as an audit trail, not ours to lint.
+# The template (submissions/_template) stays linted.
+extend-exclude = ["submissions/[!_]*"]
 
 [tool.ruff.lint]
 select = [

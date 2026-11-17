@@ -7,7 +7,10 @@ import { type Data, handleHttp } from "./mcp.ts";
 import { buildDailyReport, dayOf, rawReport, type ReportEnv } from "./report.ts";
 import type { SelfTestData } from "./selftest.ts";
 import { secured } from "./security.ts";
-import { CloudflareStore, D1ContactLog, D1StatsStore, type D1, type R2 } from "./store.ts";
+import { CloudflareStore, D1ContactLog, D1StatsStore, STALE_AFTER_MS, STALE_MESSAGE, type D1, type R2 } from "./store.ts";
+
+/** Must match the daily entry in wrangler.jsonc's crons. */
+const DAILY_REPORT_CRON = "0 14 * * *";
 
 interface Env extends ApiEnv, ReportEnv {
   ASSETS: { fetch: (request: Request | string) => Promise<Response> };
@@ -93,12 +96,16 @@ export default {
     return secured(await env.ASSETS.fetch(request), false);
   },
 
-  /** The owner's daily report (cron in wrangler.jsonc). Needs email set up, like the contact form. */
-  async scheduled(_controller: unknown, env: Env, ctx: Ctx): Promise<void> {
+  /** Crons in wrangler.jsonc: every hour, close ranked runs that stopped reporting; once a day,
+   *  the owner's report (needs email set up, like the contact form). */
+  async scheduled(controller: { cron?: string }, env: Env, ctx: Ctx): Promise<void> {
+    const now = new Date();
+    const store = new CloudflareStore(env.DB, env.BUNDLES, env.ARCHIVE);
+    ctx.waitUntil(store.expireStale(new Date(now.getTime() - STALE_AFTER_MS).toISOString(), STALE_MESSAGE));
+    if (controller.cron !== DAILY_REPORT_CRON) return;
     const mail = env.SEND_EMAIL;
     const from = env.REPORT_FROM ?? env.CONTACT_FROM;
     if (!mail || !env.CONTACT_TO || !from) return;
-    const now = new Date();
     ctx.waitUntil(
       (async () => {
         const report = await buildDailyReport(env, new D1StatsStore(env.DB), now, fetch);

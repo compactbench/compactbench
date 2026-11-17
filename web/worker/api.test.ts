@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type ApiEnv, handleApi } from "./api.ts";
-import { MemoryStore } from "./store.ts";
+import { MemoryStore, STALE_AFTER_MS, STALE_MESSAGE, type SubmissionRecord } from "./store.ts";
 
 const ORIGIN = "https://compactbench.test";
 
@@ -318,4 +318,24 @@ test("without its secrets, sign-in says so instead of failing", async () => {
   const response = await call("/auth/github");
   assert.equal(response.status, 503);
   assert.match(await response.text(), /isn't set up/);
+});
+
+test("a run that stops reporting is closed after the stale window, so its submitter can submit again", async () => {
+  const store = new MemoryStore();
+  const now = Date.parse("2026-11-17T12:00:00Z");
+  const at = (ms: number) => new Date(now - ms).toISOString();
+  const record = (id: string, status: SubmissionRecord["status"], updated: string): SubmissionRecord => ({
+    id, github_id: 7, handle: "bob", method_name: "m", method_version: "1.0.0", provider: "anthropic",
+    model: "claude-haiku-5-5", model_label: null, status, message: null, score: null,
+    created_at: updated, updated_at: updated,
+  });
+  await store.insert(record("stuck", "running", at(STALE_AFTER_MS + 60_000)), "{}");
+  await store.insert(record("busy", "running", at(STALE_AFTER_MS - 60_000)), "{}");
+  await store.insert(record("done", "published", at(STALE_AFTER_MS * 3)), "{}");
+  const closed = await store.expireStale(at(STALE_AFTER_MS), STALE_MESSAGE);
+  assert.equal(closed, 1);
+  assert.equal((await store.get("stuck"))?.status, "failed");
+  assert.equal((await store.get("stuck"))?.message, STALE_MESSAGE);
+  assert.equal((await store.get("busy"))?.status, "running", "a run inside the window is left alone");
+  assert.equal((await store.get("done"))?.status, "published", "finished runs are never touched");
 });
