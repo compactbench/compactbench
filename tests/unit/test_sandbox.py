@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -135,3 +136,56 @@ async def test_a_sandboxed_run_is_recorded_under_the_declared_name(tmp_path: Pat
     )
     result = to_run_result(out)
     assert (result.method_name, result.method_version) == ("acme-ledger", "2.1.0")
+
+
+def _fake_sandbox(reply: Mapping[str, object]) -> Sandbox:
+    """A 'method' that speaks the protocol by hand and answers one compaction with ``reply``."""
+    from compactbench.sandbox import PROTOCOL
+
+    hello = {"type": "hello", "protocol": PROTOCOL, "name": "fake", "version": "1.0.0"}
+    script = (
+        "import json, sys\n"
+        f"print(json.dumps({hello!r}), flush=True)\n"
+        "sys.stdin.readline()\n"
+        f"print(json.dumps({reply!r}), flush=True)\n"
+        "sys.stdin.readline()\n"
+    )
+    return Sandbox(command=(sys.executable, "-c", script, "--"), timeout_seconds=30)
+
+
+async def test_an_invalid_artifact_error_never_quotes_the_method() -> None:
+    secret = "Priya owns the billing migration"
+    reply = {
+        "type": "artifact",
+        "artifact": {"summaryText": "x", secret: secret, "extra_field": secret},
+        "usage": {},
+    }
+    compactor = SandboxedCompactor(
+        _fake_sandbox(reply), method_spec="m", provider_key="mock", model="m"
+    )
+    try:
+        with pytest.raises(SandboxError) as caught:
+            await compactor.compact(_request())
+        message = str(caught.value)
+        assert "invalid artifact" in message
+        assert "Priya" not in message
+        assert "extra_field: extra_forbidden" in message
+        assert "?: extra_forbidden" in message
+    finally:
+        await compactor.aclose()
+
+
+async def test_reported_usage_is_bounded() -> None:
+    reply = {
+        "type": "artifact",
+        "artifact": {"summaryText": "x"},
+        "usage": {"prompt_tokens": int("9" * 400)},
+    }
+    compactor = SandboxedCompactor(
+        _fake_sandbox(reply), method_spec="m", provider_key="mock", model="m"
+    )
+    try:
+        with pytest.raises(SandboxError, match="prompt_tokens: less_than_equal"):
+            await compactor.compact(_request())
+    finally:
+        await compactor.aclose()

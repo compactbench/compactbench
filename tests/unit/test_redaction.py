@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -87,3 +88,35 @@ def test_published_hidden_set_results_are_redacted() -> None:
             continue  # pre-v2 archives
         if start is not None and start.suite not in PUBLIC_SUITES:
             assert is_redacted(path), f"{path.relative_to(ROOT)} has private keys or method text"
+
+
+def test_published_usage_is_the_proxy_measurement(results: Path, tmp_path: Path) -> None:
+    from compactbench.contracts import TokenUsage
+    from compactbench.leaderboard.projection import project_row
+
+    measured = TokenUsage(prompt_tokens=1003, completion_tokens=101, call_count=7)
+    out = tmp_path / "public.jsonl"
+    redact_results(results, out, compactor_usage=measured)
+    run = to_run_result(out)
+    cycles = [cycle for case in run.cases for cycle in case.cycles]
+    assert sum(c.compactor_usage.prompt_tokens for c in cycles if c.compactor_usage) == 1003
+    assert sum(c.compactor_usage.completion_tokens for c in cycles if c.compactor_usage) == 101
+    assert sum(c.compactor_usage.call_count for c in cycles if c.compactor_usage) == 7
+    shares = {c.compactor_usage.total_tokens for c in cycles if c.compactor_usage}
+    assert max(shares) - min(shares) <= 2, "spread evenly, so nothing can be encoded in it"
+    for case in run.cases:
+        expected = sum(
+            (
+                part.total_tokens
+                for c in case.cycles
+                for part in (c.compactor_usage, c.reader_usage, c.control_usage)
+                if part
+            ),
+            0,
+        )
+        assert case.token_usage is not None
+        assert case.token_usage.total_tokens == expected
+    row = project_row(run, handle="a", org=None, published_at=datetime(2026, 11, 17, tzinfo=UTC))
+    assert row["method_tokens"] == 1104
+    original = to_run_result(results)
+    assert row["score"] == original.metrics.score
